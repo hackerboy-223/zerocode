@@ -20,28 +20,52 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 ## Installation
 
-Prérequis : Python 3.10 ou plus récent.
+Prérequis : **Python 3.10 ou plus récent** et Git. Pour une installation isolée, `pipx` est recommandé : il installe ZeroCode dans son propre environnement et expose la commande `zerocode` sans modifier les dépendances Python des autres projets.
+
+### Linux et macOS
 
 ```bash
-git clone git@github.com:hackerboy-223/zerocode.git
-cd zerocode
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-Pour disposer de la commande globalement, utilisez `pipx` si disponible :
-
-```bash
-pipx install .
-```
-
-Vérification :
-
-```bash
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+# Redémarre le terminal si nécessaire, puis :
+pipx install git+https://github.com/hackerboy-223/zerocode.git
 zerocode --version
 zerocode doctor
 ```
+
+### Windows · PowerShell
+
+```powershell
+py -m pip install --user pipx
+py -m pipx ensurepath
+# Redémarre PowerShell si nécessaire, puis :
+pipx install git+https://github.com/hackerboy-223/zerocode.git
+zerocode --version
+zerocode doctor
+```
+
+### Installer depuis le code source
+
+Cette méthode convient aux personnes qui souhaitent contribuer ou modifier ZeroCode :
+
+```bash
+git clone https://github.com/hackerboy-223/zerocode.git
+cd zerocode
+python -m venv .venv
+```
+
+Active l’environnement virtuel, puis installe le projet :
+
+```bash
+# Linux / macOS
+source .venv/bin/activate
+# Windows PowerShell : .venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+pytest
+ruff check src tests
+```
+
+Si l’accès public au dépôt n’est pas encore activé, l’installation directe depuis GitHub ne fonctionnera pas pour les personnes qui n’ont pas l’autorisation d’y accéder.
 
 ## Démarrage rapide
 
