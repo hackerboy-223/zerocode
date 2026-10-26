@@ -18,7 +18,32 @@ MODE PLAN ACTIF (lecture seule):
 - Si l'utilisateur demande une modification, decris les changements a faire sans les appliquer.
 """
 
-VALID_AGENT_MODES = {"build", "plan"}
+FULL_STACK_MODE_INSTRUCTION = """
+MODE FULL-STACK AUTONOME ACTIF:
+- Mission: construire ou terminer un projet complet de bout en bout, pas seulement proposer un plan.
+- L'utilisateur a explicitement active ce mode: cette autorisation remplace la regle generale et t'autorise a installer les dependances locales et a lancer les commandes de build, de test et de lint sans demander confirmation.
+- Inspecte le depot, puis cree un plan avec todo_write et maintiens-le a jour jusqu'a la livraison.
+- Si le projet existe deja, respecte sa stack et ses conventions. S'il est vide, choisis une stack moderne et coherente, puis cree la structure complete.
+- Implemente les couches necessaires: interface, backend/API, donnees, validation, authentification si utile, tests, scripts et documentation.
+- Prends des decisions raisonnables sans multiplier les questions. Ne t'arrete que si une information critique ou un secret manque.
+- Execute les tests et le build, lis les erreurs, corrige et recommence jusqu'a obtenir un resultat fonctionnel.
+- Cree des tests si le projet n'en a pas et verifie au moins une fois le parcours principal.
+- Reste dans le repertoire de travail, ne detruis pas de donnees irremplacables, ne lis jamais les secrets et ne commit/push pas sans demande explicite.
+- Continue tant qu'il reste une etape faisable. A la fin, fournis un resume court des livrables et des commandes de lancement.
+"""
+
+VALID_AGENT_MODES = {"build", "plan", "full-stack"}
+
+FULL_STACK_PRESET = {
+    "reasoning_effort": "max",
+    "temperature": 0.2,
+    "max_tokens": 128_000,
+    "max_steps": 500,
+    "permissions": "allow",
+    "command_timeout": 3_600,
+    "compact_threshold": 0.95,
+    "show_reasoning": True,
+}
 
 
 class Agent:
@@ -39,6 +64,7 @@ class Agent:
         self.store = store
         self.usage = session.usage
         self.mode = "build"
+        self._full_stack_backup: dict[str, Any] | None = None
         self.messages: list[dict[str, Any]] = session.messages
         self.tools.context.todos[:] = [todo for todo in session.todos if isinstance(todo, dict)]
         self.tools.read_only = self.mode == "plan"
@@ -176,10 +202,53 @@ class Agent:
     def set_mode(self, mode: str) -> None:
         if mode not in VALID_AGENT_MODES:
             raise ValueError(f"Mode inconnu: {mode}")
+        if mode == "full-stack":
+            self._activate_full_stack()
+            return
+        if self.mode == "full-stack":
+            self._restore_full_stack()
         self.mode = mode
         self.tools.read_only = mode == "plan"
         self._refresh_system_mode()
         self._save_quiet()
+
+    def _activate_full_stack(self) -> None:
+        if self._full_stack_backup is None:
+            self._full_stack_backup = {
+                "config": {
+                    key: getattr(self.config, key)
+                    for key in FULL_STACK_PRESET
+                },
+                "permissions": self.tools.permissions.mode,
+                "ui_reasoning": getattr(self.ui, "show_reasoning", None),
+            }
+        for key, value in FULL_STACK_PRESET.items():
+            setattr(self.config, key, value)
+        self.tools.permissions.mode = "allow"
+        self.tools.context.command_timeout = self.config.command_timeout
+        self.tools.read_only = False
+        self.mode = "full-stack"
+        self._sync_reasoning_visibility()
+        self._refresh_system_mode()
+        self._save_quiet()
+
+    def _restore_full_stack(self) -> None:
+        backup = self._full_stack_backup
+        self._full_stack_backup = None
+        if backup is None:
+            return
+        for key, value in backup["config"].items():
+            setattr(self.config, key, value)
+        self.tools.permissions.mode = str(backup["permissions"])
+        self.tools.context.command_timeout = self.config.command_timeout
+        self._sync_reasoning_visibility()
+        previous = backup.get("ui_reasoning")
+        if previous is not None and hasattr(self.ui, "show_reasoning"):
+            self.ui.show_reasoning = bool(previous)
+
+    def _sync_reasoning_visibility(self) -> None:
+        if hasattr(self.ui, "show_reasoning"):
+            self.ui.show_reasoning = self.config.show_reasoning
 
     def _refresh_system_mode(self) -> None:
         if self.messages and self.messages[0].get("role") == "system":
@@ -208,6 +277,8 @@ class Agent:
         content = build_system_prompt(cwd)
         if self.mode == "plan":
             content += "\n\n" + PLAN_MODE_INSTRUCTION
+        elif self.mode == "full-stack":
+            content += "\n\n" + FULL_STACK_MODE_INSTRUCTION
         return {"role": "system", "content": content}
 
     def _sync_session(self) -> None:

@@ -14,6 +14,7 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Outils intégrés : lecture, écriture, édition, liste, recherche regex, shell et plan de tâches.
 - Sessions reprenables, compaction du contexte et estimation des jetons.
 - Interface TUI Textual : sidebar projet/sessions, chat Markdown, streaming et approbations.
+- Mode `/full-stack` : projet complet autonome avec raisonnement, contexte, étapes et timeouts maximaux.
 - Palette de commandes, recherche de fichiers `@` et panneaux de tâches/outils.
 - Aucun secret affiché ; clés stockées avec des permissions restrictives.
 
@@ -78,7 +79,7 @@ L'interface par défaut s'appuie sur [Textual](https://textual.textualize.io/). 
 
 - **Sidebar** : branche Git, arborescence du projet et sessions récentes avec leur premier message.
 - **Chat** : réponses Markdown, blocs de code colorés, raisonnement et cartes d'outils repliables.
-- **Modes agent** : `BUILD` pour modifier, `PLAN` pour inspecter et proposer sans toucher aux fichiers (`Shift+Tab`).
+- **Modes agent** : `BUILD` pour modifier, `PLAN` pour inspecter sans toucher aux fichiers (`Shift+Tab`), `FULL-STACK` pour construire un projet complet en autonomie.
 - **Panneaux** : barre `CHAT / TÂCHES / OUTILS` toujours visible, synchronisée avec `Tab`.
 - **Statut** : modèle, fournisseur, route prévue, permissions, session et jetons, avec animation de réflexion et indicateur d'activité.
 - **Approbations** : `write`, `edit` et `bash` ouvrent un panneau `Autoriser / Refuser` avec aperçu défilable.
@@ -97,7 +98,11 @@ L'interface par défaut s'appuie sur [Textual](https://textual.textualize.io/). 
 | `F1` | Aide et commandes |
 | `Ctrl+Q` | Quitter |
 
-Le mode plan masque `write`, `edit` et `bash`, ajoute une consigne de lecture seule au prompt système et refuse toute tentative de mutation. Les réponses et le raisonnement sont diffusés en streaming via un worker, avec une animation de réflexion visible pendant l'attente, sans figer l'interface. Les confirmations de sécurité restent actives en mode `ask`.
+Le mode plan masque `write`, `edit` et `bash`, ajoute une consigne de lecture seule au prompt système et refuse toute tentative de mutation.
+
+`/full-stack` active un preset autonome : raisonnement `max`, 500 étapes, 128k jetons de sortie (plafonnés par le modèle), timeout de commande d'une heure, compaction à 95 %, raisonnement affiché et permissions `allow`. L'agent est invité à planifier, scaffolder, implémenter, installer les dépendances locales, tester, corriger et livrer un projet complet sans demander confirmation à chaque étape. Un retour en `BUILD`, `PLAN` ou `/safe` restaure automatiquement les réglages et permissions précédents. Le répertoire de travail reste confiné et les secrets restent protégés.
+
+Les réponses et le raisonnement sont diffusés en streaming via un worker, avec une animation de réflexion visible pendant l'attente, sans figer l'interface. Les confirmations de sécurité restent actives en mode `ask`.
 
 ## GLM 5.3 et offre gratuite
 
@@ -178,12 +183,12 @@ Les overrides disponibles : `--model`, `--provider`, `--free-only/--no-free-only
 | `zerocode sessions` | Lister, reprendre ou supprimer des sessions |
 | `zerocode config` | Afficher ou initialiser la configuration |
 
-Dans le chat : `/help`, `/build`, `/plan`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/clear`, `/quit`.
+Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/clear`, `/quit`.
 
 ## Outils et sécurité
 
 - `read`, `list`, `grep` sont en lecture seule et ne demandent pas de confirmation.
-- `write`, `edit` et `bash` demandent une confirmation par défaut.
+- `write`, `edit` et `bash` demandent une confirmation par défaut, sauf en mode `/full-stack` qui active explicitement `allow`.
 - Le mode `deny` bloque toutes les mutations ; `ask` est le mode recommandé.
 - Les chemins hors du répertoire de travail sont refusés sauf avec `--allow-outside-cwd`.
 - Les écritures dans `.git` et les clés privées sont bloquées.

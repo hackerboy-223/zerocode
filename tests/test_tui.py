@@ -276,6 +276,15 @@ def test_tui_work_modes_and_thinking(tmp_path):
             app.command_handler.handle("/build")
             assert app.work_mode == "build"
 
+            app.command_handler.handle("/full-stack")
+            assert app.work_mode == "full-stack"
+            assert agent.mode == "full-stack"
+            assert "FULL-STACK" in str(app.query_one("#modebar", Static).content)
+            assert "autonome" in app.query_one("#prompt", Input).placeholder
+            await pilot.press("shift+tab")
+            assert app.work_mode == "build"
+            assert agent.mode == "build"
+
             app._start_thinking()
             await pilot.pause()
             assert isinstance(app._thinking, ThinkingIndicator)

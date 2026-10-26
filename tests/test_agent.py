@@ -155,6 +155,54 @@ def test_agent_plan_mode_is_read_only(tmp_path):
     assert "MODE PLAN ACTIF" not in agent.messages[0]["content"]
 
 
+def test_agent_full_stack_mode_applies_and_restores_preset(tmp_path):
+    agent, _, _, _ = build_agent(tmp_path, [])
+    config = agent.config
+    config.reasoning_effort = "low"
+    config.temperature = 0.8
+    config.max_tokens = 4_096
+    config.max_steps = 7
+    config.permissions = "ask"
+    config.command_timeout = 45
+    config.compact_threshold = 0.5
+    config.show_reasoning = False
+    agent.tools.permissions.mode = "ask"
+
+    agent.set_mode("full-stack")
+
+    assert agent.mode == "full-stack"
+    assert config.reasoning_effort == "max"
+    assert config.temperature == 0.2
+    assert config.max_tokens == 128_000
+    assert config.max_steps == 500
+    assert config.permissions == "allow"
+    assert config.command_timeout == 3_600
+    assert config.compact_threshold == 0.95
+    assert config.show_reasoning is True
+    assert agent.tools.permissions.mode == "allow"
+    assert agent.tools.context.command_timeout == 3_600
+    assert agent.tools.read_only is False
+    assert "MODE FULL-STACK AUTONOME ACTIF" in agent.messages[0]["content"]
+    names = [schema["function"]["name"] for schema in agent.tools.schemas()]
+    assert "write" in names
+    assert "bash" in names
+
+    agent.set_mode("build")
+
+    assert agent.mode == "build"
+    assert config.reasoning_effort == "low"
+    assert config.temperature == 0.8
+    assert config.max_tokens == 4_096
+    assert config.max_steps == 7
+    assert config.permissions == "ask"
+    assert config.command_timeout == 45
+    assert config.compact_threshold == 0.5
+    assert config.show_reasoning is False
+    assert agent.tools.permissions.mode == "ask"
+    assert agent.tools.context.command_timeout == 45
+    assert "MODE FULL-STACK AUTONOME ACTIF" not in agent.messages[0]["content"]
+
+
 def test_agent_compacts_long_context(tmp_path):
     completion = Completion(content="ok")
     agent, _, _, _ = build_agent(tmp_path, [completion])

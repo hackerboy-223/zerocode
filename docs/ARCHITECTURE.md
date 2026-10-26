@@ -82,6 +82,7 @@ Les modes agent sont gérés par `Agent.set_mode` :
 
 - `build` : tous les outils sont proposés au modèle.
 - `plan` : `ToolRegistry.read_only` masque les outils dont l'approbation n'est pas `never` et refuse leur exécution ; le prompt système reçoit une consigne de lecture seule.
+- `full-stack` : preset autonome (`FULL_STACK_PRESET`) avec raisonnement max, 128k jetons de sortie, 500 étapes, timeout 3600 s, compaction à 0.95, permissions `allow` et raisonnement affiché. Le prompt système impose de livrer et vérifier un projet complet. Les réglages précédents sont sauvegardés en mémoire et restaurés dès que l'on quitte le mode.
 
 ## Contexte et compaction
 

@@ -21,6 +21,7 @@ COMMANDS: list[tuple[str, str]] = [
     ("/provider [nom]", "Voir ou changer le fournisseur"),
     ("/build", "Mode build : modifications autorisées"),
     ("/plan", "Mode plan : lecture seule"),
+    ("/full-stack", "Projet complet autonome, réglages max"),
     ("/permissions [ask|allow|deny]", "Politique d'autorisation"),
     ("/yolo", "Tout autoriser"),
     ("/safe", "Revenir au mode ask"),
@@ -69,7 +70,8 @@ class CommandHandler:
 
         if command in {"quit", "exit", "q"}:
             app.request_exit()
-        elif command in {"help", "h", "?"}:
+            return
+        if command in {"help", "h", "?"}:
             app.show_help()
         elif command == "clear":
             app.agent.reset()
@@ -123,6 +125,8 @@ class CommandHandler:
             app.set_work_mode("build")
         elif command == "plan":
             app.set_work_mode("plan")
+        elif command in {"full-stack", "fullstack"}:
+            app.set_work_mode("full-stack")
         elif command == "model":
             self._model(rest)
         elif command == "provider":
@@ -134,6 +138,8 @@ class CommandHandler:
             app.config.permissions = "allow"
             app.notice("Permissions : allow", "success")
         elif command == "safe":
+            if getattr(app.agent, "mode", "build") == "full-stack":
+                app.set_work_mode("build", quiet=True)
             app.permissions.mode = "ask"
             app.config.permissions = "ask"
             app.notice("Permissions : ask", "success")

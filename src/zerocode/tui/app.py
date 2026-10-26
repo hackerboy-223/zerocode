@@ -616,10 +616,11 @@ class ZeroCodeApp(App[None]):
         if self._busy:
             self.notice("Attends la fin du tour pour changer de mode.", "warning")
             return
-        self.set_work_mode("plan" if self.work_mode == "build" else "build")
+        next_mode = "plan" if self.work_mode == "build" else "build"
+        self.set_work_mode(next_mode)
 
     def set_work_mode(self, mode: str, *, quiet: bool = False) -> None:
-        if mode not in {"build", "plan"}:
+        if mode not in {"build", "plan", "full-stack"}:
             return
         if self._busy:
             self.notice("Attends la fin du tour pour changer de mode.", "warning")
@@ -628,6 +629,7 @@ class ZeroCodeApp(App[None]):
         setter = getattr(self.agent, "set_mode", None)
         if callable(setter):
             setter(mode)
+        self.bridge.show_reasoning = self.config.show_reasoning
         self._refresh_modebar()
         self._refresh_status()
         self._refresh_inspector()
@@ -638,6 +640,12 @@ class ZeroCodeApp(App[None]):
             self.notice(
                 "Mode PLAN : lecture seule. write/edit/bash sont désactivés.",
                 "info",
+            )
+        elif mode == "full-stack":
+            self.notice(
+                "Mode FULL-STACK : autonomie maximale · raisonnement max · "
+                "500 étapes · 128k sortie · permissions allow · timeout 1 h.",
+                "success",
             )
         else:
             self.notice("Mode BUILD : modifications autorisées.", "success")
@@ -1013,10 +1021,18 @@ class ZeroCodeApp(App[None]):
         except Exception:  # noqa: BLE001 - montage initial
             return
         text = Text()
-        for mode, label in (("build", "BUILD"), ("plan", "PLAN")):
+        for mode, label in (
+            ("build", "BUILD"),
+            ("plan", "PLAN"),
+            ("full-stack", "FULL-STACK"),
+        ):
             active = self.work_mode == mode
             if active:
-                style = "bold black on green" if mode == "build" else "bold black on yellow"
+                style = {
+                    "build": "bold black on green",
+                    "plan": "bold black on yellow",
+                    "full-stack": "bold black on magenta",
+                }[mode]
             else:
                 style = "dim"
             text.append(f" {label} ", style=style)
@@ -1029,7 +1045,7 @@ class ZeroCodeApp(App[None]):
                 style="bold black on cyan" if active else "dim",
             )
             text.append(" ")
-        if self.size.width >= 104:
+        if self.size.width >= 116:
             text.append(" Shift+Tab mode · Tab panneaux", style="dim")
         bar.update(text)
 
@@ -1041,6 +1057,11 @@ class ZeroCodeApp(App[None]):
         if self.work_mode == "plan":
             prompt.placeholder = (
                 "Mode plan (lecture seule) — décris ce que tu veux planifier…  " "Ctrl+K commandes"
+            )
+        elif self.work_mode == "full-stack":
+            prompt.placeholder = (
+                "Mode full-stack autonome — décris le projet complet à construire…  "
+                "Ctrl+K commandes"
             )
         else:
             prompt.placeholder = (
@@ -1071,7 +1092,11 @@ class ZeroCodeApp(App[None]):
             title.update("PLAN DE TRAVAIL")
             content.update(_todos_text(self.context.todos))
         elif self._mode == "tools":
-            title.update("OUTILS" + (" · LECTURE SEULE" if self.work_mode == "plan" else ""))
+            suffix = {
+                "plan": " · LECTURE SEULE",
+                "full-stack": " · AUTONOME",
+            }.get(self.work_mode, "")
+            title.update("OUTILS" + suffix)
             tools = self.agent.tools.tools()
             if self.work_mode == "plan":
                 tools = [tool for tool in tools if tool.approval == "never"]

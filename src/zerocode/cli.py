@@ -409,6 +409,16 @@ def _slash_command(
         agent.set_mode("plan")
         ui.info("Mode plan: lecture seule. write, edit et bash sont desactives.")
         return False
+    if command in {"full-stack", "fullstack"}:
+        agent.set_mode("full-stack")
+        permissions.mode = config.permissions
+        ui.show_reasoning = config.show_reasoning
+        ui.success(
+            "Mode FULL-STACK: autonomie maximale, raisonnement max, 500 etapes, "
+            "128k sortie, permissions allow, timeout 1 h."
+        )
+        ui.info("Le mode build/plan restaure automatiquement les reglages precedents.")
+        return False
     if command == "model":
         if not rest:
             ui.info(f"modele actuel: {config.model}")
@@ -459,6 +469,8 @@ def _slash_command(
         ui.success("Permissions: allow (toutes les actions sont autorisees).")
         return False
     if command == "safe":
+        if agent.mode == "full-stack":
+            agent.set_mode("build")
         permissions.mode = "ask"
         config.permissions = "ask"
         ui.success("Permissions: ask")
@@ -571,7 +583,10 @@ def print_global_help(console: Console | None = None) -> None:
     text.append("  glm-5.3-flash  GLM 5.3 Flash (gratuit chez NVIDIA/OpenCode Zen)\n")
     text.append("  auto           chaîne gratuite, sans clé via Kilo Gateway\n\n")
     text.append("Dans le chat\n", style="bold cyan")
-    text.append("  /help  /build  /plan  /model  /provider  /permissions  /compact  /cost  /quit\n")
+    text.append(
+        "  /help  /build  /plan  /full-stack  /model  /provider  /permissions  "
+        "/compact  /cost  /quit\n"
+    )
     text.append("\nCréé par ", style="dim")
     text.append(__author__, style="bold")
     text.append("\nGitHub       ", style="dim")
@@ -600,6 +615,7 @@ def print_chat_help(console: Console) -> None:
         ("/provider [nom]", "voir ou changer le fournisseur"),
         ("/build", "mode build: modifications autorisees"),
         ("/plan", "mode plan: lecture seule"),
+        ("/full-stack", "projet complet autonome avec reglages maximaux"),
         ("/permissions [ask|allow|deny]", "politique d'autorisation"),
         ("/yolo", "tout autoriser pour la session"),
         ("/reasoning low|high|max", "effort de raisonnement GLM"),
