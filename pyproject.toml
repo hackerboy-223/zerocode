@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "zerocode"
+version = "0.1.0"
+description = "Agent de codage pour le terminal, gratuit par defaut et compatible avec plusieurs fournisseurs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "H@CKERBOY" }]
+keywords = ["ai", "agent", "coding", "cli", "glm", "free"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Code Generators",
+]
+dependencies = [
+  "httpx>=0.27",
+  "prompt-toolkit>=3.0",
+  "rich>=13.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "ruff>=0.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/hackerboy-223/zerocode"
+Repository = "https://github.com/hackerboy-223/zerocode.git"
+GitHub = "https://github.com/hackerboy-223"
+Portfolio = "https://hackerboy-223.vercel.app"
+
+[project.scripts]
+zerocode = "zerocode.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zerocode"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning:zerocode.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
