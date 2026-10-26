@@ -13,7 +13,8 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - GLM 5.3 Flash gratuit, plus GLM 4.7/4.5 Flash, Kimi/Kilo, Groq, Gemini, OpenRouter, etc.
 - Outils intégrés : lecture, écriture, édition, liste, recherche regex, shell et plan de tâches.
 - Sessions reprenables, compaction du contexte et estimation des jetons.
-- Interface Rich lisible, streaming des réponses et du raisonnement.
+- Interface TUI Textual : sidebar projet/sessions, chat Markdown, streaming et approbations.
+- Palette de commandes, recherche de fichiers `@` et panneaux de tâches/outils.
 - Aucun secret affiché ; clés stockées avec des permissions restrictives.
 
 ## Installation
@@ -48,9 +49,17 @@ Sans aucune clé :
 ```bash
 zerocode "explique la structure de ce projet"
 zerocode
+zerocode tui
 ```
 
-Le mode interactif affiche l'état du routeur, la session courante et la chaîne de modèles prévue. Tapez `/help` pour les commandes internes.
+Sans prompt, `zerocode` ouvre l'interface TUI Textual. Elle affiche la sidebar du projet, les sessions, le chat Markdown, l'état du routeur et les confirmations d'outils. Tapez `/help` ou `Ctrl+K` pour les commandes.
+
+Pour revenir à l'ancienne boucle REPL :
+
+```bash
+zerocode --classic
+zerocode chat --classic
+```
 
 Exemples :
 
@@ -62,6 +71,33 @@ zerocode -c
 ```
 
 `--yolo` autorise toutes les actions de la session. À utiliser uniquement dans un dépôt de confiance.
+
+## Interface TUI
+
+L'interface par défaut s'appuie sur [Textual](https://textual.textualize.io/). Elle est pensée pour garder le contexte visible sans bloquer le terminal.
+
+- **Sidebar** : branche Git, arborescence du projet et sessions récentes avec leur premier message.
+- **Chat** : réponses Markdown, blocs de code colorés, raisonnement et cartes d'outils repliables.
+- **Modes agent** : `BUILD` pour modifier, `PLAN` pour inspecter et proposer sans toucher aux fichiers (`Shift+Tab`).
+- **Panneaux** : barre `CHAT / TÂCHES / OUTILS` toujours visible, synchronisée avec `Tab`.
+- **Statut** : modèle, fournisseur, route prévue, permissions, session et jetons, avec animation de réflexion et indicateur d'activité.
+- **Approbations** : `write`, `edit` et `bash` ouvrent un panneau `Autoriser / Refuser` avec aperçu défilable.
+- **Confort** : historique des demandes avec `↑`/`↓`, recherche floue et défilement qui ne vous arrache pas la lecture si vous êtes remonté.
+
+| Raccourci | Action |
+| --- | --- |
+| `Ctrl+K` | Palette de commandes avec recherche floue |
+| `@` | Recherche floue de fichiers du dépôt |
+| `↑` / `↓` | Naviguer dans l'historique des demandes |
+| `Shift+Tab` | Basculer entre les modes build et plan |
+| `Tab` | Chat → tâches → outils |
+| `F2` | Replier ou ouvrir le dernier résultat d'outil |
+| `F6` | Focus prompt → fichiers → sessions → chat |
+| `Ctrl+B` | Afficher ou masquer la sidebar |
+| `F1` | Aide et commandes |
+| `Ctrl+Q` | Quitter |
+
+Le mode plan masque `write`, `edit` et `bash`, ajoute une consigne de lecture seule au prompt système et refuse toute tentative de mutation. Les réponses et le raisonnement sont diffusés en streaming via un worker, avec une animation de réflexion visible pendant l'attente, sans figer l'interface. Les confirmations de sécurité restent actives en mode `ask`.
 
 ## GLM 5.3 et offre gratuite
 
@@ -133,14 +169,16 @@ Les overrides disponibles : `--model`, `--provider`, `--free-only/--no-free-only
 
 | Commande | Rôle |
 | --- | --- |
-| `zerocode [prompt]` | Exécuter une demande ou ouvrir le chat |
+| `zerocode [prompt]` | Exécuter une demande ou ouvrir le TUI |
+| `zerocode tui` | Ouvrir explicitement l'interface TUI |
+| `zerocode --classic` | Ouvrir l'ancienne interface REPL |
 | `zerocode doctor [--live]` | Diagnostic local et test réel du routeur |
 | `zerocode models [--free] [--live]` | Catalogue des modèles |
 | `zerocode providers` | État des fournisseurs et des clés |
 | `zerocode sessions` | Lister, reprendre ou supprimer des sessions |
 | `zerocode config` | Afficher ou initialiser la configuration |
 
-Dans le chat : `/model`, `/provider`, `/permissions`, `/compact`, `/cost`, `/todos`, `/tools`, `/session`, `/new`, `/resume`, `/cd`, `/init`, `/clear`, `/quit`.
+Dans le chat : `/help`, `/build`, `/plan`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/clear`, `/quit`.
 
 ## Outils et sécurité
 
@@ -159,7 +197,7 @@ Aucun agent ne remplace une revue humaine. Vérifiez les diffs et les commandes 
 Le fonctionnement interne, le routage et les points d'extension sont décrits dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```text
-CLI / UI
+CLI / TUI Textual
    |
    v
 Agent <--> Router <--> Fournisseurs OpenAI-compatibles

@@ -10,6 +10,16 @@ from .session import Session, SessionStore
 from .tokens import compact_messages, estimate_messages
 from .types import StreamCallbacks, Usage
 
+PLAN_MODE_INSTRUCTION = """
+MODE PLAN ACTIF (lecture seule):
+- Tu ne dois modifier aucun fichier et tu ne dois pas executer de commande shell.
+- Les outils write, edit et bash ne sont pas disponibles.
+- Inspecte le depot, verifie les faits et propose un plan d'action precis.
+- Si l'utilisateur demande une modification, decris les changements a faire sans les appliquer.
+"""
+
+VALID_AGENT_MODES = {"build", "plan"}
+
 
 class Agent:
     def __init__(
@@ -28,12 +38,15 @@ class Agent:
         self.ui = ui
         self.store = store
         self.usage = session.usage
+        self.mode = "build"
         self.messages: list[dict[str, Any]] = session.messages
         self.tools.context.todos[:] = [todo for todo in session.todos if isinstance(todo, dict)]
+        self.tools.read_only = self.mode == "plan"
         if not self.messages:
             self.messages = [self._system_message()]
         elif self.messages[0].get("role") != "system":
             self.messages.insert(0, self._system_message())
+        self._refresh_system_mode()
         self._sync_session()
 
     def run_turn(self, user_text: str) -> str:
@@ -151,12 +164,26 @@ class Agent:
         self.config.provider = session.provider
         self.tools.context.cwd = Path(session.cwd).expanduser().resolve()
         self.tools.context.todos[:] = [todo for todo in session.todos if isinstance(todo, dict)]
+        self.tools.read_only = self.mode == "plan"
         if not self.messages:
             self.messages = [self._system_message()]
         elif self.messages[0].get("role") != "system":
             self.messages.insert(0, self._system_message())
+        self._refresh_system_mode()
         self._sync_session()
         self._save_quiet()
+
+    def set_mode(self, mode: str) -> None:
+        if mode not in VALID_AGENT_MODES:
+            raise ValueError(f"Mode inconnu: {mode}")
+        self.mode = mode
+        self.tools.read_only = mode == "plan"
+        self._refresh_system_mode()
+        self._save_quiet()
+
+    def _refresh_system_mode(self) -> None:
+        if self.messages and self.messages[0].get("role") == "system":
+            self.messages[0]["content"] = self._system_message()["content"]
 
     def set_model(self, model: str, provider: str | None = None) -> None:
         self.config.model = model
@@ -178,7 +205,10 @@ class Agent:
 
     def _system_message(self) -> dict[str, Any]:
         cwd = self.tools.context.cwd
-        return {"role": "system", "content": build_system_prompt(cwd)}
+        content = build_system_prompt(cwd)
+        if self.mode == "plan":
+            content += "\n\n" + PLAN_MODE_INSTRUCTION
+        return {"role": "system", "content": content}
 
     def _sync_session(self) -> None:
         self.session.messages = self.messages

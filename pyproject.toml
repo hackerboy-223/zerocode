@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "zerocode"
-version = "0.1.0"
+version = "0.2.0"
 description = "Agent de codage pour le terminal, gratuit par defaut et compatible avec plusieurs fournisseurs."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,6 +23,7 @@ dependencies = [
   "httpx>=0.27",
   "prompt-toolkit>=3.0",
   "rich>=13.9",
+  "textual>=8.0",
 ]
 
 [project.optional-dependencies]

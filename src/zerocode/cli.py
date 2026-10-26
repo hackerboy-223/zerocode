@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import sys
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,7 @@ COMMANDS = {
     "version",
     "run",
     "chat",
+    "tui",
 }
 
 
@@ -94,6 +96,8 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return sessions_command(argv[1:], console)
     if first == "config":
         return config_command(argv[1:], console)
+    if first == "tui":
+        return run_agent(argv[1:], console, force_tui=True)
     if first in {"run", "chat"}:
         return run_agent(argv[1:], console)
     return run_agent(argv, console)
@@ -146,13 +150,25 @@ def _run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cwd", help="Repertoire de travail.")
     parser.add_argument("--show-thinking", action="store_true", help="Afficher le raisonnement.")
     parser.add_argument("-q", "--quiet", action="store_true", help="Reduire la sortie des outils.")
+    parser.add_argument(
+        "--classic",
+        action="store_true",
+        help="Utiliser l'ancienne interface REPL au lieu du TUI.",
+    )
     parser.add_argument("--version", action="version", version=f"zerocode {__version__}")
     return parser
 
 
-def run_agent(args_list: list[str], console: Console) -> int:
+def run_agent(
+    args_list: list[str],
+    console: Console,
+    *,
+    force_tui: bool = False,
+) -> int:
     parser = _run_parser()
     args = parser.parse_args(args_list)
+    if force_tui:
+        args.classic = False
 
     cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd().resolve()
     if not cwd.is_dir():
@@ -227,6 +243,9 @@ def run_agent(args_list: list[str], console: Console) -> int:
     prompt = " ".join(args.prompt).strip()
 
     try:
+        if force_tui and not interactive:
+            console.print(Text("ERREUR: le TUI necessite un terminal interactif.", style="bold red"))
+            return 1
         if not prompt and not interactive:
             prompt = sys.stdin.read().strip()
 
@@ -248,6 +267,25 @@ def run_agent(args_list: list[str], console: Console) -> int:
         if not interactive:
             print_global_help(console)
             return 0
+
+        if not args.classic:
+            if find_spec("textual") is None:
+                ui.warn(
+                    "Textual n'est pas installe; utilisation de l'interface classique. "
+                    "Installe-le avec `pip install textual`."
+                )
+            else:
+                from .tui import run_tui
+
+                return run_tui(
+                    config,
+                    agent,
+                    router,
+                    store,
+                    permissions,
+                    context,
+                    chain,
+                )
 
         if not chain:
             ui.warn(
@@ -362,6 +400,14 @@ def _slash_command(
         return False
     if command == "todos":
         ui.todos(context.todos)
+        return False
+    if command == "build":
+        agent.set_mode("build")
+        ui.success("Mode build: modifications autorisees.")
+        return False
+    if command == "plan":
+        agent.set_mode("plan")
+        ui.info("Mode plan: lecture seule. write, edit et bash sont desactives.")
         return False
     if command == "model":
         if not rest:
@@ -512,17 +558,20 @@ def print_global_help(console: Console | None = None) -> None:
     text.append("Agent de codage pour le terminal\n\n", style="dim")
     text.append("Usage\n", style="bold cyan")
     text.append("  zerocode [options] [prompt...]\n")
-    text.append("  zerocode setup | doctor | models | providers | sessions | config\n\n")
+    text.append("  zerocode setup | doctor | models | providers | sessions | config\n")
+    text.append("  zerocode tui [-m modele]\n\n")
     text.append("Démarrage\n", style="bold cyan")
+    text.append("  zerocode                 interface TUI interactive\n")
     text.append('  zerocode "explique la structure du projet"\n')
-    text.append('  zerocode -m auto\n')
-    text.append("  zerocode -c\n\n")
+    text.append("  zerocode -m auto\n")
+    text.append("  zerocode -c\n")
+    text.append("  zerocode --classic       ancienne interface REPL\n\n")
     text.append("Modèles\n", style="bold cyan")
     text.append("  glm-5.3        GLM 5.3 complet (essai ou payant selon le fournisseur)\n")
     text.append("  glm-5.3-flash  GLM 5.3 Flash (gratuit chez NVIDIA/OpenCode Zen)\n")
     text.append("  auto           chaîne gratuite, sans clé via Kilo Gateway\n\n")
     text.append("Dans le chat\n", style="bold cyan")
-    text.append("  /help  /model  /provider  /permissions  /compact  /cost  /quit\n")
+    text.append("  /help  /build  /plan  /model  /provider  /permissions  /compact  /cost  /quit\n")
     text.append("\nCréé par ", style="dim")
     text.append(__author__, style="bold")
     text.append("\nGitHub       ", style="dim")
@@ -549,6 +598,8 @@ def print_chat_help(console: Console) -> None:
         ("/help", "afficher cette aide"),
         ("/model [nom]", "voir ou changer le modele"),
         ("/provider [nom]", "voir ou changer le fournisseur"),
+        ("/build", "mode build: modifications autorisees"),
+        ("/plan", "mode plan: lecture seule"),
         ("/permissions [ask|allow|deny]", "politique d'autorisation"),
         ("/yolo", "tout autoriser pour la session"),
         ("/reasoning low|high|max", "effort de raisonnement GLM"),

@@ -128,6 +128,33 @@ def test_agent_load_session_restores_state(tmp_path):
     assert context.cwd == Path(other.cwd)
 
 
+def test_agent_plan_mode_is_read_only(tmp_path):
+    agent, _, _, _ = build_agent(tmp_path, [])
+    agent.set_mode("plan")
+    names = [schema["function"]["name"] for schema in agent.tools.schemas()]
+    assert "read" in names
+    assert "list" in names
+    assert "write" not in names
+    assert "edit" not in names
+    assert "bash" not in names
+    assert "MODE PLAN ACTIF" in agent.messages[0]["content"]
+
+    result = agent.tools.execute(
+        ToolCall(
+            id="call-plan",
+            name="write",
+            arguments={"path": "x.txt", "content": "interdit"},
+        )
+    )
+    assert "mode plan" in result
+    assert not (tmp_path / "x.txt").exists()
+
+    agent.set_mode("build")
+    names = [schema["function"]["name"] for schema in agent.tools.schemas()]
+    assert "write" in names
+    assert "MODE PLAN ACTIF" not in agent.messages[0]["content"]
+
+
 def test_agent_compacts_long_context(tmp_path):
     completion = Completion(content="ok")
     agent, _, _, _ = build_agent(tmp_path, [completion])

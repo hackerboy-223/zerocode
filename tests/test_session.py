@@ -31,6 +31,7 @@ def test_session_save_load_list_and_latest(tmp_path):
     assert items[0]["id"] == first.id
     assert items[0]["messages"] == 1
     assert items[0]["total_tokens"] == 7
+    assert items[0]["title"] == "bonjour"
 
     second = store.new(tmp_path, "glm-5.3-flash")
     store.save(second)

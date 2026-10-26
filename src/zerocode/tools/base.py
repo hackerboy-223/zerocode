@@ -98,6 +98,7 @@ class ToolRegistry:
         self.context = context
         self.permissions = permissions
         self.ui = ui
+        self.read_only = False
         self._tools: dict[str, Tool] = {}
 
     def register(self, tool: Tool) -> None:
@@ -106,7 +107,11 @@ class ToolRegistry:
         self._tools[tool.name] = tool
 
     def schemas(self) -> list[dict[str, Any]]:
-        return [tool.schema() for tool in self._tools.values()]
+        return [
+            tool.schema()
+            for tool in self._tools.values()
+            if not self.read_only or tool.approval == "never"
+        ]
 
     def names(self) -> list[str]:
         return list(self._tools)
@@ -118,6 +123,8 @@ class ToolRegistry:
         tool = self._tools.get(call.name)
         if tool is None:
             return f"ERREUR: outil inconnu '{call.name}'."
+        if self.read_only and tool.approval != "never":
+            return f"Action refusee: l'outil {call.name} est indisponible en mode plan (lecture seule)."
         try:
             _validate_arguments(tool.parameters, call.arguments)
         except ToolError as exc:

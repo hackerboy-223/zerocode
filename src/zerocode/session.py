@@ -74,6 +74,18 @@ class Session:
         )
 
 
+def _session_title(messages: Any) -> str:
+    if not isinstance(messages, list):
+        return ""
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = " ".join(str(message.get("content") or "").split())
+        if content:
+            return content[:42] + ("…" if len(content) > 42 else "")
+    return ""
+
+
 class SessionStore:
     def __init__(self, root: Path | None = None) -> None:
         self.root = (root or (data_dir() / "sessions")).expanduser()
@@ -151,6 +163,7 @@ class SessionStore:
                     "updated_at": str(data.get("updated_at", "")),
                     "messages": len(data.get("messages") or []),
                     "total_tokens": int((data.get("usage") or {}).get("total_tokens", 0) or 0),
+                    "title": _session_title(data.get("messages") or []),
                 }
             )
         result.sort(key=lambda item: item["updated_at"], reverse=True)
