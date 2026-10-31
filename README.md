@@ -39,7 +39,7 @@ zerocode doctor
 py -m pip install --user pipx
 py -m pipx ensurepath
 # Redémarre PowerShell si nécessaire, puis :
-pipx install git+https://github.com/hackerboy-223/zerocode.git
+pip install git+https://github.com/hackerboy-223/zerocode.git
 zerocode --version
 zerocode doctor
 ```
