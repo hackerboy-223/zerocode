@@ -105,6 +105,16 @@ def test_key_store_roundtrip_and_mode(tmp_path):
     if os.name != "nt":
         mode = stat.S_IMODE(path.stat().st_mode)
         assert mode & 0o077 == 0
+    else:
+        import subprocess
+
+        acl = subprocess.run(
+            ["icacls", str(path)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.lower()
+        assert (os.environ.get("USERNAME") or "").lower() in acl
     assert mask_key("gsk-secret-value") == "gsk-...alue"
     assert delete_key("groq") is True
     assert delete_key("groq") is False
