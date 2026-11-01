@@ -126,9 +126,9 @@ class ToolContext:
 
     def display_path(self, path: Path) -> str:
         try:
-            return str(path.resolve().relative_to(self.cwd))
+            return path.resolve().relative_to(self.cwd).as_posix()
         except ValueError:
-            return str(path)
+            return path.as_posix()
 
 
 @dataclass(frozen=True)

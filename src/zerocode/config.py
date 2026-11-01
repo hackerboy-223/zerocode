@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import contextlib
+import getpass
 import json
 import os
-import stat
+import subprocess
 import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -358,6 +358,37 @@ def mask_key(value: str | None) -> str:
     return f"{value[:4]}...{value[-4:]}"
 
 
+def _set_private_permissions(path: Path, mode: int = 0o600) -> None:
+    if os.name != "nt":
+        os.chmod(path, mode)
+        return
+
+    username = os.environ.get("USERNAME") or getpass.getuser()
+    domain = os.environ.get("USERDOMAIN")
+    principal = f"{domain}\\{username}" if domain else username
+    try:
+        result = subprocess.run(
+            [
+                "icacls",
+                str(path),
+                "/inheritance:r",
+                "/grant:r",
+                f"{principal}:(F)",
+                "*S-1-5-18:(F)",
+                "*S-1-5-32-544:(F)",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ConfigError(f"Impossible de proteger les permissions de {path}: {exc}") from exc
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "erreur icacls").strip()
+        raise ConfigError(f"Impossible de proteger les permissions de {path}: {detail}")
+
+
 def _atomic_write(path: Path, content: str, *, mode: int = 0o600) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
@@ -367,10 +398,9 @@ def _atomic_write(path: Path, content: str, *, mode: int = 0o600) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.chmod(temp, mode)
+        # Secure the temporary file before it becomes visible at the final path.
+        _set_private_permissions(temp, mode)
         os.replace(temp, path)
     finally:
         if temp.exists():
             temp.unlink(missing_ok=True)
-    with contextlib.suppress(OSError):
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
