@@ -270,7 +270,11 @@ def list_files(args: dict[str, Any], ctx: ToolContext) -> str:
                 item.is_relative_to(path) for item in visible
             ):
                 continue
-        label = str(path.relative_to(ctx.cwd)) if path.is_relative_to(ctx.cwd) else str(path)
+        label = (
+            path.relative_to(ctx.cwd).as_posix()
+            if path.is_relative_to(ctx.cwd)
+            else path.as_posix()
+        )
         if path.is_dir():
             label += "/"
         entries.append(label)
