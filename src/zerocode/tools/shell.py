@@ -137,7 +137,7 @@ def _communicate_streaming(
         value = "".join(buffers[name])
         if totals[name] > stored[name]:
             value += (
-                f"\\n[... {name} tronque: {totals[name]} caracteres recus, "
+                f"\n[... {name} tronque: {totals[name]} caracteres recus, "
                 f"{stored[name]} conserves ...]"
             )
         return value
@@ -145,7 +145,7 @@ def _communicate_streaming(
     stdout = render("stdout")
     stderr = render("stderr")
     if timed_out:
-        stdout += f"\\n[commande interrompue apres {timeout} secondes]"
+        stdout += f"\n[commande interrompue apres {timeout} secondes]"
         return stdout, stderr, 124
     return stdout, stderr, process.returncode
 
