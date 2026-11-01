@@ -4,7 +4,6 @@ import contextlib
 import getpass
 import json
 import os
-import stat
 import subprocess
 import tempfile
 from dataclasses import dataclass, field, fields
@@ -400,10 +399,8 @@ def _atomic_write(path: Path, content: str, *, mode: int = 0o600) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.chmod(temp, mode)
+        _set_private_permissions(temp, mode)
         os.replace(temp, path)
     finally:
         if temp.exists():
             temp.unlink(missing_ok=True)
-    with contextlib.suppress(OSError):
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
