@@ -20,7 +20,10 @@ def _content_tokens(content: Any) -> int:
             if isinstance(part, str):
                 total += estimate_tokens(part)
             elif isinstance(part, dict):
-                total += estimate_tokens(str(part.get("text", "")))
+                if part.get("type") in {"image_url", "input_image"}:
+                    total += 1_000
+                else:
+                    total += estimate_tokens(str(part.get("text", "")))
         return total
     return 0
 
@@ -56,7 +59,16 @@ def _summarize(messages: list[dict[str, Any]], max_chars: int) -> str:
     for message in messages:
         role = message.get("role", "")
         content = message.get("content")
-        text = content if isinstance(content, str) else ""
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            text = " ".join(
+                str(part.get("text", ""))
+                for part in content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        else:
+            text = ""
         text = " ".join(text.split())
         if role == "user" and text:
             lines.append(f"- Utilisateur: {text[:280]}")

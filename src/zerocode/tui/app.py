@@ -11,6 +11,7 @@ from typing import Any
 
 from rich import box
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
@@ -18,6 +19,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
+    Button,
     DirectoryTree,
     Input,
     Label,
@@ -27,13 +29,22 @@ from textual.widgets import (
     Static,
 )
 
+from ..checkpoints import CheckpointStore
 from ..errors import ZeroCodeError
-from ..ui import _format_tool_args
+from ..ui import _format_tool_args, _safe
 from ..version import __author__, __github__, __portfolio__, __version__
 from .bridge import TuiBridge
 from .commands import ARG_COMMANDS, COMMANDS, CommandHandler
-from .screens import CommandPaletteScreen, ConfirmScreen, FilePickerScreen, HelpScreen
-from .widgets import PromptInput, ThinkingIndicator, ToolCard
+from .screens import (
+    CommandPaletteScreen,
+    ConfirmScreen,
+    FilePickerScreen,
+    HelpScreen,
+    PasswordScreen,
+)
+from .widgets import TOOL_ICONS, PromptInput, ThinkingIndicator, ToolCard
+
+THINK_MODES = ("off", "low", "high", "max")
 
 IGNORED_DIRECTORIES = {
     ".git",
@@ -65,7 +76,7 @@ class SessionItem(ListItem):
         current: bool = False,
     ) -> None:
         body = Text()
-        body.append("● " if current else "  ", style="cyan" if current else "dim")
+        body.append("● " if current else "○ ", style="bold cyan" if current else "dim")
         body.append(title, style="bold" if current else "")
         body.append("\n   " + meta, style="dim")
         super().__init__(Static(body, classes="session-label"))
@@ -76,7 +87,7 @@ class SessionItem(ListItem):
 
 class ZeroCodeApp(App[None]):
     TITLE = "zerocode"
-    SUB_TITLE = f"par {__author__}"
+    SUB_TITLE = f"Web Agent Studio · par {__author__}"
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
         Binding("ctrl+k", "command_palette", "Commandes", priority=True),
@@ -85,39 +96,101 @@ class ZeroCodeApp(App[None]):
         Binding("shift+tab", "cycle_work_mode", "Build/Plan", priority=True, show=False),
         Binding("f1", "help", "Aide", priority=True),
         Binding("f2", "toggle_last_tool", "Dernier outil", priority=True),
+        Binding("f3", "cycle_think", "Mode think", priority=True),
         Binding("f6", "cycle_focus", "Focus suivant", priority=True),
+        Binding("escape", "interrupt_turn", "Interrompre", show=False),
         Binding("ctrl+q", "request_exit", "Quitter", priority=True),
     ]
 
     CSS = """
     Screen {
-        background: $surface;
-        color: $text;
+        background: #0d1117;
+        color: #e6edf3;
     }
 
+    /* Barre supérieure style navigateur / Web App */
     #brandbar {
         height: 1;
         padding: 0 1;
-        background: $boost;
-        color: $text-muted;
+        background: #161b22;
+        color: #8b949e;
+        border-bottom: none;
     }
 
     #body {
         height: 1fr;
     }
 
-    #modebar {
+    /* Barre d'onglets et de modes style Web Studio */
+    #modebar-row {
         height: 1;
-        padding: 0 1;
-        background: $panel;
+        background: #161b22;
     }
 
+    #modebar {
+        width: 1fr;
+        height: 1;
+        padding: 0 1;
+        background: #161b22;
+    }
+
+    .think-chip {
+        min-width: 0;
+        height: 1;
+    }
+
+    .think-chip.thinking-on {
+        background: #8957e5;
+        color: #ffffff;
+        text-style: bold;
+    }
+
+    /* Barre d'actions rapides cliquables (Web Toolbar) */
+    #web-toolbar {
+        height: auto;
+        padding: 0 1;
+        background: #0d1117;
+        border-bottom: solid #21262d;
+    }
+
+    .web-chip {
+        min-width: 10;
+        height: 1;
+        margin: 0 1 0 0;
+        padding: 0 1;
+        border: none;
+        background: #21262d;
+        color: #c9d1d9;
+    }
+
+    .web-chip:hover {
+        background: #30363d;
+        color: #58a6ff;
+    }
+
+    .web-chip.primary-chip {
+        background: #1f6feb;
+        color: #ffffff;
+        text-style: bold;
+    }
+
+    .web-chip.primary-chip:hover {
+        background: #388bfd;
+    }
+
+    .web-chip.accent-chip {
+        background: #8957e5;
+        color: #ffffff;
+        text-style: bold;
+    }
+
+    /* Sidebar style IDE Web (Cursor / Devin / Bolt) */
     #sidebar {
-        width: 32;
+        width: 34;
         min-width: 24;
         padding: 0 1;
-        border-right: solid $primary;
-        background: $panel;
+        border-right: solid #30363d;
+        background: #161b22;
     }
 
     #sidebar.hidden {
@@ -126,7 +199,7 @@ class ZeroCodeApp(App[None]):
 
     .section {
         margin-top: 1;
-        color: $accent;
+        color: #58a6ff;
         text-style: bold;
     }
 
@@ -144,7 +217,8 @@ class ZeroCodeApp(App[None]):
     }
 
     SessionItem.current {
-        background: $boost;
+        background: #1f2937;
+        border-left: thick #58a6ff;
     }
 
     .session-label {
@@ -153,24 +227,26 @@ class ZeroCodeApp(App[None]):
     }
 
     SessionItem.current .session-label {
-        color: $accent;
+        color: #58a6ff;
     }
 
     #main {
         width: 1fr;
+        background: #0d1117;
     }
 
     #chat {
         height: 1fr;
-        padding: 0 1;
+        padding: 0 2;
         scrollbar-size-vertical: 1;
     }
 
+    /* Tiroir Inspecteur Web (Tâches / Outils) */
     #inspector {
-        height: 12;
-        border-top: solid $primary;
-        padding: 0 1;
-        background: $panel;
+        height: 13;
+        border-top: heavy #30363d;
+        padding: 0 2;
+        background: #161b22;
     }
 
     #inspector.hidden {
@@ -178,8 +254,9 @@ class ZeroCodeApp(App[None]):
     }
 
     #inspector-title {
-        color: $accent;
+        color: #58a6ff;
         text-style: bold;
+        margin-top: 0;
     }
 
     #inspector-content {
@@ -188,67 +265,97 @@ class ZeroCodeApp(App[None]):
         scrollbar-size-vertical: 1;
     }
 
+    /* Barre d'état inférieure style Web App */
     #status {
         height: 1;
-        padding: 0 1;
-        background: $boost;
-        color: $text-muted;
+        padding: 0 2;
+        background: #161b22;
+        color: #8b949e;
     }
 
+    /* Zone Composer style ChatGPT / Claude / v0 */
     #prompt {
-        margin: 0 1 1 1;
-        border: tall $primary;
+        margin: 0 2 1 2;
+        border: round #388bfd;
+        background: #161b22;
+        color: #f0f6fc;
+    }
+
+    #prompt:focus {
+        border: round #58a6ff;
+        background: #1c2128;
     }
 
     .welcome {
         margin: 1 0;
     }
 
+    /* Bulle / Carte message utilisateur style Web Chat */
     .user-message {
         margin: 1 0 1 0;
-        padding: 0 1;
-        border-left: thick $primary;
+        padding: 0 2;
+        background: #161b22;
+        border-left: heavy #58a6ff;
+    }
+
+    /* En-tête et corps de réponse Agent Web */
+    .agent-header {
+        margin: 1 0 0 0;
+        color: #58a6ff;
     }
 
     .assistant {
-        margin: 1 0;
+        margin: 0 0 1 0;
+        padding: 0 2;
+        border-left: thick #238636;
+        background: #11161d;
     }
 
     .reasoning {
-        color: $text-muted;
+        color: #8b949e;
         text-style: italic;
         margin: 0 0 1 0;
+        padding: 0 2;
+        border-left: thick #8957e5;
+        background: #13111c;
     }
 
     .thinking {
-        color: $text-muted;
+        color: #c9d1d9;
         margin: 0 0 1 0;
+        padding: 0 1;
+        background: #161b22;
+        border-left: heavy #d29922;
     }
 
     .tool-line {
-        color: $text-muted;
+        color: #8b949e;
         margin: 0;
     }
 
+    /* Cartes d'exécution d'outils style Web Agent */
     ToolCard {
         height: auto;
         margin: 0 0 1 0;
         padding: 0;
         border: none;
-        border-left: heavy $primary;
-        background: transparent;
+        border-left: heavy #388bfd;
+        background: #161b22;
     }
 
     ToolCard.running {
-        border-left: heavy $warning;
+        border-left: heavy #d29922;
+        background: #1c1912;
     }
 
     ToolCard.success {
-        border-left: heavy $success;
+        border-left: heavy #2ea043;
+        background: #121a16;
     }
 
     ToolCard.error {
-        border-left: heavy $error;
+        border-left: heavy #f85149;
+        background: #1f1315;
     }
 
     ToolCard CollapsibleTitle {
@@ -262,48 +369,54 @@ class ZeroCodeApp(App[None]):
     }
 
     .tool-output {
-        color: $text-muted;
+        color: #8b949e;
         height: auto;
     }
 
     .notice {
         margin: 0 0 1 0;
         padding: 0 1;
+        background: #161b22;
+        border-left: thick #30363d;
     }
 
     .notice.warning {
-        color: $warning;
+        color: #d29922;
+        border-left: thick #d29922;
     }
 
     .notice.error {
-        color: $error;
+        color: #f85149;
         text-style: bold;
+        border-left: thick #f85149;
     }
 
     .notice.success {
-        color: $success;
+        color: #3fb950;
+        border-left: thick #2ea043;
     }
 
     .notice.info {
-        color: $text-muted;
+        color: #8b949e;
+        border-left: thick #58a6ff;
     }
 
-    ConfirmScreen, FilePickerScreen, CommandPaletteScreen, HelpScreen {
+    ConfirmScreen, PasswordScreen, FilePickerScreen, CommandPaletteScreen, HelpScreen {
         align: center middle;
-        background: $background 60%;
+        background: #010409 75%;
     }
 
     #confirm-dialog {
-        width: 72;
-        max-width: 90%;
+        width: 74;
+        max-width: 92%;
         height: auto;
         padding: 1 2;
-        border: thick $warning;
-        background: $panel;
+        border: round #d29922;
+        background: #161b22;
     }
 
     #confirm-title, .palette-title {
-        color: $accent;
+        color: #58a6ff;
         text-style: bold;
         height: 1;
     }
@@ -321,7 +434,7 @@ class ZeroCodeApp(App[None]):
 
     #confirm-hint {
         height: 1;
-        color: $text-muted;
+        color: #8b949e;
     }
 
     #confirm-actions {
@@ -334,13 +447,58 @@ class ZeroCodeApp(App[None]):
         margin-left: 1;
     }
 
-    #palette-dialog {
-        width: 72;
-        max-width: 90%;
-        height: 70%;
+    #password-dialog {
+        width: 74;
+        max-width: 92%;
+        height: auto;
         padding: 1 2;
-        border: thick $primary;
-        background: $panel;
+        border: round #8957e5;
+        background: #161b22;
+    }
+
+    #password-title {
+        color: #c9a4ff;
+        text-style: bold;
+        height: 1;
+    }
+
+    #password-scroll {
+        height: auto;
+        max-height: 12;
+        margin: 1 0;
+        scrollbar-size-vertical: 1;
+    }
+
+    #password-body {
+        height: auto;
+    }
+
+    #password-input {
+        margin-bottom: 1;
+    }
+
+    #password-hint {
+        height: 1;
+        color: #8b949e;
+    }
+
+    #password-actions {
+        height: auto;
+        align-horizontal: right;
+        margin-top: 1;
+    }
+
+    #password-actions Button {
+        margin-left: 1;
+    }
+
+    #palette-dialog {
+        width: 74;
+        max-width: 92%;
+        height: 72%;
+        padding: 1 2;
+        border: round #388bfd;
+        background: #161b22;
     }
 
     #file-filter, #command-filter {
@@ -353,12 +511,12 @@ class ZeroCodeApp(App[None]):
     }
 
     #help-dialog {
-        width: 82;
+        width: 84;
         max-width: 94%;
         height: 82%;
         padding: 1 2;
-        border: thick $primary;
-        background: $panel;
+        border: round #388bfd;
+        background: #161b22;
     }
 
     #help-scroll {
@@ -368,7 +526,7 @@ class ZeroCodeApp(App[None]):
 
     .palette-hint {
         height: 1;
-        color: $text-muted;
+        color: #8b949e;
     }
     """
 
@@ -390,23 +548,38 @@ class ZeroCodeApp(App[None]):
         self.permissions = permissions
         self.context = context
         self.chain = chain
+        self.checkpoints = CheckpointStore()
+        self.pending_images: list[str] = []
+        self.agent.checkpoints = self.checkpoints
+        self.context.checkpoint = lambda path, before, tool: self.checkpoints.record(
+            self.agent.session.id, path, before, tool
+        )
         self.bridge = TuiBridge(self)
         self.command_handler = CommandHandler(self)
         self.agent.ui = self.bridge
         self.agent.tools.ui = self.bridge
         self.router.ui = self.bridge
+        if hasattr(self.context, "request_sudo_password"):
+            self.context.request_sudo_password = self.bridge.request_sudo_password
+        if hasattr(self.context, "show_diff"):
+            self.context.show_diff = self.bridge.show_diff
         self._thread_id = threading.get_ident()
         self._assistant: Markdown | None = None
         self._assistant_buffer = ""
+        self._assistant_rendered = 0
         self._reasoning: Static | None = None
         self._reasoning_buffer = ""
         self._last_render = 0.0
+        self._last_reasoning_render = 0.0
+        self._route: list[str] = list(chain)
+        self._route_stamp = time.monotonic()
         self._files: list[str] = []
         self._tool_cards: list[ToolCard] = []
         self._thinking: ThinkingIndicator | None = None
         self._mode = "chat"
         self.work_mode = getattr(agent, "mode", "build")
         self._busy = False
+        self._interrupt_requested = False
         self._opening_picker = False
         self._branch = ""
         self._spinner_index = 0
@@ -416,19 +589,64 @@ class ZeroCodeApp(App[None]):
         yield Static("", id="brandbar")
         with Horizontal(id="body"):
             with Vertical(id="sidebar"):
-                yield Label("PROJET", id="project-title", classes="section")
+                yield Label("EXPLORATEUR", id="project-title", classes="section")
                 yield DirectoryTree(str(self.context.cwd), id="files")
-                yield Label("SESSIONS", classes="section")
+                yield Label("HISTORIQUE SESSIONS", classes="section")
                 yield ListView(id="sessions")
             with Vertical(id="main"):
-                yield Static("", id="modebar")
+                with Horizontal(id="modebar-row"):
+                    yield Static("", id="modebar")
+                    btn_think = Button(
+                        self._think_label(),
+                        id="chip-think",
+                        classes="web-chip think-chip",
+                    )
+                    btn_think.can_focus = False
+                    yield btn_think
+                with Horizontal(id="web-toolbar"):
+                    btn_build = Button("🛠 Build", id="chip-build", classes="web-chip")
+                    btn_build.can_focus = False
+                    yield btn_build
+
+                    btn_plan = Button("📐 Plan", id="chip-plan", classes="web-chip")
+                    btn_plan.can_focus = False
+                    yield btn_plan
+
+                    btn_fs = Button(
+                        "🚀 Full-Stack",
+                        id="chip-fullstack",
+                        classes="web-chip accent-chip",
+                    )
+                    btn_fs.can_focus = False
+                    yield btn_fs
+
+                    btn_files = Button(
+                        "📎 @Fichier", id="chip-files", classes="web-chip"
+                    )
+                    btn_files.can_focus = False
+                    yield btn_files
+
+                    btn_todos = Button(
+                        "☑️ Tâches", id="chip-todos", classes="web-chip"
+                    )
+                    btn_todos.can_focus = False
+                    yield btn_todos
+
+                    btn_palette = Button(
+                        "⌘K Commandes",
+                        id="chip-palette",
+                        classes="web-chip primary-chip",
+                    )
+                    btn_palette.can_focus = False
+                    yield btn_palette
+
                 yield VerticalScroll(id="chat")
                 with Vertical(id="inspector", classes="hidden"):
                     yield Label("", id="inspector-title")
                     yield Static("", id="inspector-content")
                 yield Static("", id="status")
                 yield PromptInput(
-                    placeholder="Demandez quelque chose…  @ fichiers  Ctrl+K commandes",
+                    placeholder="💬 Demandez à l'agent web…  @ fichiers  ·  Ctrl+K commandes",
                     id="prompt",
                 )
 
@@ -440,6 +658,7 @@ class ZeroCodeApp(App[None]):
         self._refresh_brandbar()
         self._refresh_project_title()
         self._refresh_modebar()
+        self.refresh_think_chip()
         self._refresh_prompt_placeholder()
         self._refresh_sessions()
         self._refresh_status()
@@ -460,6 +679,26 @@ class ZeroCodeApp(App[None]):
     def on_resize(self) -> None:
         self._refresh_status()
         self._refresh_brandbar()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        btn_id = event.button.id or ""
+        if btn_id == "chip-build":
+            self.set_work_mode("build")
+        elif btn_id == "chip-plan":
+            self.set_work_mode("plan")
+        elif btn_id == "chip-fullstack":
+            self.set_work_mode("full-stack")
+        elif btn_id == "chip-think":
+            self.cycle_think_mode()
+        elif btn_id == "chip-files":
+            self._open_file_picker()
+        elif btn_id == "chip-todos":
+            self.set_mode("todos" if self._mode != "todos" else "chat")
+        elif btn_id == "chip-palette":
+            self.action_command_palette()
+        else:
+            return
+        self.query_one("#prompt", Input).focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id != "prompt":
@@ -487,7 +726,9 @@ class ZeroCodeApp(App[None]):
         else:
             self.submit_prompt(text)
 
-    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
+    def on_directory_tree_file_selected(
+        self, event: DirectoryTree.FileSelected
+    ) -> None:
         try:
             path = event.path.resolve().relative_to(self.context.cwd)
         except ValueError:
@@ -516,19 +757,25 @@ class ZeroCodeApp(App[None]):
         self.query_one("#prompt", Input).focus()
 
     def submit_prompt(self, text: str) -> None:
-        self._mount_user(text)
+        self._interrupt_requested = False
+        images = list(self.pending_images)
+        self.pending_images.clear()
+        self._mount_user(text, images)
         self._start_thinking()
         self._busy = True
         self.query_one("#prompt", Input).disabled = True
         self._start_spinner()
         self._refresh_status()
         self._scroll_chat()
-        self._run_turn(text)
+        self._run_turn(text, images)
 
     @work(thread=True, exclusive=True, group="agent")
-    def _run_turn(self, text: str) -> None:
+    def _run_turn(self, text: str, images: list[str] | None = None) -> None:
         try:
-            self.agent.run_turn(text)
+            if images:
+                self.agent.run_turn(text, images=images)
+            else:
+                self.agent.run_turn(text)
         except KeyboardInterrupt:
             self._call_main("_turn_interrupted")
         except ZeroCodeError as exc:
@@ -556,13 +803,14 @@ class ZeroCodeApp(App[None]):
         self._refresh_status()
         self._refresh_sessions()
         self._refresh_inspector()
+        self._refresh_modebar()
         if self._is_following():
             self._scroll_chat()
 
     def _start_spinner(self) -> None:
         self._stop_spinner()
         self._spinner_index = 0
-        self._spinner_timer = self.set_interval(0.12, self._spin)
+        self._spinner_timer = self.set_interval(0.18, self._spin)
 
     def _stop_spinner(self) -> None:
         if self._spinner_timer is not None:
@@ -618,6 +866,52 @@ class ZeroCodeApp(App[None]):
             return
         next_mode = "plan" if self.work_mode == "build" else "build"
         self.set_work_mode(next_mode)
+
+    def current_think_mode(self) -> str:
+        if not self.config.show_reasoning:
+            return "off"
+        effort = getattr(self.config, "reasoning_effort", "high")
+        return effort if effort in THINK_MODES else "high"
+
+    def _think_label(self) -> str:
+        mode = self.current_think_mode()
+        return "🧠 Think: off" if mode == "off" else f"🧠 Think: {mode}"
+
+    def set_think_mode(self, mode: str, *, quiet: bool = False) -> None:
+        if mode not in THINK_MODES:
+            return
+        if mode == "off":
+            self.config.show_reasoning = False
+        else:
+            self.config.show_reasoning = True
+            self.config.reasoning_effort = mode
+        self.bridge.show_reasoning = self.config.show_reasoning
+        self.refresh_think_chip()
+        self._refresh_modebar()
+        self._refresh_status()
+        if quiet:
+            return
+        if mode == "off":
+            self.notice("Think : désactivé (raisonnement masqué).", "info")
+        else:
+            self.notice(f"Think : {mode} · raisonnement affiché.", "success")
+
+    def cycle_think_mode(self) -> None:
+        current = THINK_MODES.index(self.current_think_mode())
+        self.set_think_mode(THINK_MODES[(current + 1) % len(THINK_MODES)])
+
+    def action_cycle_think(self) -> None:
+        if isinstance(self.screen, ModalScreen):
+            return
+        self.cycle_think_mode()
+
+    def refresh_think_chip(self) -> None:
+        try:
+            button = self.query_one("#chip-think", Button)
+        except Exception:  # noqa: BLE001 - montage initial
+            return
+        button.label = self._think_label()
+        button.set_class(self.current_think_mode() != "off", "thinking-on")
 
     def set_work_mode(self, mode: str, *, quiet: bool = False) -> None:
         if mode not in {"build", "plan", "full-stack"}:
@@ -680,12 +974,26 @@ class ZeroCodeApp(App[None]):
         else:
             widgets[0].focus()
 
+    def action_interrupt_turn(self) -> None:
+        if isinstance(self.screen, ModalScreen) or not self._busy:
+            return
+        if self._interrupt_requested:
+            return
+        self._interrupt_requested = True
+        terminate = getattr(self.context, "terminate_active_process", None)
+        if callable(terminate):
+            terminate()
+        self.notice("⏹ Interruption demandée…", "warning")
+        self._refresh_status()
+
     def action_request_exit(self) -> None:
         self.request_exit()
 
     def request_exit(self) -> None:
         if self._busy:
-            self.notice("Un tour est en cours. Attends sa fin avant de quitter.", "warning")
+            self.notice(
+                "Un tour est en cours. Attends sa fin avant de quitter.", "warning"
+            )
             return
         self.exit()
 
@@ -698,7 +1006,7 @@ class ZeroCodeApp(App[None]):
 
     def show_help(self) -> None:
         body = Text()
-        body.append("Raccourcis\n", style="bold cyan")
+        body.append("Raccourcis Web Studio\n", style="bold cyan")
         for key, description in (
             ("Ctrl+K", "palette de commandes"),
             ("@", "rechercher un fichier"),
@@ -706,7 +1014,9 @@ class ZeroCodeApp(App[None]):
             ("Tab", "chat / tâches / outils"),
             ("↑ ↓", "historique des demandes"),
             ("F2", "replier / ouvrir le dernier outil"),
+            ("F3", "mode think : off / low / high / max"),
             ("F6", "focus prompt → fichiers → sessions → chat"),
+            ("Échap", "interrompre le tour en cours"),
             ("Ctrl+B", "afficher ou masquer la sidebar"),
             ("F1", "aide et commandes"),
             ("Ctrl+Q", "quitter"),
@@ -726,41 +1036,71 @@ class ZeroCodeApp(App[None]):
         self.push_screen(HelpScreen(body, self.context.cwd))
 
     def show_welcome(self) -> None:
-        body = Text()
-        body.append("Agent de codage pour le terminal\n\n", style="dim")
-        body.append("modèle       ", style="dim")
-        body.append(self.config.model)
-        body.append("\nfournisseur  ", style="dim")
-        body.append(self.config.provider or "automatique")
-        body.append("\n")
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column(style="dim", width=14)
+        grid.add_column()
+
+        model_pill = Text()
+        model_pill.append(f" {self.config.model} ", style="bold black on cyan")
+        model_pill.append(
+            f"  via {self.config.provider or 'routeur auto'}", style="dim"
+        )
+        grid.add_row("Modèle actif", model_pill)
+
         if self.chain:
-            body.append("route        ", style="dim")
-            body.append(" · ".join(self.chain[:3]) + "\n")
-        body.append("mode         ", style="dim")
-        body.append(self.work_mode + "\n")
-        body.append("permissions  ", style="dim")
-        body.append(self.permissions.mode + "\n")
+            grid.add_row("Route Web", Text(" → ".join(self.chain[:3]), style="cyan"))
+
+        mode_style = {
+            "build": "bold black on green",
+            "plan": "bold black on yellow",
+            "full-stack": "bold white on magenta",
+        }.get(self.work_mode, "bold cyan")
+        mode_row = Text()
+        mode_row.append(f" {self.work_mode.upper()} ", style=mode_style)
+        mode_row.append(f"  ·  permissions : {self.permissions.mode}", style="dim")
+        grid.add_row("Mode Agent", mode_row)
+
+        ws_text = Text(str(self.context.cwd), style="bold")
         if self._branch:
-            body.append("branche      ", style="dim")
-            body.append(self._branch + "\n")
-        body.append("dossier      ", style="dim")
-        body.append(str(self.context.cwd) + "\n")
-        body.append("\nCréé par ", style="dim")
-        body.append(__author__, style="bold")
-        body.append("\nGitHub       ", style="dim")
-        body.append(__github__, style=f"cyan underline link {__github__}")
-        body.append("\nPortfolio    ", style="dim")
-        body.append(__portfolio__, style=f"cyan underline link {__portfolio__}")
-        body.append("\n\n")
-        body.append("Ctrl+K commandes · @ fichiers · Tab panneaux · F1 aide", style="dim")
+            ws_text.append(f"  (⎇ {self._branch})", style="cyan")
+        grid.add_row("Workspace", ws_text)
+
+        header = Text()
+        header.append(" ✦ ZEROCODE WEB STUDIO ", style="bold white on blue")
+        header.append(
+            "  Agent de codage autonome dans le terminal\n\n", style="bold cyan"
+        )
+
+        footer = Text()
+        footer.append("\nActions rapides : ", style="bold cyan")
+        footer.append("[/full-stack]", style="bold magenta")
+        footer.append(" Projet complet  ·  ", style="dim")
+        footer.append("[/plan]", style="bold yellow")
+        footer.append(" Lecture seule  ·  ", style="dim")
+        footer.append("[@]", style="bold cyan")
+        footer.append(" Joindre un fichier  ·  ", style="dim")
+        footer.append("[Ctrl+K]", style="bold green")
+        footer.append(" Palette\n", style="dim")
+        footer.append("Créé par ", style="dim")
+        footer.append(__author__, style="bold")
+        footer.append("  ·  GitHub : ", style="dim")
+        footer.append(__github__, style=f"cyan underline link {__github__}")
+        footer.append("  ·  Portfolio : ", style="dim")
+        footer.append(__portfolio__, style=f"cyan underline link {__portfolio__}")
+
+        wrapper = Table.grid()
+        wrapper.add_row(header)
+        wrapper.add_row(grid)
+        wrapper.add_row(footer)
+
         panel = Panel(
-            body,
-            title=f"zerocode {__version__}",
+            wrapper,
+            title=f"🌐 zerocode://studio  ·  v{__version__}",
             title_align="left",
-            border_style="cyan",
+            border_style="bright_blue",
             box=box.ROUNDED,
-            padding=(0, 1),
-            expand=False,
+            padding=(0, 2),
+            expand=True,
         )
         self._mount(Static(panel, classes="welcome"))
         self._scroll_chat()
@@ -770,10 +1110,11 @@ class ZeroCodeApp(App[None]):
         self.show_welcome()
         for message in session.messages:
             role = message.get("role")
-            content = str(message.get("content") or "")
+            content = _safe(str(message.get("content") or ""))
             if role == "user" and content:
                 self._mount_user(content)
             elif role == "assistant" and content:
+                self._mount_agent_header()
                 self._mount(Markdown(content, classes="assistant"))
         self._scroll_chat()
 
@@ -782,6 +1123,7 @@ class ZeroCodeApp(App[None]):
         self.query_one("#chat", VerticalScroll).remove_children()
         self._assistant = None
         self._assistant_buffer = ""
+        self._assistant_rendered = 0
         self._reasoning = None
         self._reasoning_buffer = ""
         self._tool_cards = []
@@ -793,14 +1135,22 @@ class ZeroCodeApp(App[None]):
             "success": "green",
             "info": "dim",
         }.get(kind, "dim")
-        label = "ERREUR " if kind == "error" else ""
-        self._mount(Static(Text(label + message, style=style), classes=f"notice {kind}"))
+        badge = {
+            "warning": "⚠ ",
+            "error": "✗ ERREUR ",
+            "success": "✓ ",
+            "info": "ℹ ",
+        }.get(kind, "")
+        self._mount(
+            Static(Text(badge + _safe(message), style=style), classes=f"notice {kind}")
+        )
         self._scroll_chat()
 
     def show_list(self, title: str, lines: list[str]) -> None:
         body = Text()
-        body.append(title + "\n\n", style="bold cyan")
-        body.append("\n".join(lines) if lines else "Aucun résultat.", style="")
+        body.append("📋 " + _safe(title) + "\n\n", style="bold cyan")
+        cleaned = "\n".join(_safe(line) for line in lines)
+        body.append(cleaned if lines else "Aucun résultat.", style="")
         self._mount(Static(body, classes="notice"))
         self._scroll_chat()
 
@@ -811,9 +1161,11 @@ class ZeroCodeApp(App[None]):
         self._refresh_inspector()
 
     def refresh_after_command(self) -> None:
+        self._route_stamp = 0.0
         self._refresh_status()
         self._refresh_brandbar()
         self._refresh_sessions()
+        self._refresh_modebar()
 
     def refresh_sessions(self) -> None:
         self._refresh_sessions()
@@ -826,9 +1178,25 @@ class ZeroCodeApp(App[None]):
         self._refresh_brandbar()
         self._refresh_project_title()
 
-    def _mount_user(self, text: str) -> None:
-        body = Text.assemble(("vous\n", "bold cyan"), (text, ""))
+    def _mount_user(self, text: str, images: list[str] | None = None) -> None:
+        stamp = datetime.now().strftime("%H:%M")
+        label = _safe(text)
+        if images:
+            label += f"\n[{len(images)} image(s) jointe(s)]"
+        body = Text.assemble(
+            (" 👤 VOUS ", "bold black on bright_cyan"),
+            (f"  {stamp}\n", "dim"),
+            (label, ""),
+        )
         self._mount(Static(body, classes="user-message"))
+
+    def _mount_agent_header(self) -> None:
+        stamp = datetime.now().strftime("%H:%M")
+        hdr = Text.assemble(
+            (" ✦ ZEROCODE ", "bold black on green"),
+            (f"  {self.config.model}  ·  {stamp}", "dim"),
+        )
+        self._mount(Static(hdr, classes="agent-header"))
 
     def _mount(self, widget: Any) -> None:
         self.query_one("#chat", VerticalScroll).mount(widget)
@@ -852,13 +1220,20 @@ class ZeroCodeApp(App[None]):
     def _stream_text(self, delta: str) -> None:
         self._stop_thinking()
         follow = self._is_following()
-        self._assistant_buffer += delta
+        self._assistant_buffer += _safe(delta)
         if self._assistant is None:
+            self._mount_agent_header()
             self._assistant = Markdown("", classes="assistant")
+            self._assistant_rendered = 0
             self._mount(self._assistant)
         now = time.monotonic()
-        if now - self._last_render >= 0.05:
-            self._assistant.update(self._assistant_buffer)
+        if (
+            self._assistant.is_mounted
+            and now - self._last_render >= 0.05
+            and self._assistant_rendered < len(self._assistant_buffer)
+        ):
+            self._assistant.append(self._assistant_buffer[self._assistant_rendered :])
+            self._assistant_rendered = len(self._assistant_buffer)
             self._last_render = now
             if follow:
                 self._scroll_chat()
@@ -866,15 +1241,15 @@ class ZeroCodeApp(App[None]):
     def _stream_reasoning(self, delta: str) -> None:
         self._stop_thinking()
         follow = self._is_following()
-        self._reasoning_buffer += delta
+        self._reasoning_buffer += _safe(delta)
         if self._reasoning is None:
             self._reasoning = Static("", classes="reasoning")
             self._mount(self._reasoning)
         now = time.monotonic()
-        if now - self._last_render >= 0.05:
-            text = Text("réflexion  " + self._reasoning_buffer, style="dim italic")
+        if now - self._last_reasoning_render >= 0.08:
+            text = Text("💭 réflexion  " + self._reasoning_buffer, style="dim italic")
             self._reasoning.update(text)
-            self._last_render = now
+            self._last_reasoning_render = now
             if follow:
                 self._scroll_chat()
 
@@ -901,11 +1276,17 @@ class ZeroCodeApp(App[None]):
     def _end_assistant(self) -> None:
         follow = self._is_following()
         if self._assistant is not None:
-            self._assistant.update(self._assistant_buffer)
+            fully_rendered = (
+                self._assistant.is_mounted
+                and self._assistant_rendered >= len(self._assistant_buffer)
+            )
+            if not fully_rendered:
+                self._assistant.update(self._assistant_buffer)
             self._assistant = None
             self._assistant_buffer = ""
+            self._assistant_rendered = 0
         if self._reasoning is not None:
-            text = Text("réflexion  " + self._reasoning_buffer, style="dim italic")
+            text = Text("💭 réflexion  " + self._reasoning_buffer, style="dim italic")
             self._reasoning.update(text)
             self._reasoning = None
             self._reasoning_buffer = ""
@@ -920,6 +1301,21 @@ class ZeroCodeApp(App[None]):
         self._tool_cards.append(card)
         self._mount(card)
         if follow:
+            self._scroll_chat()
+
+    def _tool_output(self, name: str, chunk: str) -> None:
+        card = next(
+            (
+                candidate
+                for candidate in reversed(self._tool_cards)
+                if candidate.tool_name == name and not candidate.done
+            ),
+            None,
+        )
+        if card is None:
+            return
+        card.append_stream(chunk)
+        if self._is_following():
             self._scroll_chat()
 
     def _tool_result(self, name: str, result: str) -> None:
@@ -939,12 +1335,29 @@ class ZeroCodeApp(App[None]):
         card.set_result(result)
         if name == "todo_write":
             self._refresh_inspector()
+            self._refresh_modebar()
         if follow:
             self._scroll_chat()
 
+    def _tool_diff(self, path: str, diff: str) -> None:
+        card = next(
+            (candidate for candidate in reversed(self._tool_cards) if not candidate.done),
+            None,
+        )
+        if card is None:
+            card = ToolCard("diff", "")
+            self._tool_cards.append(card)
+            self._mount(card)
+        card.set_diff(path, diff)
+        if self._is_following():
+            self._scroll_chat()
+
     def ask_tool_permission(self, name: str, args: dict[str, Any], callback: Any) -> None:
-        preview = _format_tool_args(name, args, full=True)
+        preview = _safe(_format_tool_args(name, args, full=True))
         self.push_screen(ConfirmScreen(name, preview), callback)
+
+    def ask_sudo_password(self, command: str, callback: Any) -> None:
+        self.push_screen(PasswordScreen(_safe(command)), callback)
 
     def _is_following(self) -> bool:
         try:
@@ -961,16 +1374,23 @@ class ZeroCodeApp(App[None]):
             status = self.query_one("#status", Static)
         except Exception:  # noqa: BLE001 - montage initial
             return
-        route = self.router.preview()
+        now = time.monotonic()
+        if now - self._route_stamp >= 3.0:
+            self._route = self.router.preview()
+            self._route_stamp = now
+        route = self._route
         usage = self.agent.usage
         width = self.size.width
         text = Text()
+        text.append("● ", style="bold green" if route else "bold red")
         text.append(f"{self.config.model}", style="bold cyan")
         if width >= 70:
             text.append(f"  {self.config.provider or 'auto'}", style="dim")
         if width >= 92:
             text.append("  ·  ", style="dim")
-            text.append(" → ".join(route[:2]) if route else "aucune route", style="dim")
+            text.append(
+                " → ".join(route[:2]) if route else "aucune route", style="dim"
+            )
         if width >= 64:
             text.append("  ·  ", style="dim")
             text.append(
@@ -982,10 +1402,15 @@ class ZeroCodeApp(App[None]):
             text.append(f"session {self.agent.session.id[-8:]}", style="dim")
         if width >= 96:
             text.append("  ·  ", style="dim")
-            text.append(f"{usage.total_tokens:,} jetons".replace(",", " "), style="dim")
+            text.append(
+                f"{usage.total_tokens:,} jetons".replace(",", " "), style="dim"
+            )
         if self._busy:
-            frame = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[self._spinner_index]
-            text.append(f"  ·  {frame} travail…", style="bold yellow")
+            if self._interrupt_requested:
+                text.append("  ·  ⏹ interruption…", style="bold red")
+            else:
+                frame = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[self._spinner_index]
+                text.append(f"  ·  {frame} travail…", style="bold yellow")
         status.update(text)
 
     def _refresh_brandbar(self) -> None:
@@ -994,8 +1419,12 @@ class ZeroCodeApp(App[None]):
         except Exception:  # noqa: BLE001 - montage initial
             return
         text = Text()
-        text.append(f"zerocode {__version__}", style="bold cyan")
-        text.append("  par ", style="dim")
+        text.append("● ", style="bold red")
+        text.append("● ", style="bold yellow")
+        text.append("●  ", style="bold green")
+        text.append(f"🌐 zerocode {__version__}", style="bold cyan")
+        text.append(f"  /{self.context.cwd.name}", style="bold white")
+        text.append("  ·  par ", style="dim")
         text.append(__author__, style="bold")
         text.append("  ·  ", style="dim")
         text.append(__github__, style=f"cyan underline link {__github__}")
@@ -1009,10 +1438,10 @@ class ZeroCodeApp(App[None]):
             title = self.query_one("#project-title", Label)
         except Exception:  # noqa: BLE001 - montage initial
             return
-        text = Text("PROJET", style="bold")
+        text = Text("📂 PROJET", style="bold")
         text.append("  " + self.context.cwd.name, style="dim")
         if self._branch:
-            text.append("  " + self._branch, style="cyan")
+            text.append(f"  ⎇ {self._branch}", style="cyan")
         title.update(text)
 
     def _refresh_modebar(self) -> None:
@@ -1031,14 +1460,20 @@ class ZeroCodeApp(App[None]):
                 style = {
                     "build": "bold black on green",
                     "plan": "bold black on yellow",
-                    "full-stack": "bold black on magenta",
+                    "full-stack": "bold white on magenta",
                 }[mode]
             else:
                 style = "dim"
             text.append(f" {label} ", style=style)
             text.append(" ")
-        text.append("·  ", style="dim")
-        for mode, label in (("chat", "CHAT"), ("todos", "TÂCHES"), ("tools", "OUTILS")):
+        text.append("│ ", style="dim")
+        todo_count = len(self.context.todos)
+        todo_label = f"TÂCHES ({todo_count})" if todo_count else "TÂCHES"
+        for mode, label in (
+            ("chat", "CHAT"),
+            ("todos", todo_label),
+            ("tools", "OUTILS"),
+        ):
             active = self._mode == mode
             text.append(
                 f" {label} ",
@@ -1056,16 +1491,17 @@ class ZeroCodeApp(App[None]):
             return
         if self.work_mode == "plan":
             prompt.placeholder = (
-                "Mode plan (lecture seule) — décris ce que tu veux planifier…  " "Ctrl+K commandes"
+                "📐 Mode plan (lecture seule) — décris ce que tu veux planifier…  "
+                "Ctrl+K commandes"
             )
         elif self.work_mode == "full-stack":
             prompt.placeholder = (
-                "Mode full-stack autonome — décris le projet complet à construire…  "
+                "🚀 Mode full-stack autonome — décris le projet complet à construire…  "
                 "Ctrl+K commandes"
             )
         else:
             prompt.placeholder = (
-                "Demandez quelque chose…  @ fichiers  Ctrl+K commandes"
+                "💬 Demandez quelque chose…  @ fichiers  ·  Ctrl+K commandes"
             )
 
     def _refresh_sessions(self) -> None:
@@ -1089,19 +1525,28 @@ class ZeroCodeApp(App[None]):
         except Exception:  # noqa: BLE001 - montage initial
             return
         if self._mode == "todos":
-            title.update("PLAN DE TRAVAIL")
+            title.update("☑️ PLAN DE TRAVAIL (PROGRESSION)")
             content.update(_todos_text(self.context.todos))
         elif self._mode == "tools":
             suffix = {
                 "plan": " · LECTURE SEULE",
                 "full-stack": " · AUTONOME",
             }.get(self.work_mode, "")
-            title.update("OUTILS" + suffix)
+            title.update("🔧 OUTILS WEB AGENT" + suffix)
             tools = self.agent.tools.tools()
             if self.work_mode == "plan":
                 tools = [tool for tool in tools if tool.approval == "never"]
-            lines = [f"{tool.name:<14} {tool.description}" for tool in tools]
-            content.update(Text("\n".join(lines), style="dim"))
+            text = Text()
+            for tool in tools:
+                icon = TOOL_ICONS.get(tool.name, "🔧")
+                text.append(f"{icon} {tool.name:<12}", style="bold cyan")
+                perm_badge = "AUTO" if tool.approval == "never" else "CONFIRM"
+                text.append(
+                    f" [{perm_badge:<7}] ",
+                    style="green" if tool.approval == "never" else "yellow",
+                )
+                text.append(tool.description + "\n", style="dim")
+            content.update(text)
         else:
             title.update("")
 
@@ -1145,17 +1590,27 @@ def _relative_time(value: str) -> str:
 
 def _todos_text(todos: list[dict[str, Any]]) -> Text:
     if not todos:
-        return Text("Aucune tâche planifiée.", style="dim")
-    markers = {
-        "pending": "[ ]",
-        "in_progress": "[~]",
-        "completed": "[x]",
-        "cancelled": "[-]",
-    }
+        return Text("Aucune tâche planifiée pour le moment.", style="dim")
+    done_count = sum(1 for t in todos if str(t.get("status")) == "completed")
+    total = len(todos)
+    pct = int((done_count / total) * 100) if total else 0
+    bar_width = 16
+    filled = int((done_count / total) * bar_width) if total else 0
+    bar = "━" * filled + "─" * (bar_width - filled)
+
     text = Text()
+    text.append(f"Progression : {bar} {pct}% ({done_count}/{total})\n\n", style="bold cyan")
+
+    markers = {
+        "pending": ("○ ATTENTE", "dim"),
+        "in_progress": ("⟳ EN COURS", "bold yellow"),
+        "completed": ("✓ TERMINÉ", "bold green"),
+        "cancelled": ("✕ ANNULÉ", "red"),
+    }
     for todo in todos:
-        marker = markers.get(str(todo.get("status")), "[ ]")
-        text.append(f"{marker} ", style="cyan")
+        status = str(todo.get("status", "pending"))
+        badge, style = markers.get(status, ("○ ATTENTE", "dim"))
+        text.append(f"  {badge:<11} ", style=style)
         text.append(str(todo.get("content", "")) + "\n")
     return text
 
@@ -1163,21 +1618,33 @@ def _todos_text(todos: list[dict[str, Any]]) -> Text:
 def _list_project_files(root: Path, limit: int = 5_000) -> list[str]:
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard"],
+            [
+                "git",
+                "-C",
+                str(root),
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+            ],
             capture_output=True,
             text=True,
             timeout=5,
             check=False,
         )
         if result.returncode == 0:
-            files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            files = [
+                line.strip() for line in result.stdout.splitlines() if line.strip()
+            ]
             return sorted(files)[:limit]
     except (OSError, subprocess.SubprocessError):
         pass
 
     files: list[str] = []
     for current, directories, names in os.walk(root):
-        directories[:] = [name for name in directories if name not in IGNORED_DIRECTORIES]
+        directories[:] = [
+            name for name in directories if name not in IGNORED_DIRECTORIES
+        ]
         for name in names:
             path = Path(current) / name
             try:

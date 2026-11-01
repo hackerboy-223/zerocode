@@ -51,6 +51,7 @@ class Router:
         provider: str | None = None,
         *,
         needs_tools: bool = True,
+        needs_vision: bool = False,
     ) -> list[tuple[ProviderSpec, ModelSpec]]:
         requested = (model or self.config.model).strip()
         wanted_provider = (provider or self.config.provider or "").strip() or None
@@ -131,10 +132,14 @@ class Router:
                 continue
             if needs_tools and not model_spec.tools:
                 continue
+            if needs_vision and not model_spec.vision:
+                continue
             result.append((spec, model_spec))
 
         if not result:
-            raise ConfigError(self._no_candidate_message(requested, wanted_provider))
+            raise ConfigError(
+                self._no_candidate_message(requested, wanted_provider, needs_vision=needs_vision)
+            )
         return result
 
     def preview(
@@ -166,9 +171,15 @@ class Router:
         model: str | None = None,
         provider: str | None = None,
         callbacks: StreamCallbacks | None = None,
+        needs_vision: bool = False,
     ) -> Completion:
         callbacks = callbacks or StreamCallbacks()
-        candidates = self.resolve_candidates(model, provider, needs_tools=bool(tools))
+        candidates = self.resolve_candidates(
+            model,
+            provider,
+            needs_tools=bool(tools),
+            needs_vision=needs_vision,
+        )
         failures: list[tuple[str, Exception]] = []
 
         for spec, model_spec in candidates:
@@ -225,7 +236,13 @@ class Router:
             return True
         return resolve_api_key(spec, self.config) is not None
 
-    def _no_candidate_message(self, requested: str, provider: str | None) -> str:
+    def _no_candidate_message(
+        self,
+        requested: str,
+        provider: str | None,
+        *,
+        needs_vision: bool = False,
+    ) -> str:
         scope = f" chez {provider}" if provider else ""
         lines = [
             f"Aucun modele disponible pour {requested!r}{scope}.",
@@ -234,6 +251,11 @@ class Router:
             "  zerocode models --free",
             "  zerocode setup",
         ]
+        if needs_vision:
+            lines.append(
+                "Ce modele ne gere pas les images. Essaie un modele multimodal "
+                "(ex: glm-5.3-flash-free ou z-ai/glm-5.3-flash)."
+            )
         if self.config.free_only:
             lines.append("Le mode gratuit est actif (--no-free-only pour autoriser les modeles payants).")
         return "\n".join(lines)

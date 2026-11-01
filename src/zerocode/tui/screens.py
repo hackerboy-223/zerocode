@@ -90,9 +90,9 @@ class ConfirmScreen(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         body = Text()
         body.append(self.preview, style="bold")
-        body.append("\n\nCette action peut modifier le système.", style="dim")
+        body.append("\n\n⚠ Cette action peut modifier les fichiers ou exécuter une commande.", style="dim")
         with Vertical(id="confirm-dialog"):
-            yield Label(f"Autorisation requise · {self.tool_name}", id="confirm-title")
+            yield Label(f"🛡️ Autorisation Web Agent · {self.tool_name}", id="confirm-title")
             with VerticalScroll(id="confirm-scroll"):
                 yield Static(body, id="confirm-body")
             yield Static(
@@ -101,8 +101,8 @@ class ConfirmScreen(ModalScreen[bool]):
                 classes="palette-hint",
             )
             with Horizontal(id="confirm-actions"):
-                yield Button("Refuser", id="deny", variant="default")
-                yield Button("Autoriser", id="allow", variant="success")
+                yield Button("✕ Refuser", id="deny", variant="default")
+                yield Button("✓ Autoriser", id="allow", variant="success")
 
     def on_mount(self) -> None:
         self.query_one("#allow", Button).focus()
@@ -115,6 +115,56 @@ class ConfirmScreen(ModalScreen[bool]):
 
     def action_deny(self) -> None:
         self.dismiss(False)
+
+
+class PasswordScreen(ModalScreen[str | None]):
+    BINDINGS = [Binding("escape", "cancel", "Annuler")]
+
+    def __init__(self, command: str) -> None:
+        super().__init__()
+        self.command = command
+
+    def compose(self) -> ComposeResult:
+        body = Text()
+        body.append("🔐 Commande privilégiée détectée\n\n", style="bold yellow")
+        body.append(self.command, style="bold")
+        body.append(
+            "\n\nTon mot de passe reste en local et n'est jamais envoyé au modèle.",
+            style="dim",
+        )
+        with Vertical(id="password-dialog"):
+            yield Label("Mot de passe sudo", id="password-title")
+            with VerticalScroll(id="password-scroll"):
+                yield Static(body, id="password-body")
+            yield Input(
+                placeholder="Mot de passe…",
+                password=True,
+                id="password-input",
+            )
+            yield Static(
+                "Entrée valider · Échap annuler",
+                id="password-hint",
+                classes="palette-hint",
+            )
+            with Horizontal(id="password-actions"):
+                yield Button("✕ Annuler", id="password-cancel", variant="default")
+                yield Button("✓ Valider", id="password-allow", variant="success")
+
+    def on_mount(self) -> None:
+        self.query_one("#password-input", Input).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "password-input":
+            self.dismiss(event.value)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "password-allow":
+            self.dismiss(self.query_one("#password-input", Input).value)
+        elif event.button.id == "password-cancel":
+            self.dismiss(None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 class FilePickerScreen(ModalScreen[str | None]):

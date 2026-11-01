@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import getpass
 import json
 import re
 import sys
@@ -45,6 +46,12 @@ class NullUI:
     def tool_result(self, name: str, result: str) -> None:
         return None
 
+    def stream_tool_output(self, name: str, chunk: str) -> None:
+        return None
+
+    def show_diff(self, path: str, diff: str) -> None:
+        return None
+
     def warn(self, message: str) -> None:
         return None
 
@@ -60,8 +67,73 @@ class NullUI:
     def confirm_tool(self, name: str, args: dict[str, Any]) -> bool:
         return False
 
+    def request_sudo_password(self, command: str) -> str | None:
+        return None
+
     def ask(self, prompt: str = "> ") -> str:
         raise EOFError
+
+
+class JsonUI(NullUI):
+    """Interface non interactive: un evenement JSON par ligne sur stdout."""
+
+    def __init__(self, stream: Any | None = None) -> None:
+        self.stream = stream or sys.stdout
+
+    def _emit(self, event: str, **data: Any) -> None:
+        payload = {"type": event, **data}
+        self.stream.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        self.stream.flush()
+
+    def stream_text(self, delta: str) -> None:
+        if delta:
+            self._emit("text_delta", delta=delta)
+
+    def stream_reasoning(self, delta: str) -> None:
+        if delta:
+            self._emit("reasoning_delta", delta=delta)
+
+    def end_assistant(self) -> None:
+        self._emit("assistant_end")
+
+    def tool_start(self, name: str, args: dict[str, Any]) -> None:
+        self._emit("tool_start", name=name, arguments=args)
+
+    def tool_result(self, name: str, result: str) -> None:
+        self._emit("tool_result", name=name, result=result)
+
+    def stream_tool_output(self, name: str, chunk: str) -> None:
+        if chunk:
+            self._emit("tool_output", name=name, chunk=chunk)
+
+    def warn(self, message: str) -> None:
+        self._emit("warning", message=message)
+
+    def error(self, message: str) -> None:
+        self._emit("error", message=message)
+
+    def info(self, message: str) -> None:
+        self._emit("info", message=message)
+
+    def success(self, message: str) -> None:
+        self._emit("success", message=message)
+
+    def result(
+        self,
+        content: str,
+        *,
+        session_id: str,
+        usage: Usage,
+        completion: Completion | None,
+    ) -> None:
+        self._emit(
+            "result",
+            content=content,
+            session_id=session_id,
+            usage=usage.as_dict(),
+            model=completion.model if completion is not None else None,
+            provider=completion.provider if completion is not None else None,
+        )
 
 
 class ConsoleUI:
@@ -147,6 +219,32 @@ class ConsoleUI:
             if total > 6:
                 self.console.print(Text(f"  ... ({total} lignes)", style="dim"))
 
+    def stream_tool_output(self, name: str, chunk: str) -> None:
+        if self.quiet or not chunk:
+            return
+        self.end_assistant()
+        for line in _safe(chunk).splitlines():
+            if line.strip():
+                self.console.print(Text("  │ " + line[:400], style="dim"))
+
+    def show_diff(self, path: str, diff: str) -> None:
+        if self.quiet:
+            return
+        self.end_assistant()
+        self.console.print(Text("  📄 " + _safe(path), style="bold cyan"))
+        for line in _safe(diff).splitlines():
+            if line.startswith(("+++", "---")):
+                style = "bold"
+            elif line.startswith("+"):
+                style = "green"
+            elif line.startswith("-"):
+                style = "red"
+            elif line.startswith("@@"):
+                style = "cyan"
+            else:
+                style = "dim"
+            self.console.print(Text("  " + line, style=style), soft_wrap=True)
+
     def warn(self, message: str) -> None:
         self.end_assistant()
         self.console.print(Text("  " + _safe(message), style="yellow"))
@@ -192,6 +290,18 @@ class ConsoleUI:
             )
         except (EOFError, KeyboardInterrupt):
             return False
+
+    def request_sudo_password(self, command: str) -> str | None:
+        self.end_assistant()
+        self.console.print(Text("Commande privilegiee detectee:", style="bold yellow"))
+        self.console.print(Text("  " + _safe(command), style="dim"))
+        if not self.interactive:
+            self.warn("Mode non interactif: mot de passe sudo indisponible.")
+            return None
+        try:
+            return getpass.getpass("  mot de passe sudo: ")
+        except (EOFError, KeyboardInterrupt):
+            return None
 
     def ask(self, prompt: str = "> ") -> str:
         if not self.interactive:
@@ -307,6 +417,10 @@ def _format_tool_args(
                 f"{args.get('pattern', '')} · {args.get('path', '.')}",
                 220,
             )
+        if name == "fetch":
+            return truncate_text(str(args.get("url", "")), 220)
+        if name == "web_search":
+            return truncate_text(str(args.get("query", "")), 220)
         if name == "todo_write":
             todos = args.get("todos")
             count = len(todos) if isinstance(todos, list) else 0

@@ -75,16 +75,24 @@ class Agent:
         self._refresh_system_mode()
         self._sync_session()
 
-    def run_turn(self, user_text: str) -> str:
+    def run_turn(self, user_text: str, images: list[str] | None = None) -> str:
         text = user_text.strip()
         if not text:
             return ""
-        self.messages.append({"role": "user", "content": text})
+        content: str | list[dict[str, Any]] = text
+        if images:
+            content = [{"type": "text", "text": text}]
+            content.extend(
+                {"type": "image_url", "image_url": {"url": image}} for image in images
+            )
+        self.messages.append({"role": "user", "content": content})
         self._sync_session()
         self._save_quiet()
         final_text = ""
         try:
             for _ in range(self.config.max_steps):
+                if self._interrupted():
+                    raise KeyboardInterrupt
                 self._maybe_compact()
                 callbacks = StreamCallbacks(
                     on_text=self._callable("stream_text"),
@@ -98,7 +106,10 @@ class Agent:
                     model=self.config.model,
                     provider=self.config.provider,
                     callbacks=callbacks,
+                    needs_vision=_messages_have_images(self.messages),
                 )
+                if self._interrupted():
+                    raise KeyboardInterrupt
                 self.usage.add(completion.usage)
                 assistant: dict[str, Any] = {
                     "role": "assistant",
@@ -124,10 +135,16 @@ class Agent:
                     if completion.finish_reason == "length" and not completion.content:
                         self._call_ui("warn", "Reponse vide ou tronquee: augmente max_tokens.")
                     break
-                if completion.finish_reason == "length" and not completion.content:
-                    self._call_ui("warn", "Reponse tronquee avant l'appel d'outil.")
+                if completion.finish_reason == "length":
+                    self._call_ui(
+                        "warn",
+                        "Reponse tronquee pendant l'appel d'outil: augmente max_tokens.",
+                    )
+                    self._repair_pending_tool_calls()
                     break
                 for call in completion.tool_calls:
+                    if self._interrupted():
+                        raise KeyboardInterrupt
                     self._call_ui("tool_start", call.name, call.arguments)
                     result = self.tools.execute(call)
                     self._call_ui("tool_result", call.name, result)
@@ -138,6 +155,8 @@ class Agent:
                             "content": result,
                         }
                     )
+                    if self._interrupted():
+                        raise KeyboardInterrupt
                 self._sync_session()
                 self._save_quiet()
             else:
@@ -148,8 +167,38 @@ class Agent:
                 )
             return final_text
         finally:
+            self._repair_pending_tool_calls()
             self._sync_session()
             self._save_quiet()
+
+    def _repair_pending_tool_calls(self) -> None:
+        for index in range(len(self.messages) - 1, -1, -1):
+            message = self.messages[index]
+            if message.get("role") != "assistant":
+                continue
+            calls = message.get("tool_calls") or []
+            if not calls:
+                return
+            completed = {
+                str(item.get("tool_call_id"))
+                for item in self.messages[index + 1 :]
+                if item.get("role") == "tool"
+            }
+            for call in calls:
+                call_id = str(call.get("id") or "")
+                if not call_id or call_id in completed:
+                    continue
+                self.messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": (
+                            "ERREUR: appel d'outil interrompu avant execution. "
+                            "Relance l'action si necessaire."
+                        ),
+                    }
+                )
+            return
 
     def compact(self, force: bool = False) -> None:
         context = self.router.context_window(self.config.model)
@@ -303,9 +352,26 @@ class Agent:
             return method(*args, **kwargs)
         return None
 
+    def _interrupted(self) -> bool:
+        checker = getattr(self.ui, "interrupted", None)
+        return bool(checker()) if callable(checker) else False
+
     def _callable(self, name: str) -> Any:
         method = getattr(self.ui, name, None)
         return method if callable(method) else None
+
+
+def _messages_have_images(messages: list[dict[str, Any]]) -> bool:
+    for message in messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        if any(
+            isinstance(part, dict) and part.get("type") in {"image_url", "input_image"}
+            for part in content
+        ):
+            return True
+    return False
 
 
 def _json_arguments(arguments: dict[str, Any]) -> str:

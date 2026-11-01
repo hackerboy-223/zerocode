@@ -16,6 +16,7 @@ class ModelSpec:
     tier: str = "free"
     tools: bool = True
     reasoning: bool = False
+    vision: bool = False
     notes: str = ""
     upstream_id: str | None = None
 

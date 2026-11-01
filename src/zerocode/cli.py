@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import getpass
 import json
+import mimetypes
 import os
 import stat
 import sys
@@ -20,6 +22,7 @@ from rich.text import Text
 
 from .agent import Agent
 from .catalog import PROVIDERS, all_choices, get_provider
+from .checkpoints import CheckpointStore
 from .config import (
     Config,
     default_config_path,
@@ -30,7 +33,8 @@ from .config import (
     save_config,
     store_key,
 )
-from .errors import ZeroCodeError
+from .errors import ConfigError, ZeroCodeError
+from .mcp import MCPManager, register_mcp_tools
 from .providers import (
     applied_providers,
     discover_free_models,
@@ -43,7 +47,7 @@ from .router import Router
 from .session import Session, SessionStore
 from .tools import PermissionManager, ToolContext, build_registry
 from .types import StreamCallbacks
-from .ui import ConsoleUI
+from .ui import ConsoleUI, JsonUI
 from .version import __author__, __github__, __portfolio__, __version__
 
 COMMANDS = {
@@ -58,6 +62,7 @@ COMMANDS = {
     "run",
     "chat",
     "tui",
+    "completion",
 }
 
 
@@ -96,6 +101,8 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return sessions_command(argv[1:], console)
     if first == "config":
         return config_command(argv[1:], console)
+    if first == "completion":
+        return completion_command(argv[1:], console)
     if first == "tui":
         return run_agent(argv[1:], console, force_tui=True)
     if first in {"run", "chat"}:
@@ -139,6 +146,18 @@ def _run_parser() -> argparse.ArgumentParser:
         default=None,
         help="Autoriser les chemins hors du repertoire de travail.",
     )
+    parser.add_argument(
+        "--protect-secrets",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Bloquer la lecture des fichiers de secrets (defaut: oui).",
+    )
+    parser.add_argument(
+        "--allow-secrets",
+        action="store_true",
+        default=None,
+        help="Autoriser explicitement l'acces aux fichiers de secrets.",
+    )
     parser.add_argument("--session", help="Reprendre une session par identifiant.")
     parser.add_argument(
         "-c",
@@ -148,8 +167,19 @@ def _run_parser() -> argparse.ArgumentParser:
         help="Reprendre la derniere session du repertoire courant.",
     )
     parser.add_argument("--cwd", help="Repertoire de travail.")
+    parser.add_argument(
+        "--image",
+        action="append",
+        metavar="FICHIER",
+        help="Joindre une image au prompt (PNG, JPEG, WEBP ou GIF; repeter l'option).",
+    )
     parser.add_argument("--show-thinking", action="store_true", help="Afficher le raisonnement.")
     parser.add_argument("-q", "--quiet", action="store_true", help="Reduire la sortie des outils.")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Mode headless: evenements et resultat en JSON Lines sur stdout.",
+    )
     parser.add_argument(
         "--classic",
         action="store_true",
@@ -186,6 +216,8 @@ def run_agent(
         "max_steps": args.max_steps,
         "permissions": args.permissions,
         "allow_outside_cwd": args.allow_outside_cwd,
+        "protect_secrets": args.protect_secrets,
+        "allow_secrets": args.allow_secrets,
         "show_reasoning": True if args.show_thinking else None,
     }
     if args.yolo:
@@ -193,6 +225,7 @@ def run_agent(
 
     config = load_config(cwd, overrides)
     store = SessionStore()
+    checkpoints = CheckpointStore()
 
     session: Session | None = None
     if args.session:
@@ -221,26 +254,46 @@ def run_agent(
     session.provider = config.provider
 
     interactive = sys.stdin.isatty()
-    ui = ConsoleUI(
-        config,
-        console=console,
-        show_reasoning=config.show_reasoning,
-        quiet=args.quiet,
-        interactive=interactive,
+    ui = (
+        JsonUI()
+        if args.json
+        else ConsoleUI(
+            config,
+            console=console,
+            show_reasoning=config.show_reasoning,
+            quiet=args.quiet,
+            interactive=interactive,
+        )
     )
     router = Router(config, ui=ui)
     context = ToolContext(
         cwd=cwd,
         allow_outside=config.allow_outside_cwd,
         command_timeout=config.command_timeout,
+        protect_secrets=config.protect_secrets,
+        allow_secrets=config.allow_secrets,
         todos=[todo for todo in session.todos if isinstance(todo, dict)],
+        request_sudo_password=ui.request_sudo_password,
     )
     permissions = PermissionManager(mode=config.permissions, interactive=interactive)
     registry = build_registry(context, permissions, ui)
     agent = Agent(config, router, registry, session, ui, store=store)
+    agent.checkpoints = checkpoints
+    context.checkpoint = lambda path, before, tool: checkpoints.record(
+        agent.session.id, path, before, tool
+    )
+    mcp_manager = MCPManager()
+    if config.mcp_servers:
+        mcp_manager = register_mcp_tools(
+            registry,
+            config.mcp_servers,
+            cwd=cwd,
+            ui=ui,
+        )
 
     chain = router.preview()
     prompt = " ".join(args.prompt).strip()
+    images: list[str] = []
 
     try:
         if force_tui and not interactive:
@@ -249,6 +302,16 @@ def run_agent(
         if not prompt and not interactive:
             prompt = sys.stdin.read().strip()
 
+        if args.image:
+            if not prompt:
+                ui.error("--image necessite un prompt.")
+                return 1
+            try:
+                images = [_load_image(path, cwd) for path in args.image]
+            except ConfigError as exc:
+                ui.error(str(exc))
+                return 1
+
         if prompt:
             if not chain:
                 ui.error(
@@ -256,12 +319,19 @@ def run_agent(
                 )
                 return 1
             try:
-                agent.run_turn(prompt)
+                result = agent.run_turn(prompt, images=images)
             except ZeroCodeError as exc:
                 ui.error(str(exc))
                 return 1
             finally:
                 ui.usage(agent.usage, router.last)
+            if args.json:
+                ui.result(
+                    result,
+                    session_id=agent.session.id,
+                    usage=agent.usage,
+                    completion=router.last,
+                )
             return 0
 
         if not interactive:
@@ -303,7 +373,28 @@ def run_agent(
         return _interactive_loop(agent, router, ui, store, permissions, context, config)
 
     finally:
+        mcp_manager.close()
         router.close()
+
+
+def _load_image(raw_path: str, cwd: Path) -> str:
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = cwd / path
+    path = path.resolve()
+    if not path.is_file():
+        raise ConfigError(f"Image introuvable: {path}")
+    data = path.read_bytes()
+    if len(data) > 10 * 1024 * 1024:
+        raise ConfigError(f"Image trop volumineuse (max 10 Mo): {path}")
+    mime, _ = mimetypes.guess_type(path.name)
+    allowed = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+    if mime not in allowed:
+        raise ConfigError(
+            f"Format d'image non supporte: {path.name} (attendu: PNG, JPEG, WEBP ou GIF)."
+        )
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 def _interactive_loop(
@@ -476,14 +567,21 @@ def _slash_command(
         ui.success("Permissions: ask")
         return False
     if command in {"think", "thinking"}:
-        if rest in {"on", "oui", "1", "true"}:
+        if rest in {"low", "high", "max"}:
+            config.show_reasoning = True
+            config.reasoning_effort = rest
+        elif rest in {"on", "oui", "1", "true"}:
             config.show_reasoning = True
         elif rest in {"off", "non", "0", "false"}:
             config.show_reasoning = False
+        elif rest:
+            ui.warn("Valeurs: off, low, high, max")
+            return False
         else:
             config.show_reasoning = not config.show_reasoning
         ui.show_reasoning = config.show_reasoning
-        ui.info(f"raisonnement affiche: {'oui' if config.show_reasoning else 'non'}")
+        level = config.reasoning_effort if config.show_reasoning else "off"
+        ui.info(f"mode think: {level}")
         return False
     if command == "reasoning":
         if rest not in {"low", "high", "max"}:
@@ -557,6 +655,17 @@ def _slash_command(
     if command == "init":
         _init_project_file(context, ui.console)
         return False
+    if command == "undo":
+        checkpoints = getattr(agent, "checkpoints", None)
+        if checkpoints is None:
+            ui.warn("Undo indisponible.")
+            return False
+        ok, message = checkpoints.undo(agent.session.id)
+        if ok:
+            ui.success(message)
+        else:
+            ui.warn(message)
+        return False
     if command == "setup":
         ui.info("Quitte et lance `zerocode setup`.")
         return False
@@ -619,7 +728,7 @@ def print_chat_help(console: Console) -> None:
         ("/permissions [ask|allow|deny]", "politique d'autorisation"),
         ("/yolo", "tout autoriser pour la session"),
         ("/reasoning low|high|max", "effort de raisonnement GLM"),
-        ("/think [on|off]", "afficher le raisonnement"),
+        ("/think [off|low|high|max]", "mode think et affichage du raisonnement"),
         ("/temp <0-2>", "temperature"),
         ("/max-steps <n>", "etapes d'outils maximum"),
         ("/compact", "compacter le contexte"),
@@ -635,6 +744,7 @@ def print_chat_help(console: Console) -> None:
         ("/providers", "etat des fournisseurs"),
         ("/cd <chemin>", "changer de repertoire"),
         ("/init", "creer ZEROCODE.md"),
+        ("/undo", "annuler la derniere modification de fichier"),
         ("/clear", "effacer la conversation"),
         ("/quit", "quitter"),
     ]
@@ -652,6 +762,28 @@ def print_chat_help(console: Console) -> None:
             expand=False,
         )
     )
+
+
+def completion_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode completion")
+    parser.add_argument("shell", choices=("bash", "zsh", "fish"))
+    args = parser.parse_args(args_list)
+    words = " ".join(sorted(COMMANDS))
+    if args.shell == "bash":
+        script = f"complete -W '{words}' zerocode\n"
+    elif args.shell == "zsh":
+        script = (
+            "#compdef zerocode\n"
+            f"_arguments '1:commande:({words})' '*::argument:->args'\n"
+        )
+    else:
+        script = (
+            f"complete -c zerocode -f -a '{words}'\n"
+            "complete -c zerocode -n '__fish_seen_subcommand_from run chat tui' "
+            "-l model -r -d 'Modele'\n"
+        )
+    sys.stdout.write(script)
+    return 0
 
 
 def setup_command(args_list: list[str], console: Console) -> int:

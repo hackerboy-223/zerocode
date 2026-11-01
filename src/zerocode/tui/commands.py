@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import mimetypes
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +28,7 @@ COMMANDS: list[tuple[str, str]] = [
     ("/yolo", "Tout autoriser"),
     ("/safe", "Revenir au mode ask"),
     ("/reasoning [low|high|max]", "Effort de raisonnement"),
-    ("/think [on|off]", "Afficher le raisonnement"),
+    ("/think [off|low|high|max]", "Mode think et affichage du raisonnement"),
     ("/temp [0-2]", "Température"),
     ("/max-steps [n]", "Étapes d'outils maximum"),
     ("/compact", "Compacter le contexte"),
@@ -42,6 +44,8 @@ COMMANDS: list[tuple[str, str]] = [
     ("/providers", "État des fournisseurs"),
     ("/cd [chemin]", "Changer de répertoire"),
     ("/init", "Créer ZEROCODE.md"),
+    ("/undo", "Annuler la dernière modification de fichier"),
+    ("/image [fichier|clear]", "Joindre une image au prochain message"),
     ("/clear", "Effacer la conversation"),
     ("/quit", "Quitter"),
 ]
@@ -55,7 +59,27 @@ ARG_COMMANDS = {
     "/max-steps",
     "/resume",
     "/cd",
+    "/image",
 }
+
+
+def _load_image(raw_path: str, cwd: Path) -> str:
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = cwd / path
+    path = path.resolve()
+    if not path.is_file():
+        raise ValueError(f"Image introuvable : {path}")
+    data = path.read_bytes()
+    if len(data) > 10 * 1024 * 1024:
+        raise ValueError(f"Image trop volumineuse (max 10 Mo) : {path}")
+    mime, _ = mimetypes.guess_type(path.name)
+    allowed = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+    if mime not in allowed:
+        raise ValueError(
+            f"Format non supporté : {path.name} (attendu : PNG, JPEG, WEBP ou GIF)."
+        )
+    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
 
 class CommandHandler:
@@ -74,11 +98,13 @@ class CommandHandler:
         if command in {"help", "h", "?"}:
             app.show_help()
         elif command == "clear":
+            app.pending_images.clear()
             app.agent.reset()
             app.clear_chat()
             app.show_welcome()
             app.notice("Conversation effacée. Les fichiers sont inchangés.", "success")
         elif command == "new":
+            app.pending_images.clear()
             session = app.store.new(app.context.cwd, app.config.model, app.config.provider)
             app.agent.load_session(session)
             app.permissions.mode = app.config.permissions
@@ -144,22 +170,24 @@ class CommandHandler:
             app.config.permissions = "ask"
             app.notice("Permissions : ask", "success")
         elif command in {"think", "thinking"}:
-            if rest in {"on", "oui", "1", "true"}:
-                app.config.show_reasoning = True
-            elif rest in {"off", "non", "0", "false"}:
-                app.config.show_reasoning = False
+            if rest in {"off", "non", "0", "false"}:
+                app.set_think_mode("off")
+            elif rest in {"low", "high", "max"}:
+                app.set_think_mode(rest)
+            elif rest in {"on", "oui", "1", "true"}:
+                mode = app.current_think_mode()
+                app.set_think_mode("high" if mode == "off" else mode)
+            elif not rest:
+                app.cycle_think_mode()
             else:
-                app.config.show_reasoning = not app.config.show_reasoning
-            app.bridge.show_reasoning = app.config.show_reasoning
-            app.notice(
-                f"Raisonnement : {'affiché' if app.config.show_reasoning else 'masqué'}",
-                "info",
-            )
+                app.notice("Valeurs : off, low, high, max", "warning")
         elif command == "reasoning":
             if rest not in {"low", "high", "max"}:
                 app.notice("Valeurs : low, high, max", "warning")
             else:
                 app.config.reasoning_effort = rest
+                app.refresh_think_chip()
+                app._refresh_modebar()
                 app.notice(f"Raisonnement : {rest}", "success")
         elif command in {"temp", "temperature"}:
             try:
@@ -198,12 +226,40 @@ class CommandHandler:
             app.notice(f"{len(app.store.list())} session(s) dans {app.store.root}", "info")
         elif command == "init":
             self._init_project_file()
+        elif command == "image":
+            self._image(rest)
+        elif command == "undo":
+            ok, message = app.checkpoints.undo(app.agent.session.id)
+            app.notice(message, "success" if ok else "warning")
+            if ok:
+                app.reload_project(app.context.cwd)
         elif command == "setup":
             app.notice("Quitte puis lance `zerocode setup` dans le terminal.", "info")
         else:
             app.notice(f"Commande inconnue : /{command}. Tape /help.", "warning")
 
         app.refresh_after_command()
+
+    def _image(self, rest: str) -> None:
+        app = self.app
+        if not rest:
+            count = len(app.pending_images)
+            app.notice(f"{count} image(s) joignable(s). Usage : /image chemin.png", "info")
+            return
+        if rest in {"clear", "none", "aucune"}:
+            app.pending_images.clear()
+            app.notice("Images joignables effacées.", "success")
+            return
+        try:
+            data_url = _load_image(rest, app.context.cwd)
+        except (OSError, ValueError) as exc:
+            app.notice(str(exc), "warning")
+            return
+        app.pending_images.append(data_url)
+        app.notice(
+            f"Image joignable au prochain message ({len(app.pending_images)}).",
+            "success",
+        )
 
     def _model(self, rest: str) -> None:
         app = self.app

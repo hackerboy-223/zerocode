@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import contextlib
+import difflib
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,39 @@ DEFAULT_IGNORES = {
 }
 MAX_READ_BYTES = 2_000_000
 MAX_WRITE_CHARS = 1_000_000
+MAX_DIFF_LINES = 300
+MAX_DIFF_LINE_CHARS = 500
+MAX_DIFF_CHARS = 24_000
+
+
+def _git_visible_files(root: Path) -> set[Path] | None:
+    if not root.is_dir():
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+            ],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return {
+        (root / name).resolve()
+        for name in result.stdout.decode("utf-8", errors="replace").split("\0")
+        if name
+    }
 
 
 def _is_binary(path: Path) -> bool:
@@ -55,6 +90,62 @@ def _read_slice(path: Path, offset: int, limit: int) -> tuple[list[str], bool]:
     return lines, True
 
 
+def _diff_source(text: str) -> list[str]:
+    return [line[:MAX_DIFF_LINE_CHARS] for line in text.splitlines()]
+
+
+def _emit_diff(
+    ctx: ToolContext,
+    path: Path,
+    before: str,
+    after: str,
+    *,
+    existed: bool,
+) -> None:
+    emitter = ctx.show_diff
+    if emitter is None or before == after:
+        return
+    label = ctx.display_path(path)
+    diff = difflib.unified_diff(
+        _diff_source(before),
+        _diff_source(after),
+        fromfile=f"a/{label}" if existed else "/dev/null",
+        tofile=f"b/{label}",
+        lineterm="",
+        n=3,
+    )
+    lines: list[str] = []
+    truncated = False
+    for line in diff:
+        if len(lines) >= MAX_DIFF_LINES:
+            truncated = True
+            break
+        lines.append(line)
+    if not lines:
+        return
+    text = "\n".join(lines)
+    if truncated:
+        text += f"\n... diff tronque ({MAX_DIFF_LINES} lignes max) ..."
+    if len(text) > MAX_DIFF_CHARS:
+        text = text[:MAX_DIFF_CHARS] + "\n... diff tronque ..."
+    emitter(label, text)
+
+
+def _record_checkpoint(
+    ctx: ToolContext,
+    path: Path,
+    before: str | None,
+    tool: str,
+) -> None:
+    recorder = ctx.checkpoint
+    if recorder is None:
+        return
+    try:
+        recorder(path, before, tool)
+    except (OSError, ValueError):
+        return
+
+
 def _atomic_text_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing_mode = 0o644
@@ -76,6 +167,7 @@ def _atomic_text_write(path: Path, content: str) -> None:
 
 def read_file(args: dict[str, Any], ctx: ToolContext) -> str:
     path = ctx.resolve_path(str(args["path"]))
+    ctx.check_secret(path)
     if not path.exists():
         raise ToolError(f"Fichier introuvable: {ctx.display_path(path)}")
     if path.is_dir():
@@ -98,15 +190,32 @@ def read_file(args: dict[str, Any], ctx: ToolContext) -> str:
 
 def write_file(args: dict[str, Any], ctx: ToolContext) -> str:
     path = ctx.resolve_path(str(args["path"]), for_write=True)
+    ctx.check_secret(path)
     content = str(args["content"])
     if len(content) > MAX_WRITE_CHARS:
         raise ToolError(f"Contenu trop volumineux (max {MAX_WRITE_CHARS} caracteres).")
+    existed = path.is_file()
+    before = ""
+    can_diff = True
+    if existed:
+        try:
+            if path.stat().st_size > MAX_READ_BYTES:
+                can_diff = False
+            else:
+                before = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            can_diff = False
+    if can_diff:
+        _record_checkpoint(ctx, path, before if existed else None, "write")
     _atomic_text_write(path, content)
+    if can_diff:
+        _emit_diff(ctx, path, before, content, existed=existed)
     return f"Ecrit {len(content)} caracteres dans {ctx.display_path(path)}"
 
 
 def edit_file(args: dict[str, Any], ctx: ToolContext) -> str:
     path = ctx.resolve_path(str(args["path"]), for_write=True)
+    ctx.check_secret(path)
     if not path.is_file():
         raise ToolError(f"Fichier introuvable: {ctx.display_path(path)}")
     if path.stat().st_size > MAX_READ_BYTES:
@@ -127,7 +236,9 @@ def edit_file(args: dict[str, Any], ctx: ToolContext) -> str:
             f"old_string apparait {count} fois. Ajoute du contexte ou utilise replace_all=true."
         )
     updated = text.replace(old, new, -1 if replace_all else 1)
+    _record_checkpoint(ctx, path, text, "edit")
     _atomic_text_write(path, updated)
+    _emit_diff(ctx, path, text, updated, existed=True)
     replacements = count if replace_all else 1
     return f"Modifie {ctx.display_path(path)} ({replacements} remplacement(s))"
 
@@ -143,6 +254,7 @@ def list_files(args: dict[str, Any], ctx: ToolContext) -> str:
     if not root.is_dir():
         raise ToolError(f"Dossier introuvable: {ctx.display_path(root)}")
 
+    visible = _git_visible_files(root)
     entries: list[str] = []
     for path in sorted(root.glob(pattern), key=lambda item: str(item).lower()):
         try:
@@ -151,6 +263,13 @@ def list_files(args: dict[str, Any], ctx: ToolContext) -> str:
             continue
         if any(part in DEFAULT_IGNORES for part in relative.parts):
             continue
+        if visible is not None:
+            if path.is_file() and path.resolve() not in visible:
+                continue
+            if path.is_dir() and not any(
+                item.is_relative_to(path) for item in visible
+            ):
+                continue
         label = str(path.relative_to(ctx.cwd)) if path.is_relative_to(ctx.cwd) else str(path)
         if path.is_dir():
             label += "/"

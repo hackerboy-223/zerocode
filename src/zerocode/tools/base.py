@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
+import subprocess
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +16,34 @@ from ..types import ToolCall
 
 Handler = Callable[[dict[str, Any], "ToolContext"], str]
 
+SECRET_NAMES = {
+    ".env",
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    ".git-credentials",
+    "credentials",
+    "credentials.json",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+}
+SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks")
+SAFE_ENV_NAMES = {".env.example", ".env.sample", ".env.template", ".env.dist"}
+
+
+def is_secret_path(path: Path) -> bool:
+    name = path.name.lower()
+    if name in SAFE_ENV_NAMES:
+        return False
+    if name in SECRET_NAMES or name.startswith(".env."):
+        return True
+    if any(name.endswith(suffix) for suffix in SECRET_SUFFIXES):
+        return True
+    parts = {part.lower() for part in path.parts}
+    return bool(parts & {".ssh", ".aws", ".gnupg"})
+
 
 @dataclass
 class ToolContext:
@@ -17,7 +51,55 @@ class ToolContext:
     allow_outside: bool = False
     command_timeout: int = 120
     max_output_chars: int = 30_000
+    protect_secrets: bool = True
+    allow_secrets: bool = False
     todos: list[dict[str, Any]] = field(default_factory=list)
+    request_sudo_password: Callable[[str], str | None] | None = None
+    show_diff: Callable[[str, str], None] | None = None
+    checkpoint: Callable[[Path, str | None, str], None] | None = None
+    stream_output: Callable[[str, str], None] | None = None
+    _active_process: Any = field(default=None, repr=False, compare=False)
+    _process_interrupted: bool = field(default=False, repr=False, compare=False)
+
+    def attach_process(self, process: Any) -> None:
+        self._active_process = process
+        self._process_interrupted = False
+
+    def detach_process(self, process: Any) -> None:
+        if self._active_process is process:
+            self._active_process = None
+
+    def process_interrupted(self) -> bool:
+        return self._process_interrupted
+
+    def terminate_active_process(self, *, user: bool = True, grace: float = 2.0) -> None:
+        process = self._active_process
+        if process is None or process.poll() is not None:
+            return
+        if user:
+            self._process_interrupted = True
+        _signal_process_group(process, signal.SIGTERM)
+        if grace > 0:
+            threading.Thread(
+                target=_force_kill_after,
+                args=(process, grace),
+                daemon=True,
+            ).start()
+
+    def kill_active_process(self) -> None:
+        process = self._active_process
+        if process is None or process.poll() is not None:
+            return
+        _signal_process_group(process, signal.SIGKILL)
+
+    def check_secret(self, path: Path) -> None:
+        if not self.protect_secrets or self.allow_secrets:
+            return
+        if is_secret_path(path):
+            raise ToolError(
+                f"Fichier de secrets protege: {self.display_path(path)}. "
+                "Utilise --allow-secrets pour l'autoriser explicitement."
+            )
 
     def resolve_path(self, raw: str, *, for_write: bool = False) -> Path:
         text = str(raw or "").strip()
@@ -98,6 +180,12 @@ class ToolRegistry:
         self.context = context
         self.permissions = permissions
         self.ui = ui
+        if ui is not None and hasattr(ui, "request_sudo_password"):
+            context.request_sudo_password = ui.request_sudo_password
+        if ui is not None and hasattr(ui, "show_diff"):
+            context.show_diff = ui.show_diff
+        if ui is not None and hasattr(ui, "stream_tool_output"):
+            context.stream_output = ui.stream_tool_output
         self.read_only = False
         self._tools: dict[str, Tool] = {}
 
@@ -144,6 +232,35 @@ class ToolRegistry:
         if not isinstance(result, str):
             return f"ERREUR: l'outil {tool.name} a renvoye un type invalide."
         return result
+
+
+def _signal_process_group(process: Any, sig: int) -> None:
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        elif hasattr(os, "killpg"):
+            os.killpg(process.pid, sig)
+        elif sig == signal.SIGTERM:
+            process.terminate()
+        else:
+            process.kill()
+    except OSError:
+        with contextlib.suppress(OSError):
+            if sig == signal.SIGTERM:
+                process.terminate()
+            else:
+                process.kill()
+
+
+def _force_kill_after(process: Any, grace: float) -> None:
+    time.sleep(grace)
+    if process.poll() is None:
+        _signal_process_group(process, signal.SIGKILL)
 
 
 def _validate_arguments(schema: dict[str, Any], args: dict[str, Any]) -> None:

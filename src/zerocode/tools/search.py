@@ -10,8 +10,8 @@ from typing import Any
 
 from ..errors import ToolError
 from ..tokens import truncate_text
-from .base import Tool, ToolContext, ToolRegistry
-from .files import DEFAULT_IGNORES, _is_binary
+from .base import Tool, ToolContext, ToolRegistry, is_secret_path
+from .files import DEFAULT_IGNORES, _git_visible_files, _is_binary
 
 MAX_FILE_BYTES = 1_000_000
 MAX_FILES = 5000
@@ -84,8 +84,26 @@ def _grep_with_ripgrep(
         return None
     if process.returncode not in (0, 1):
         return None
-    result = [line for line in process.stdout.splitlines() if line.strip()]
-    return result[:max_results]
+    result = []
+    protect = ctx.protect_secrets and not ctx.allow_secrets
+    for line in process.stdout.splitlines():
+        if not line.strip():
+            continue
+        path_text = line.split(":", 1)[0]
+        if protect and is_secret_path(Path(path_text)):
+            continue
+        result.append(line)
+        if len(result) >= max_results:
+            break
+    return result
+
+
+def _walk_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for current, dirs, names in os.walk(root):
+        dirs[:] = [name for name in dirs if name not in DEFAULT_IGNORES]
+        files.extend(Path(current) / name for name in names)
+    return files
 
 
 def _grep_with_python(
@@ -99,29 +117,37 @@ def _grep_with_python(
     if root.is_file():
         files = [root]
     elif root.is_dir():
-        scanned = 0
-        for current, dirs, names in os.walk(root):
-            dirs[:] = [name for name in dirs if name not in DEFAULT_IGNORES]
-            for name in names:
-                if scanned >= MAX_FILES:
-                    break
-                path = Path(current) / name
+        visible = _git_visible_files(root)
+        candidates = (
+            sorted(visible)
+            if visible is not None
+            else _walk_files(root)
+        )
+        for path in candidates:
+            if len(files) >= MAX_FILES:
+                break
+            try:
                 relative = str(path.relative_to(root))
-                if include and not (
-                    fnmatch.fnmatch(name, include) or fnmatch.fnmatch(relative, include)
+            except ValueError:
+                continue
+            if include and not (
+                fnmatch.fnmatch(path.name, include) or fnmatch.fnmatch(relative, include)
+            ):
+                continue
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                if (
+                    ctx.protect_secrets
+                    and not ctx.allow_secrets
+                    and is_secret_path(path)
                 ):
                     continue
-                try:
-                    if path.is_symlink() or not path.is_file():
-                        continue
-                    if path.stat().st_size > MAX_FILE_BYTES:
-                        continue
-                except OSError:
+                if path.stat().st_size > MAX_FILE_BYTES:
                     continue
-                files.append(path)
-                scanned += 1
-            if scanned >= MAX_FILES:
-                break
+            except OSError:
+                continue
+            files.append(path)
     else:
         raise ToolError(f"Chemin introuvable: {ctx.display_path(root)}")
 

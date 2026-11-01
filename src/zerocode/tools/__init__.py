@@ -7,6 +7,7 @@ from .files import register_file_tools
 from .search import register_search_tools
 from .shell import register_shell_tools
 from .todo import register_todo_tools
+from .web import register_web_tools
 
 __all__ = [
     "PermissionManager",
@@ -27,4 +28,5 @@ def build_registry(
     register_search_tools(registry)
     register_shell_tools(registry)
     register_todo_tools(registry)
+    register_web_tools(registry)
     return registry

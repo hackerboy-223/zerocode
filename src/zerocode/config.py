@@ -27,10 +27,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "max_steps": 40,
     "permissions": "ask",
     "allow_outside_cwd": False,
+    "protect_secrets": True,
+    "allow_secrets": False,
     "command_timeout": 120,
     "compact_threshold": 0.75,
     "show_reasoning": False,
     "providers": {},
+    "mcp_servers": {},
 }
 
 
@@ -140,6 +143,8 @@ def _env_overrides() -> dict[str, Any]:
         "ZEROCODE_MAX_STEPS": ("max_steps", "int"),
         "ZEROCODE_PERMISSIONS": ("permissions", "str"),
         "ZEROCODE_ALLOW_OUTSIDE_CWD": ("allow_outside_cwd", "bool"),
+        "ZEROCODE_PROTECT_SECRETS": ("protect_secrets", "bool"),
+        "ZEROCODE_ALLOW_SECRETS": ("allow_secrets", "bool"),
         "ZEROCODE_COMMAND_TIMEOUT": ("command_timeout", "int"),
         "ZEROCODE_COMPACT_THRESHOLD": ("compact_threshold", "float"),
         "ZEROCODE_SHOW_REASONING": ("show_reasoning", "bool"),
@@ -172,10 +177,13 @@ class Config:
     max_steps: int = 40
     permissions: str = "ask"
     allow_outside_cwd: bool = False
+    protect_secrets: bool = True
+    allow_secrets: bool = False
     command_timeout: int = 120
     compact_threshold: float = 0.75
     show_reasoning: bool = False
     providers: dict[str, dict[str, Any]] = field(default_factory=dict)
+    mcp_servers: dict[str, dict[str, Any]] = field(default_factory=dict)
     base_dir: Path = field(default_factory=Path.cwd)
     sources: list[str] = field(default_factory=list)
 
@@ -228,6 +236,26 @@ def validate_config(config: Config) -> None:
         if "enabled" in override and not isinstance(override["enabled"], bool):
             raise ConfigError(f"providers.{name}.enabled doit etre un booleen.")
 
+    if not isinstance(config.mcp_servers, dict):
+        raise ConfigError("mcp_servers doit etre un objet JSON.")
+    for name, server in config.mcp_servers.items():
+        if not isinstance(server, dict):
+            raise ConfigError(f"mcp_servers.{name} doit etre un objet JSON.")
+        unknown = set(server) - {"command", "args", "env", "cwd", "enabled", "timeout"}
+        if unknown:
+            raise ConfigError(
+                f"mcp_servers.{name}: cles inconnues {', '.join(sorted(unknown))}."
+            )
+        command = server.get("command")
+        if not isinstance(command, str) or not command.strip():
+            raise ConfigError(f"mcp_servers.{name}.command doit etre une chaine non vide.")
+        if "args" in server and not isinstance(server["args"], list):
+            raise ConfigError(f"mcp_servers.{name}.args doit etre une liste.")
+        if "env" in server and not isinstance(server["env"], dict):
+            raise ConfigError(f"mcp_servers.{name}.env doit etre un objet JSON.")
+        if "enabled" in server and not isinstance(server["enabled"], bool):
+            raise ConfigError(f"mcp_servers.{name}.enabled doit etre un booleen.")
+
 
 def load_config(
     cwd: Path | None = None,
@@ -254,7 +282,14 @@ def load_config(
     known = {item.name for item in fields(Config)} - {"base_dir", "sources"}
     data = {key: value for key, value in merged.items() if key in known}
 
-    for key in ("free_only", "fallback", "allow_outside_cwd", "show_reasoning"):
+    for key in (
+        "free_only",
+        "fallback",
+        "allow_outside_cwd",
+        "protect_secrets",
+        "allow_secrets",
+        "show_reasoning",
+    ):
         data[key] = _as_bool(data.get(key, DEFAULT_CONFIG[key]), key)
     data["temperature"] = _as_float(data.get("temperature", 0.2), "temperature")
     for key in ("max_tokens", "max_steps", "command_timeout"):

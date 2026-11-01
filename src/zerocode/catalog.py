@@ -55,6 +55,7 @@ OPENCODE_FREE = (
         tier="free",
         tools=True,
         reasoning=True,
+        vision=True,
         notes="Zero retention, pas d'entrainement. Quota gratuit via OpenCode Zen.",
     ),
     ModelSpec(
@@ -95,6 +96,7 @@ OPENCODE_FREE = (
         context=1_000_000,
         max_output=32_000,
         tier="free",
+        vision=True,
         notes="Usage d'essai; eviter les donnees personnelles.",
     ),
     ModelSpec(
@@ -162,6 +164,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
                 tier="paid",
                 tools=True,
                 reasoning=True,
+                vision=True,
                 notes="Tres bon marche via Kilo, non gratuit.",
             ),
             ModelSpec(
@@ -204,6 +207,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
                 tier="trial",
                 tools=True,
                 reasoning=True,
+                vision=True,
                 notes="Essai gratuit NVIDIA, multilingue et multimodal.",
             ),
         ),

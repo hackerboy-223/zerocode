@@ -80,7 +80,14 @@ def _session_title(messages: Any) -> str:
     for message in messages:
         if not isinstance(message, dict) or message.get("role") != "user":
             continue
-        content = " ".join(str(message.get("content") or "").split())
+        raw = message.get("content")
+        if isinstance(raw, list):
+            raw = " ".join(
+                str(part.get("text", ""))
+                for part in raw
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        content = " ".join(str(raw or "").split())
         if content:
             return content[:42] + ("…" if len(content) > 42 else "")
     return ""
