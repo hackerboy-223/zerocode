@@ -398,6 +398,7 @@ def _atomic_write(path: Path, content: str, *, mode: int = 0o600) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
+        # Secure the temporary file before it becomes visible at the final path.
         _set_private_permissions(temp, mode)
         os.replace(temp, path)
     finally:
