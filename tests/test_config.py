@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 
 import pytest
@@ -101,8 +102,9 @@ def test_key_store_roundtrip_and_mode(tmp_path):
     path = store_key("groq", "gsk-secret-value")
     assert path == keys_path()
     assert load_key_store()["groq"] == "gsk-secret-value"
-    mode = stat.S_IMODE(path.stat().st_mode)
-    assert mode & 0o077 == 0
+    if os.name != "nt":
+        mode = stat.S_IMODE(path.stat().st_mode)
+        assert mode & 0o077 == 0
     assert mask_key("gsk-secret-value") == "gsk-...alue"
     assert delete_key("groq") is True
     assert delete_key("groq") is False
