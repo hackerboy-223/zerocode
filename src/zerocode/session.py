@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import tempfile
 from dataclasses import dataclass, field
@@ -103,6 +104,9 @@ class SessionStore:
         return Session(id=session_id, cwd=str(cwd.resolve()), model=model, provider=provider)
 
     def path_for(self, session: Session) -> Path:
+        # Session IDs come from persisted JSON too; never let them escape the store.
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", session.id):
+            raise ConfigError("Identifiant de session invalide.")
         return self.root / f"{session.id}.json"
 
     def save(self, session: Session) -> Path:
