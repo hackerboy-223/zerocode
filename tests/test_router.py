@@ -115,3 +115,27 @@ def test_context_window_uses_candidates():
         assert 32_000 <= router.context_window("auto") <= 256_000
     finally:
         router.close()
+
+
+def test_vision_filter_rejects_text_only_models():
+    from zerocode.types import ModelSpec, ProviderSpec
+
+    spec = ProviderSpec(
+        name="demo",
+        label="Demo",
+        base_url="https://example.com/v1",
+        api_key_envs=(),
+        keyless=True,
+        models=(
+            ModelSpec("texte", "Texte", context=1_000),
+            ModelSpec("vision", "Vision", context=1_000, vision=True),
+        ),
+    )
+    router = Router(Config(model="texte", provider="demo"), providers={"demo": spec})
+    try:
+        assert router.resolve_candidates("vision", "demo", needs_vision=True)[0][1].id == "vision"
+        with pytest.raises(ConfigError) as exc_info:
+            router.resolve_candidates("texte", "demo", needs_vision=True)
+        assert "images" in str(exc_info.value)
+    finally:
+        router.close()

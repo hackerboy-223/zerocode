@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from zerocode.agent import Agent
 from zerocode.config import Config
 from zerocode.session import SessionStore
@@ -15,9 +17,22 @@ class FakeRouter:
         self.completions = list(completions)
         self.last = None
         self.calls = 0
+        self.messages = None
+        self.needs_vision = None
 
-    def complete(self, messages, tools, *, model=None, provider=None, callbacks=None):
+    def complete(
+        self,
+        messages,
+        tools,
+        *,
+        model=None,
+        provider=None,
+        callbacks=None,
+        needs_vision=False,
+    ):
         self.calls += 1
+        self.messages = [dict(message) for message in messages]
+        self.needs_vision = needs_vision
         completion = self.completions.pop(0)
         if completion.content and callbacks and callbacks.on_text:
             callbacks.on_text(completion.content)
@@ -76,6 +91,22 @@ def test_agent_executes_tool_then_finishes(tmp_path):
     assert any(message.get("role") == "tool" for message in agent.messages)
     assert agent.session.todos == context.todos
     assert store.path_for(agent.session).is_file()
+
+
+class InterruptingUI(NullUI):
+    def interrupted(self) -> bool:
+        return True
+
+
+def test_agent_stops_when_ui_requests_interruption(tmp_path):
+    completion = Completion(content="Bonjour.", finish_reason="stop")
+    agent, router, _, _ = build_agent(tmp_path, [completion])
+    agent.ui = InterruptingUI()
+
+    with pytest.raises(KeyboardInterrupt):
+        agent.run_turn("salut")
+
+    assert router.calls == 0
 
 
 def test_agent_stops_without_tool_calls(tmp_path):
@@ -214,3 +245,31 @@ def test_agent_compacts_long_context(tmp_path):
     agent.compact(force=True)
     assert len(agent.messages) < before
     assert "Contexte anterieur" in agent.messages[0]["content"]
+
+
+def test_agent_sends_images_as_multimodal_content(tmp_path):
+    completion = Completion(content="vu", finish_reason="stop")
+    agent, router, _, _ = build_agent(tmp_path, [completion])
+
+    result = agent.run_turn("analyse", images=["data:image/png;base64,AAAA"])
+
+    assert result == "vu"
+    assert router.needs_vision is True
+    user = [message for message in router.messages if message["role"] == "user"][-1]
+    assert user["content"][0] == {"type": "text", "text": "analyse"}
+    assert user["content"][1]["type"] == "image_url"
+
+
+def test_agent_repairs_truncated_tool_calls(tmp_path):
+    truncated = Completion(
+        content="",
+        tool_calls=[ToolCall(id="call-1", name="read", arguments={"path": "missing.txt"})],
+        finish_reason="length",
+    )
+    agent, _, _, _ = build_agent(tmp_path, [truncated])
+
+    assert agent.run_turn("lis le fichier") == ""
+    tool_messages = [message for message in agent.messages if message["role"] == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0]["tool_call_id"] == "call-1"
+    assert "interrompu avant execution" in tool_messages[0]["content"]

@@ -5,15 +5,21 @@ import threading
 from pathlib import Path
 from typing import Any
 
+import pytest
 from textual.widgets import Input, Markdown, Static
 
 from zerocode.config import Config
 from zerocode.session import SessionStore
-from zerocode.tools import PermissionManager, ToolContext
+from zerocode.tools import PermissionManager, ToolContext, build_registry
 from zerocode.tui.app import SessionItem, ZeroCodeApp
-from zerocode.tui.screens import CommandPaletteScreen, ConfirmScreen, FilePickerScreen
+from zerocode.tui.screens import (
+    CommandPaletteScreen,
+    ConfirmScreen,
+    FilePickerScreen,
+    PasswordScreen,
+)
 from zerocode.tui.widgets import PromptInput, ThinkingIndicator, ToolCard
-from zerocode.types import Usage
+from zerocode.types import ToolCall, Usage
 
 
 class FakeTools:
@@ -113,6 +119,8 @@ def test_tui_mounts_with_branding(tmp_path):
             assert "kilo/kilo-auto/free" in status
             assert "CHAT" in str(app.query_one("#modebar", Static).content)
             assert app.query_one("#prompt", Input) is not None
+            assert app.context.show_diff.__self__ is app.bridge
+            assert app.context.request_sudo_password.__self__ is app.bridge
             app.store.save(app.agent.session)
             app._refresh_sessions()
             assert any(item.has_class("current") for item in app.query(SessionItem))
@@ -321,3 +329,174 @@ def test_tui_permission_round_trip(tmp_path):
             assert result["allowed"] is True
 
     asyncio.run(scenario())
+
+
+def test_tui_write_tool_renders_diff(tmp_path):
+    async def scenario() -> None:
+        app, _ = _make_app(tmp_path)
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            app.permissions.mode = "allow"
+            registry = build_registry(app.context, app.permissions, app.bridge)
+            arguments = {"path": "note.txt", "content": "bonjour\n"}
+            app.bridge.tool_start("write", arguments)
+            result = registry.execute(
+                ToolCall(id="call-1", name="write", arguments=arguments)
+            )
+            app.bridge.tool_result("write", result)
+            await pilot.pause()
+
+            card = app.query_one(ToolCard)
+            body = card._body.content
+            plain = getattr(body, "plain", str(body))
+            assert "+bonjour" in plain
+            assert "note.txt" in plain
+            assert (tmp_path / "note.txt").read_text(encoding="utf-8") == "bonjour\n"
+
+    asyncio.run(scenario())
+
+
+def test_tui_sudo_password_round_trip(tmp_path):
+    async def scenario() -> None:
+        app, _ = _make_app(tmp_path)
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            result: dict[str, str | None] = {}
+
+            def worker() -> None:
+                result["password"] = app.bridge.request_sudo_password(
+                    "sudo apt install -y ripgrep"
+                )
+
+            thread = threading.Thread(target=worker)
+            thread.start()
+            await pilot.pause()
+            assert isinstance(app.screen, PasswordScreen)
+            password_input = app.screen.query_one("#password-input", Input)
+            password_input.value = "secret"
+            await pilot.press("enter")
+            thread.join(timeout=5)
+            assert not thread.is_alive()
+            assert result["password"] == "secret"
+
+    asyncio.run(scenario())
+
+
+def test_tui_escape_interrupts_busy_turn(tmp_path):
+    async def scenario() -> None:
+        app, _ = _make_app(tmp_path)
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            app._busy = True
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app._interrupt_requested is True
+            assert "interruption" in str(app.query_one("#status", Static).content)
+
+    asyncio.run(scenario())
+
+
+def test_tui_bridge_stops_stream_when_interrupted(tmp_path):
+    async def scenario() -> None:
+        app, _ = _make_app(tmp_path)
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            app._interrupt_requested = True
+            assert app.bridge.interrupted() is True
+            with pytest.raises(KeyboardInterrupt):
+                app.bridge.stream_text("late")
+            with pytest.raises(KeyboardInterrupt):
+                app.bridge.stream_reasoning("late")
+
+    asyncio.run(scenario())
+
+
+def test_tui_sudo_password_can_be_cancelled(tmp_path):
+    async def scenario() -> None:
+        app, _ = _make_app(tmp_path)
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            result: dict[str, str | None] = {}
+
+            def worker() -> None:
+                result["password"] = app.bridge.request_sudo_password("sudo id")
+
+            thread = threading.Thread(target=worker)
+            thread.start()
+            await pilot.pause()
+            assert isinstance(app.screen, PasswordScreen)
+            await pilot.press("escape")
+            thread.join(timeout=5)
+            assert not thread.is_alive()
+            assert result["password"] is None
+
+    asyncio.run(scenario())
+
+
+def test_tui_web_toolbar_chips(tmp_path):
+    async def scenario() -> None:
+        app, agent = _make_app(tmp_path)
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            await pilot.click("#chip-plan")
+            await pilot.pause()
+            assert app.work_mode == "plan"
+            assert agent.mode == "plan"
+
+            await pilot.click("#chip-fullstack")
+            await pilot.pause()
+            assert app.work_mode == "full-stack"
+            assert agent.mode == "full-stack"
+
+            await pilot.click("#chip-build")
+            await pilot.pause()
+            assert app.work_mode == "build"
+            assert agent.mode == "build"
+
+            await pilot.click("#chip-todos")
+            await pilot.pause()
+            assert app._mode == "todos"
+            assert not app.query_one("#inspector").has_class("hidden")
+
+            assert app.current_think_mode() == "off"
+            await pilot.click("#chip-think")
+            await pilot.pause()
+            assert app.current_think_mode() == "low"
+            assert "low" in str(app.query_one("#chip-think").label)
+            for expected in ("high", "max", "off"):
+                await pilot.press("f3")
+                await pilot.pause()
+                assert app.current_think_mode() == expected
+                assert expected in str(app.query_one("#chip-think").label)
+
+    asyncio.run(scenario())
+
+
+def test_tui_tool_card_shows_diff(tmp_path):
+    async def scenario() -> None:
+        app, _ = _make_app(tmp_path)
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            diff = (
+                "--- a/src/b.py\n"
+                "+++ b/src/b.py\n"
+                "@@ -1 +1 @@\n"
+                "-old\n"
+                "+new\n"
+            )
+            app.bridge.tool_start("edit", {"path": "src/b.py"})
+            app.bridge.show_diff("src/b.py", diff)
+            app.bridge.tool_result("edit", "Modifie src/b.py")
+            await pilot.pause()
+
+            card = app.query_one(ToolCard)
+            body = card._body.content
+            plain = getattr(body, "plain", str(body))
+            assert "src/b.py" in plain
+            assert "-old" in plain
+            assert "+new" in plain
+            assert "+1" in str(card.title)
+            assert "−1" in str(card.title)
+
+    asyncio.run(scenario())
+
