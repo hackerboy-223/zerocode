@@ -86,3 +86,20 @@ def test_session_list_handles_bad_json(tmp_path):
     )
     store = SessionStore(root)
     assert [item["id"] for item in store.list()] == ["good"]
+
+
+def test_session_id_cannot_escape_session_store(tmp_path):
+    root = tmp_path / "sessions"
+    root.mkdir()
+    victim = tmp_path / "victim.json"
+    victim.write_text("keep", encoding="utf-8")
+    (root / "evil.json").write_text(
+        json.dumps({"id": "../victim", "cwd": str(tmp_path), "model": "auto"}),
+        encoding="utf-8",
+    )
+    store = SessionStore(root)
+
+    with pytest.raises(ConfigError, match="Identifiant de session invalide"):
+        store.delete("evil")
+
+    assert victim.read_text(encoding="utf-8") == "keep"

@@ -61,38 +61,14 @@ def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
 
     ctx.attach_process(process)
     try:
-        if ctx.stream_output is None:
-            try:
-                stdout_raw, stderr_raw = process.communicate(timeout=timeout)
-                stdout = _as_text(stdout_raw)
-                stderr = _as_text(stderr_raw)
-                exit_code = process.returncode
-            except subprocess.TimeoutExpired:
-                ctx.terminate_active_process(user=False, grace=TERMINATE_GRACE)
-                try:
-                    stdout_raw, stderr_raw = process.communicate(timeout=TERMINATE_GRACE + 3)
-                except subprocess.TimeoutExpired:
-                    ctx.kill_active_process()
-                    stdout_raw, stderr_raw = process.communicate()
-                stdout = _as_text(stdout_raw)
-                stderr = _as_text(stderr_raw)
-                stdout += f"\n[commande interrompue apres {timeout} secondes]"
-                exit_code = 124
-        else:
-            stdout, stderr, exit_code = _communicate_streaming(
-                process, timeout, ctx, ctx.stream_output
-            )
+        stdout, stderr, exit_code = _communicate_streaming(
+            process, timeout, ctx, ctx.stream_output
+        )
         if ctx.process_interrupted():
             stdout += "\n[commande interrompue par l'utilisateur]"
             exit_code = 130
     finally:
         ctx.detach_process(process)
-
-    budget = max(2_000, ctx.max_output_chars // 2)
-    if len(stdout) > budget:
-        stdout = stdout[:budget] + f"\n[... stdout tronque: {len(stdout)} caracteres ...]"
-    if len(stderr) > budget:
-        stderr = stderr[:budget] + f"\n[... stderr tronque: {len(stderr)} caracteres ...]"
 
     parts = [f"exit_code: {exit_code}"]
     if stdout.strip():
@@ -108,24 +84,36 @@ def _communicate_streaming(
     process: subprocess.Popen[str],
     timeout: int,
     ctx: ToolContext,
-    stream: Any,
+    stream: Any | None,
 ) -> tuple[str, str, int]:
-    stdout_parts: list[str] = []
-    stderr_parts: list[str] = []
+    # Bound each pipe independently so noisy commands cannot exhaust process memory.
+    budget = max(1_000, ctx.max_output_chars // 2)
+    buffers: dict[str, list[str]] = {"stdout": [], "stderr": []}
+    totals = {"stdout": 0, "stderr": 0}
+    stored = {"stdout": 0, "stderr": 0}
 
-    def reader(pipe: Any, parts: list[str]) -> None:
+    def reader(pipe: Any, name: str) -> None:
         try:
-            for line in iter(pipe.readline, ""):
-                parts.append(line)
-                with contextlib.suppress(Exception):
-                    stream("bash", line)
+            while True:
+                chunk = pipe.read(4_096)
+                if not chunk:
+                    break
+                totals[name] += len(chunk)
+                remaining = max(0, budget - stored[name])
+                if remaining:
+                    kept = chunk[:remaining]
+                    buffers[name].append(kept)
+                    stored[name] += len(kept)
+                if stream is not None:
+                    with contextlib.suppress(Exception):
+                        stream("bash", chunk)
         finally:
             with contextlib.suppress(Exception):
                 pipe.close()
 
     threads = [
-        threading.Thread(target=reader, args=(process.stdout, stdout_parts), daemon=True),
-        threading.Thread(target=reader, args=(process.stderr, stderr_parts), daemon=True),
+        threading.Thread(target=reader, args=(process.stdout, "stdout"), daemon=True),
+        threading.Thread(target=reader, args=(process.stderr, "stderr"), daemon=True),
     ]
     for thread in threads:
         thread.start()
@@ -141,11 +129,21 @@ def _communicate_streaming(
         except subprocess.TimeoutExpired:
             ctx.kill_active_process()
             process.wait()
-    for thread in threads:
-        thread.join(timeout=2)
 
-    stdout = "".join(stdout_parts)
-    stderr = "".join(stderr_parts)
+    for thread in threads:
+        thread.join(timeout=TERMINATE_GRACE + 3)
+
+    def render(name: str) -> str:
+        value = "".join(buffers[name])
+        if totals[name] > stored[name]:
+            value += (
+                f"\n[... {name} tronque: {totals[name]} caracteres recus, "
+                f"{stored[name]} conserves ...]"
+            )
+        return value
+
+    stdout = render("stdout")
+    stderr = render("stderr")
     if timed_out:
         stdout += f"\n[commande interrompue apres {timeout} secondes]"
         return stdout, stderr, 124

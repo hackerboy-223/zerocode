@@ -39,7 +39,7 @@ zerocode doctor
 py -m pip install --user pipx
 py -m pipx ensurepath
 # Redémarre PowerShell si nécessaire, puis :
-pip install git+https://github.com/hackerboy-223/zerocode.git
+pipx install git+https://github.com/hackerboy-223/zerocode.git
 zerocode --version
 zerocode doctor
 ```
@@ -124,7 +124,7 @@ L'interface par défaut s'appuie sur [Textual](https://textual.textualize.io/). 
 
 Le mode plan masque `write`, `edit` et `bash`, ajoute une consigne de lecture seule au prompt système et refuse toute tentative de mutation.
 
-`/full-stack` active un preset autonome : raisonnement `max`, 500 étapes, 128k jetons de sortie (plafonnés par le modèle), timeout de commande d'une heure, compaction à 95 %, raisonnement affiché et permissions `allow`. L'agent est invité à planifier, scaffolder, implémenter, installer les dépendances locales, tester, corriger et livrer un projet complet sans demander confirmation à chaque étape. Un retour en `BUILD`, `PLAN` ou `/safe` restaure automatiquement les réglages et permissions précédents. Le répertoire de travail reste confiné et les secrets restent protégés.
+`/full-stack` active un preset autonome : raisonnement `max`, 500 étapes, 128k jetons de sortie (plafonnés par le modèle), timeout de commande d'une heure, compaction à 95 %, raisonnement affiché et permissions `allow`. L'agent est invité à planifier, scaffolder, implémenter, installer les dépendances locales, tester, corriger et livrer un projet complet sans demander confirmation à chaque étape. Un retour en `BUILD`, `PLAN` ou `/safe` restaure automatiquement les réglages et permissions précédents. Les outils de fichiers vérifient les chemins et bloquent les fichiers de secrets par défaut. Attention : le shell exécute des commandes avec les droits de votre compte et n'est pas une sandbox ; une commande peut accéder à des fichiers hors du projet, y compris des secrets. N'activez `--yolo` ou `/full-stack` que dans un environnement de confiance.
 
 Les réponses et le raisonnement sont diffusés en streaming via un worker, avec une animation de réflexion visible pendant l'attente, sans figer l'interface. Les confirmations de sécurité restent actives en mode `ask`.
 
@@ -214,9 +214,10 @@ Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/model`, `/provider`,
 - `read`, `list`, `grep` sont en lecture seule et ne demandent pas de confirmation.
 - `write`, `edit` et `bash` demandent une confirmation par défaut, sauf en mode `/full-stack` qui active explicitement `allow`.
 - Le mode `deny` bloque toutes les mutations ; `ask` est le mode recommandé.
-- Les chemins hors du répertoire de travail sont refusés sauf avec `--allow-outside-cwd`.
-- Les écritures dans `.git` et les clés privées sont bloquées.
-- Les commandes ont un délai maximal et leur sortie est tronquée.
+- Les outils de fichiers refusent les chemins hors du répertoire de travail sauf avec `--allow-outside-cwd`, et bloquent les fichiers de secrets par défaut.
+- Les écritures dans `.git` et les clés privées sont bloquées par les outils de fichiers.
+- Les commandes shell s'exécutent avec les droits de votre compte : elles ne sont pas confinées au projet et peuvent lire ou modifier d'autres fichiers.
+- Les commandes ont un délai maximal ; leur sortie est limitée en mémoire et tronquée avant d'être renvoyée à l'agent.
 - zerocode ne commit, ne pousse et n'installe rien sans demande explicite.
 
 Aucun agent ne remplace une revue humaine. Vérifiez les diffs et les commandes avant de les accepter, surtout en mode `--yolo`.

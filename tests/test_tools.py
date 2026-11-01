@@ -231,3 +231,39 @@ def test_web_tools_are_registered_and_block_localhost(tmp_path):
     result = call(registry, "fetch", url="http://127.0.0.1:8080")
     assert result.startswith("ERREUR:")
     assert "locales et privees" in result
+
+
+def test_bash_output_is_bounded_without_streaming(tmp_path):
+    import sys
+
+    context = ToolContext(cwd=tmp_path, max_output_chars=4_000)
+    permissions = PermissionManager(mode="allow", interactive=False)
+    registry = build_registry(context, permissions)
+    command = f'"{sys.executable}" -c "print(\'x\' * 100000)"'
+
+    result = call(registry, "bash", command=command)
+
+    assert "exit_code: 0" in result
+    assert "stdout tronque" in result
+    assert len(result) < 3_000
+
+
+def test_bash_output_is_bounded_with_streaming(tmp_path):
+    import sys
+
+    chunks: list[tuple[str, str]] = []
+    context = ToolContext(
+        cwd=tmp_path,
+        max_output_chars=4_000,
+        stream_output=lambda name, chunk: chunks.append((name, chunk)),
+    )
+    permissions = PermissionManager(mode="allow", interactive=False)
+    registry = build_registry(context, permissions)
+    command = f'"{sys.executable}" -c "print(\'x\' * 100000)"'
+
+    result = call(registry, "bash", command=command)
+
+    assert "exit_code: 0" in result
+    assert "stdout tronque" in result
+    assert chunks
+    assert len(result) < 3_000
