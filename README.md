@@ -67,16 +67,6 @@ ruff check src tests
 
 Si l’accès public au dépôt n’est pas encore activé, l’installation directe depuis GitHub ne fonctionnera pas pour les personnes qui n’ont pas l’autorisation d’y accéder.
 
-## Versions autonomes
-
-Les releases GitHub peuvent fournir un binaire autonome pour Windows, Linux et macOS. Il ne nécessite pas d'installation Python séparée : télécharge le fichier correspondant à ton système depuis les assets d'une release.
-
-- Windows : `zerocode.exe`
-- Linux : `zerocode`
-- macOS : `zerocode`
-
-Ces exécutables sont générés par GitHub Actions à partir d'un tag `v*`. Ils sont portables, mais ne constituent pas encore un installateur avec raccourci, désinstallation et mise à jour automatique. Les binaires macOS ne sont pas signés/notarisés pour le moment ; Gatekeeper peut afficher un avertissement.
-
 ## Démarrage rapide
 
 Sans aucune clé :
