@@ -4,7 +4,7 @@ Agent de codage autonome pour le terminal, gratuit par défaut et compatible ave
 
 Créé par **H@CKERBOY** · [GitHub](https://github.com/hackerboy-223) · [Portfolio](https://hackerboy-223.vercel.app)
 
-zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et exécute des commandes. Il ne se contente pas de générer du texte : chaque action est vérifiable, les écritures et les commandes demandent une autorisation par défaut, et les résultats proviennent réellement des outils.
+zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et exécute des commandes. Il ne se contente pas de générer du texte : chaque action est vérifiable, les modifications sûres et les commandes de contrôle courantes sont automatiques, et les opérations sensibles restent soumises à autorisation.
 
 ## Points clés
 
@@ -100,7 +100,7 @@ L'interface par défaut s'appuie sur [Textual](https://textual.textualize.io/). 
 - **Modes agent** : `BUILD` pour modifier, `PLAN` pour inspecter sans toucher aux fichiers (`Shift+Tab`), `FULL-STACK` pour construire un projet complet en autonomie.
 - **Panneaux** : barre `CHAT / TÂCHES / OUTILS` toujours visible, synchronisée avec `Tab`.
 - **Statut** : modèle, fournisseur, route prévue, permissions, session et jetons, avec animation de réflexion et indicateur d'activité.
-- **Approbations** : `write`, `edit` et `bash` ouvrent un panneau `Autoriser / Refuser` avec aperçu défilable.
+- **Approbations** : les modifications risquées et commandes non classées comme sûres ouvrent un panneau `Autoriser / Refuser` avec aperçu défilable.
 - **Confort** : historique des demandes avec `↑`/`↓`, recherche floue et défilement qui ne vous arrache pas la lecture si vous êtes remonté.
 
 | Raccourci | Action |
@@ -219,9 +219,10 @@ Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/model`, `/provider`,
 
 ## Outils et sécurité
 
-- `read`, `list`, `grep` sont en lecture seule et ne demandent pas de confirmation.
-- `write`, `edit` et `bash` demandent une confirmation par défaut, sauf en mode `/full-stack` qui active explicitement `allow`.
-- Le mode `deny` bloque toutes les mutations ; `ask` est le mode recommandé.
+- `read`, `list`, `grep` sont en lecture seule et automatiques.
+- En mode `ask`, la création de nouveaux fichiers, les éditions dans le projet et une liste limitée de commandes de diagnostic/tests sont automatiques.
+- Le remplacement d'un fichier existant, les commandes shell non classées comme sûres et les actions sensibles demandent confirmation.
+- Le mode `deny` bloque les outils de mutation ; `/full-stack` et `--yolo` restent des choix explicites d'autonomie étendue.
 - Les outils de fichiers refusent les chemins hors du répertoire de travail sauf avec `--allow-outside-cwd`, et bloquent les fichiers de secrets par défaut.
 - Les écritures dans `.git` et les clés privées sont bloquées par les outils de fichiers.
 - Les commandes shell s'exécutent avec les droits de votre compte : elles ne sont pas confinées au projet et peuvent lire ou modifier d'autres fichiers.
