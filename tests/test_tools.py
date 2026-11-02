@@ -332,7 +332,7 @@ def test_auto_shell_allows_safe_commands_and_blocks_arbitrary_commands(tmp_path)
     permissions = PermissionManager(mode="ask", interactive=False)
     registry = build_registry(context, permissions)
 
-    safe = call(registry, "bash", command="pwd")
+    safe = call(registry, "bash", command="python -m pytest --version")
     assert "exit_code: 0" in safe
     assert "Action refusee" not in safe
 
