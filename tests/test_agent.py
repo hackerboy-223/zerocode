@@ -273,3 +273,23 @@ def test_agent_repairs_truncated_tool_calls(tmp_path):
     assert len(tool_messages) == 1
     assert tool_messages[0]["tool_call_id"] == "call-1"
     assert "interrompu avant execution" in tool_messages[0]["content"]
+
+def test_mode_switch_preserves_compacted_context(tmp_path):
+    agent, _, _, _ = build_agent(tmp_path, [])
+    summary = (
+        "## Contexte anterieur (resume automatique)\\n"
+        "- Utilisateur: Keep the existing authentication contract."
+    )
+    agent.messages[0]["content"] += "\\n\\n" + summary
+
+    agent.set_mode("plan")
+    assert "Keep the existing authentication contract" in agent.messages[0]["content"]
+    assert "MODE PLAN ACTIF" in agent.messages[0]["content"]
+
+    agent.set_mode("build")
+    assert "Keep the existing authentication contract" in agent.messages[0]["content"]
+    assert "MODE PLAN ACTIF" not in agent.messages[0]["content"]
+    assert agent.messages[0]["content"].count(
+        "## Contexte anterieur (resume automatique)"
+    ) == 1
+
