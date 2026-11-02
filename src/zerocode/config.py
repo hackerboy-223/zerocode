@@ -32,7 +32,7 @@ PROVIDER_HOSTS = {
 LOCAL_MODEL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "model": "glm-5.3",
+    "model": "auto",
     "provider": None,
     "free_only": True,
     "fallback": True,
@@ -182,7 +182,7 @@ def _env_overrides() -> dict[str, Any]:
 
 @dataclass
 class Config:
-    model: str = "glm-5.3"
+    model: str = "auto"
     provider: str | None = None
     free_only: bool = True
     fallback: bool = True

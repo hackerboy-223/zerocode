@@ -23,7 +23,7 @@ from zerocode.config import (
 
 def test_defaults(tmp_path):
     config = load_config(tmp_path)
-    assert config.model == "glm-5.3"
+    assert config.model == "auto"
     assert config.free_only is True
     assert config.fallback is True
     assert config.permissions == "ask"

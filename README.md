@@ -1,6 +1,6 @@
 # zerocode
 
-Agent de codage autonome pour le terminal, gratuit par défaut et compatible avec plusieurs fournisseurs de modèles.
+Agent de codage autonome pour le terminal, gratuit par défaut et compatible avec plusieurs fournisseurs de modèles. Le mode `auto` sélectionne une route adaptée à la demande.
 
 Créé par **H@CKERBOY** · [GitHub](https://github.com/hackerboy-223) · [Portfolio](https://hackerboy-223.vercel.app)
 
