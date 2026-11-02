@@ -135,7 +135,7 @@ def _as_bool(value: Any, key: str) -> bool:
 def _as_int(value: Any, key: str) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError) as exc:
+    except (OverflowError, TypeError, ValueError) as exc:
         raise ConfigError(f"Valeur entiere invalide pour {key}: {value!r}") from exc
 
 
@@ -252,7 +252,11 @@ def validate_config(config: Config) -> None:
             value = override["base_url"]
             if not isinstance(value, str):
                 raise ConfigError(f"providers.{name}.base_url doit etre une URL valide.")
-            parsed = urlsplit(value)
+            try:
+                parsed = urlsplit(value)
+                port = parsed.port
+            except ValueError as exc:
+                raise ConfigError(f"providers.{name}.base_url contient un port invalide.") from exc
             hostname = (parsed.hostname or "").lower()
             if (
                 parsed.username is not None
@@ -276,7 +280,7 @@ def validate_config(config: Config) -> None:
                 if (
                     parsed.scheme != "https"
                     or hostname != expected_host
-                    or parsed.port not in (None, 443)
+                    or port not in (None, 443)
                 ):
                     raise ConfigError(
                         f"providers.{name}.base_url doit utiliser HTTPS sur le domaine "

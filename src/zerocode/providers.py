@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from .catalog import PROVIDERS
-from .config import Config, load_key_store
+from .config import Config, load_key_store, validate_config
 from .errors import AuthError, ProviderError, RateLimitError
 from .tokens import estimate_messages, estimate_tokens
 from .types import Completion, ModelSpec, ProviderSpec, StreamCallbacks, ToolCall, Usage
@@ -59,6 +59,16 @@ def provider_available(provider: ProviderSpec, config: Config) -> bool:
 
 
 def applied_providers(config: Config) -> dict[str, ProviderSpec]:
+    # Validate even directly constructed Config objects before attaching API credentials.
+    validate_config(config)
+    ollama_env = os.environ.get("OLLAMA_BASE_URL")
+    if ollama_env:
+        overrides = dict(config.providers)
+        overrides["ollama"] = {
+            **config.provider_config("ollama"),
+            "base_url": ollama_env,
+        }
+        validate_config(replace(config, providers=overrides))
     result: dict[str, ProviderSpec] = {}
     for name, provider in PROVIDERS.items():
         override = config.provider_config(name)

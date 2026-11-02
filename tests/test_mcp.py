@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 
+import pytest
+
 from zerocode.mcp import register_mcp_tools
 from zerocode.tools import PermissionManager, ToolContext, build_registry
 from zerocode.types import ToolCall

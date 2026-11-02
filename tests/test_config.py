@@ -145,6 +145,14 @@ def test_ollama_override_must_be_loopback(tmp_path):
         load_config(tmp_path)
 
 
+def test_ollama_environment_override_cannot_target_remote_hosts(monkeypatch):
+    from zerocode.providers import applied_providers
+
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://10.0.0.5:11434/v1")
+    with pytest.raises(ConfigError, match="loopback"):
+        applied_providers(Config())
+
+
 def test_official_provider_override_is_allowed(tmp_path):
     (tmp_path / "zerocode.json").write_text(
         json.dumps({"providers": {"groq": {"base_url": "https://api.groq.com/openai/v1"}}}),

@@ -237,7 +237,7 @@ def register_mcp_tools(
         else:
             try:
                 timeout = float(raw_timeout)
-            except (TypeError, ValueError):
+            except (OverflowError, TypeError, ValueError):
                 _warn(ui, f"MCP {server_name}: timeout invalide ({raw_timeout!r}).")
                 continue
             if not math.isfinite(timeout) or not 1 <= timeout <= 3_600:
