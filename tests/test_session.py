@@ -139,6 +139,11 @@ def test_session_list_tolerates_infinite_usage(tmp_path):
     assert SessionStore(root).list()[0]["total_tokens"] == 0
 
 
+def test_usage_from_dict_tolerates_infinite_values():
+    usage = Usage.from_dict({"total_tokens": float("inf")})
+    assert usage.total_tokens == 0
+
+
 def test_session_id_cannot_escape_session_store(tmp_path):
     root = tmp_path / "sessions"
     root.mkdir()

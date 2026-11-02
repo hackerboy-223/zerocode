@@ -45,7 +45,7 @@ for line in sys.stdin:
 '''
 
 
-@pytest.mark.parametrize("timeout", [float("inf"), float("nan"), 3_601])
+@pytest.mark.parametrize("timeout", [True, float("inf"), float("nan"), 3_601])
 def test_mcp_non_finite_or_excessive_timeout_is_skipped(tmp_path, timeout):
     context = ToolContext(cwd=tmp_path)
     permissions = PermissionManager(mode="allow", interactive=False)

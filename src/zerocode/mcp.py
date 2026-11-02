@@ -235,6 +235,9 @@ def register_mcp_tools(
         if raw_timeout in (None, ""):
             timeout = DEFAULT_TIMEOUT
         else:
+            if isinstance(raw_timeout, bool):
+                _warn(ui, f"MCP {server_name}: timeout invalide ({raw_timeout!r}).")
+                continue
             try:
                 timeout = float(raw_timeout)
             except (OverflowError, TypeError, ValueError):

@@ -125,6 +125,7 @@ def test_invalid_mcp_server_options_are_rejected(tmp_path, server):
         "https://evil.example/v1",
         "https://user:password@api.groq.com/openai/v1",
         "https://api.groq.com/openai/v1?forward=1",
+        "https://api.groq.com:99999/openai/v1",
     ],
 )
 def test_provider_override_cannot_redirect_api_keys_to_untrusted_hosts(tmp_path, base_url):
@@ -159,6 +160,15 @@ def test_official_provider_override_is_allowed(tmp_path):
         encoding="utf-8",
     )
     assert load_config(tmp_path).provider_config("groq")["base_url"].startswith("https://")
+
+
+def test_non_finite_integer_config_is_reported(tmp_path):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"max_tokens": float("inf")}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_config(tmp_path)
 
 
 def test_provider_alias_is_normalized(tmp_path):
