@@ -277,10 +277,10 @@ def test_agent_repairs_truncated_tool_calls(tmp_path):
 def test_mode_switch_preserves_compacted_context(tmp_path):
     agent, _, _, _ = build_agent(tmp_path, [])
     summary = (
-        "## Contexte anterieur (resume automatique)\\n"
+        "## Contexte anterieur (resume automatique)\n"
         "- Utilisateur: Keep the existing authentication contract."
     )
-    agent.messages[0]["content"] += "\\n\\n" + summary
+    agent.messages[0]["content"] += "\n\n" + summary
 
     agent.set_mode("plan")
     assert "Keep the existing authentication contract" in agent.messages[0]["content"]
