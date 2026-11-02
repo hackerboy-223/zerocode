@@ -343,3 +343,10 @@ def test_auto_shell_allows_safe_commands_and_blocks_arbitrary_commands(tmp_path)
     assert "Action refusee" in compound
     assert not (tmp_path / "unexpected.txt").exists()
 
+    (tmp_path / ".env").write_text("TOKEN=secret\\n", encoding="utf-8")
+    secret = call(registry, "bash", command="cat .env")
+    assert "Action refusee" in secret
+
+    outside = call(registry, "bash", command="ls ../")
+    assert "Action refusee" in outside
+
