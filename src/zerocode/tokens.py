@@ -75,13 +75,20 @@ def _summarize(messages: list[dict[str, Any]], max_chars: int) -> str:
         elif role == "assistant" and text:
             lines.append(f"- Assistant: {text[:280]}")
         elif role == "assistant" and message.get("tool_calls"):
-            names = [
-                str((call.get("function") or {}).get("name", "?"))
-                for call in message.get("tool_calls") or []
-            ]
-            lines.append(f"- Outils demandes: {', '.join(names)}")
+            for call in message.get("tool_calls") or []:
+                function = call.get("function") or {}
+                name = str(function.get("name", "?"))
+                arguments = str(function.get("arguments", "") or "")
+                if arguments:
+                    lines.append(
+                        f"- Appel outil {name}: {truncate_text(arguments, 420, head_ratio=0.7)}"
+                    )
+                else:
+                    lines.append(f"- Appel outil: {name}")
         elif role == "tool" and text:
-            lines.append(f"- Resultat d'outil: {text[:180]}")
+            lines.append(
+                f"- Resultat outil: {truncate_text(text, 320, head_ratio=0.65)}"
+            )
     if not lines:
         return ""
     summary = "\n".join(lines)
