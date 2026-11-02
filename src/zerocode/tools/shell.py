@@ -20,22 +20,29 @@ SUDO_COMMAND_RE = re.compile(
 )
 
 
-def _safe_workspace_arguments(arguments: list[str], ctx: ToolContext) -> bool:
+def _safe_workspace_arguments(
+    arguments: list[str], ctx: ToolContext, *, check_bare_paths: bool = False
+) -> bool:
     for argument in arguments:
+        candidate = argument
         if argument.startswith("-"):
+            if "=" not in argument:
+                continue
+            candidate = argument.split("=", 1)[1]
+        if not candidate:
             continue
         if (
-            argument.startswith(("/", "~"))
-            or argument == ".."
-            or argument.startswith("../")
-            or "/../" in argument
-            or "\\..\\" in argument
-            or re.match(r"^[A-Za-z]:[\\/]", argument)
+            candidate.startswith(("/", "~"))
+            or candidate == ".."
+            or candidate.startswith("../")
+            or "/../" in candidate
+            or "\\..\\" in candidate
+            or re.match(r"^[A-Za-z]:[\\/]", candidate)
         ):
             return False
-        if "/" in argument or "\\" in argument:
+        if check_bare_paths or "/" in candidate or "\\" in candidate:
             try:
-                path = ctx.resolve_path(argument)
+                path = ctx.resolve_path(candidate)
                 ctx.check_secret(path)
             except Exception:
                 return False
@@ -56,13 +63,13 @@ def is_safe_auto_command(command: str, ctx: ToolContext) -> bool:
 
     executable = os.path.basename(parts[0]).lower()
     arguments = parts[1:]
-    if not _safe_workspace_arguments(arguments, ctx):
-        return False
 
     if executable == "pwd":
         return not arguments
     if executable == "ls":
-        return True
+        return _safe_workspace_arguments(arguments, ctx, check_bare_paths=True)
+    if not _safe_workspace_arguments(arguments, ctx):
+        return False
     if executable == "git" and arguments:
         subcommand = arguments[0]
         options = arguments[1:]
@@ -104,7 +111,7 @@ def is_safe_auto_command(command: str, ctx: ToolContext) -> bool:
         ("php", "artisan", "test"),
     }
     if any(tuple(parts[: len(prefix)]) == prefix for prefix in test_commands):
-        return True
+        return _safe_workspace_arguments(arguments, ctx, check_bare_paths=True)
 
     script_runners = {"npm", "pnpm", "yarn", "bun"}
     safe_scripts = {"test", "lint", "build", "typecheck", "check"}
