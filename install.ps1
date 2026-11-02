@@ -12,24 +12,16 @@ if ([int]$Parts[0] -lt 3 -or ([int]$Parts[0] -eq 3 -and [int]$Parts[1] -lt 10)) 
 }
 Write-Host "Python $Version détecté." -ForegroundColor Green
 
-$PipxCommand = Get-Command pipx -ErrorAction SilentlyContinue
-if (-not $PipxCommand) {
+$PipxVersion = & py -m pipx --version 2>$null
+if (-not $PipxVersion) {
     Write-Host "Installation de pipx…" -ForegroundColor Cyan
     & py -m pip install --user pipx
     if ($LASTEXITCODE -ne 0) { throw "Échec de l'installation de pipx." }
     & py -m pipx ensurepath
-    $PipxCommand = Get-Command pipx -ErrorAction SilentlyContinue
-}
-if (-not $PipxCommand) {
-    $Candidate = Join-Path $env:APPDATA "Python\Scripts\pipx.exe"
-    if (Test-Path $Candidate) { $PipxCommand = @{ Source = $Candidate } }
-}
-if (-not $PipxCommand) {
-    throw "pipx est installé. Rouvre PowerShell puis relance : pipx install --force $Repo"
 }
 
 Write-Host "Installation de ZeroCode et de toutes ses dépendances…" -ForegroundColor Cyan
-& $PipxCommand.Source install --force $Repo
+& py -m pipx install --force $Repo
 if ($LASTEXITCODE -ne 0) { throw "Échec de l'installation de ZeroCode." }
 
 $UserBin = Join-Path $env:USERPROFILE ".local\bin"
