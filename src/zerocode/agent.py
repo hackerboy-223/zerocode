@@ -90,6 +90,7 @@ class Agent:
         self._save_quiet()
         final_text = ""
         try:
+            repeated_failures: dict[str, int] = {}
             for _ in range(self.config.max_steps):
                 if self._interrupted():
                     raise KeyboardInterrupt
@@ -142,11 +143,17 @@ class Agent:
                     )
                     self._repair_pending_tool_calls()
                     break
+                stop_after_repeated_failure = False
                 for call in completion.tool_calls:
                     if self._interrupted():
                         raise KeyboardInterrupt
                     self._call_ui("tool_start", call.name, call.arguments)
+                    fingerprint = _tool_call_fingerprint(call)
                     result = self.tools.execute(call)
+                    if result.startswith("ERREUR:"):
+                        repeated_failures[fingerprint] = repeated_failures.get(fingerprint, 0) + 1
+                        if repeated_failures[fingerprint] >= 2:
+                            stop_after_repeated_failure = True
                     self._call_ui("tool_result", call.name, result)
                     self.messages.append(
                         {
@@ -159,6 +166,13 @@ class Agent:
                         raise KeyboardInterrupt
                 self._sync_session()
                 self._save_quiet()
+                if stop_after_repeated_failure:
+                    final_text = (
+                        "J'ai arrêté la boucle : le même appel d'outil a échoué deux fois "
+                        "avec les mêmes arguments. Vérifie l'erreur ci-dessus avant de réessayer."
+                    )
+                    self._call_ui("warn", final_text)
+                    break
             else:
                 self._call_ui(
                     "warn",
@@ -300,8 +314,18 @@ class Agent:
             self.ui.show_reasoning = self.config.show_reasoning
 
     def _refresh_system_mode(self) -> None:
-        if self.messages and self.messages[0].get("role") == "system":
-            self.messages[0]["content"] = self._system_message()["content"]
+        if not self.messages or self.messages[0].get("role") != "system":
+            return
+        current = str(self.messages[0].get("content") or "")
+        title = "## Contexte anterieur (resume automatique)"
+        summary = ""
+        if title in current:
+            _, summary = current.split(title, 1)
+            summary = summary.strip()
+        content = self._system_message()["content"]
+        if summary:
+            content = f"{content.rstrip()}\n\n{title}\n{summary}"
+        self.messages[0]["content"] = content
 
     def set_model(self, model: str, provider: str | None = None) -> None:
         self.config.model = model
@@ -378,3 +402,9 @@ def _json_arguments(arguments: dict[str, Any]) -> str:
     import json
 
     return json.dumps(arguments, ensure_ascii=False)
+
+
+def _tool_call_fingerprint(call: Any) -> str:
+    import json
+
+    return f"{call.name}:{json.dumps(call.arguments, ensure_ascii=False, sort_keys=True)}"

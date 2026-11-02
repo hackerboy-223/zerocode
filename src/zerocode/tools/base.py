@@ -151,18 +151,45 @@ class Tool:
         }
 
 
+def _auto_approve(tool: Tool, args: dict[str, Any], context: ToolContext | None) -> bool:
+    if context is None:
+        return False
+    if tool.name in {"write", "edit"}:
+        try:
+            path = context.resolve_path(str(args.get("path", "")), for_write=True)
+            context.check_secret(path)
+        except ToolError:
+            return False
+        if tool.name == "write":
+            return not path.exists()
+        return path.is_file()
+    if tool.name == "bash":
+        from .shell import is_safe_auto_command
+
+        return is_safe_auto_command(str(args.get("command", "")), context)
+    return False
+
+
 @dataclass
 class PermissionManager:
     mode: str = "ask"
     interactive: bool = True
 
-    def allow(self, tool: Tool, args: dict[str, Any], ui: Any | None = None) -> bool:
+    def allow(
+        self,
+        tool: Tool,
+        args: dict[str, Any],
+        ui: Any | None = None,
+        context: ToolContext | None = None,
+    ) -> bool:
         if tool.approval == "never":
             return True
         if self.mode == "allow":
             return True
         if self.mode == "deny":
             return False
+        if tool.approval == "auto" and _auto_approve(tool, args, context):
+            return True
         if not self.interactive or ui is None:
             return False
         confirm = getattr(ui, "confirm_tool", None)
@@ -218,7 +245,7 @@ class ToolRegistry:
             _validate_arguments(tool.parameters, call.arguments)
         except ToolError as exc:
             return f"ERREUR: {exc}"
-        if not self.permissions.allow(tool, call.arguments, self.ui):
+        if not self.permissions.allow(tool, call.arguments, self.ui, self.context):
             return "Action refusee par l'utilisateur."
         try:
             result = tool.handler(call.arguments, self.context)

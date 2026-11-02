@@ -1936,7 +1936,7 @@ class ZeroCodeApp(App[None]):
             text = Text()
             for tool in tools:
                 text.append(f"{tool.name:<12}", style="bold #e6edf3")
-                perm_badge = "AUTO" if tool.approval == "never" else "CONFIRM"
+                perm_badge = "AUTO" if tool.approval in {"never", "auto"} else "CONFIRM"
                 text.append(
                     f" [{perm_badge:<7}] ",
                     style="#34d399" if tool.approval == "never" else "#fbbf24",
