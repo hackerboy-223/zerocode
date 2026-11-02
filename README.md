@@ -8,7 +8,6 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 ## Points clés
 
-- Démarre sans clé API personnelle grâce à Kilo Gateway en accès anonyme (quota et disponibilité soumis aux conditions du fournisseur).
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
 - Outils intégrés : lecture, écriture, édition, liste, recherche regex, shell et plan de tâches.
@@ -86,7 +85,6 @@ Exemples :
 
 ```bash
 zerocode "corrige le test qui échoue" --yolo
-zerocode -m glm-5.3-flash --show-thinking
 zerocode -m auto
 zerocode -c
 ```
