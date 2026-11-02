@@ -320,10 +320,11 @@ class Router:
         scope = f" chez {provider}" if provider else ""
         lines = [
             f"Aucun modele disponible pour {requested!r}{scope}.",
-            "Verifie que le modele existe et qu'une cle gratuite est configuree.",
+            "Le mode auto n'utilise que les routes gratuites anonymes de Kilo.",
+            "Si le quota gratuit est atteint, reessaie plus tard ou utilise un modele local avec Ollama.",
             "Commandes utiles:",
             "  zerocode models --free",
-            "  zerocode setup",
+            "  zerocode doctor",
         ]
         if needs_vision:
             lines.append(
