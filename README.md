@@ -8,7 +8,7 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 ## Points clés
 
-- Démarre sans clé API grâce à Kilo Gateway en accès anonyme.
+- Démarre sans clé API personnelle grâce à Kilo Gateway en accès anonyme (quota et disponibilité soumis aux conditions du fournisseur).
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
 - GLM 5.3 Flash gratuit, plus GLM 4.7/4.5 Flash, Kimi/Kilo, Groq, Gemini, OpenRouter, etc.
 - Outils intégrés : lecture, écriture, édition, liste, recherche regex, shell et plan de tâches.
@@ -20,54 +20,48 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Palette de commandes, recherche de fichiers `@` et panneaux de tâches/outils.
 - Aucun secret affiché ; clés stockées avec des permissions restrictives.
 
-## Installation
+## Installation automatique
 
-Prérequis : **Python 3.10 ou plus récent** et Git. Pour une installation isolée, `pipx` est recommandé : il installe ZeroCode dans son propre environnement et expose la commande `zerocode` sans modifier les dépendances Python des autres projets.
+ZeroCode installe ses dépendances Python dans un environnement isolé via **pipx**. Aucune clé API, aucun compte OpenRouter et aucune carte bancaire ne sont nécessaires pour démarrer.
 
 ### Linux et macOS
 
+Une seule commande :
+
 ```bash
-python3 -m pip install --user pipx
-python3 -m pipx ensurepath
-# Redémarre le terminal si nécessaire, puis :
-pipx install git+https://github.com/hackerboy-223/zerocode.git
-zerocode --version
-zerocode doctor
+curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.sh | bash
 ```
+
+Ou télécharge le dépôt et lance `./install.sh`.
 
 ### Windows · PowerShell
 
 ```powershell
-py -m pip install --user pipx
-py -m pipx ensurepath
-# Redémarre PowerShell si nécessaire, puis :
-pipx install git+https://github.com/hackerboy-223/zerocode.git
-zerocode --version
-zerocode doctor
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
 ```
 
-### Installer depuis le code source
+Le script vérifie Python 3.10+, installe pipx si nécessaire, installe ZeroCode avec toutes ses dépendances déclarées, puis vérifie la commande. Ferme et rouvre le terminal si Windows ou ton shell ne trouve pas encore `zerocode`.
 
-Cette méthode convient aux personnes qui souhaitent contribuer ou modifier ZeroCode :
+### Installation manuelle
+
+```bash
+python -m pip install --user pipx
+python -m pipx ensurepath
+pipx install git+https://github.com/hackerboy-223/zerocode.git
+```
+
+Pour contribuer au code source :
 
 ```bash
 git clone https://github.com/hackerboy-223/zerocode.git
 cd zerocode
 python -m venv .venv
-```
-
-Active l’environnement virtuel, puis installe le projet :
-
-```bash
-# Linux / macOS
-source .venv/bin/activate
-# Windows PowerShell : .venv\Scripts\Activate.ps1
+# Linux/macOS : source .venv/bin/activate
+# Windows : .venv\\Scripts\\Activate.ps1
 python -m pip install -e ".[dev]"
 pytest
 ruff check src tests
 ```
-
-Si l’accès public au dépôt n’est pas encore activé, l’installation directe depuis GitHub ne fonctionnera pas pour les personnes qui n’ont pas l’autorisation d’y accéder.
 
 ## Démarrage rapide
 
@@ -134,7 +128,7 @@ Les réponses et le raisonnement sont diffusés en streaming via un worker, avec
 
 Avec une clé OpenRouter, ZeroCode expose aussi plusieurs modèles gratuits spécialisés : Cohere North Mini Code pour le développement agentique, Xing4.0 pour les tâches d'ingénierie, Nemotron 3 Ultra pour le raisonnement et l'orchestration, Nemotron 3.5 Lightning pour les tours rapides, Nemotron 3.5 Super VL et Gemma 4 pour les tâches multimodales, ainsi qu'Inkling Small pour les harness agents.
 
-Le routeur `auto` choisit un ordre de priorité selon la demande : vitesse pour les questions simples, modèles code pour les tâches de développement, raisonnement plus profond pour les audits et architectures. Les modèles gratuits ont des quotas et des politiques de données variables. NVIDIA et Thinking Machines signalent la journalisation de certains endpoints gratuits : ne leur envoyez aucun secret ni code privé.
+Le routeur `auto` utilise uniquement les routes gratuites anonymes de Kilo : aucun compte OpenRouter ni clé personnelle n'est requis. Le fournisseur peut appliquer des quotas, des limites ou modifier la disponibilité de son offre gratuite. Les autres fournisseurs nécessitant une clé ne sont jamais utilisés automatiquement. Pour une confidentialité maximale, installe Ollama et utilise un modèle local : les prompts restent sur ta machine.
 
 Détails, identifiants et limites : [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
