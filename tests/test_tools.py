@@ -295,3 +295,51 @@ def test_bash_output_is_bounded_with_streaming(tmp_path):
     assert "stdout tronque" in result
     assert chunks
     assert len(result) < 3_000
+
+def test_auto_permissions_allow_new_files_and_in_workspace_edits(tmp_path):
+    context = ToolContext(cwd=tmp_path)
+    permissions = PermissionManager(mode="ask", interactive=False)
+    registry = build_registry(context, permissions)
+
+    created = call(registry, "write", path="src/app.py", content="value = 1\n")
+    assert "Ecrit" in created
+    edited = call(
+        registry,
+        "edit",
+        path="src/app.py",
+        old_string="value = 1",
+        new_string="value = 2",
+    )
+    assert "Modifie" in edited
+    assert "value = 2" in (tmp_path / "src/app.py").read_text(encoding="utf-8")
+
+
+def test_auto_permissions_do_not_overwrite_existing_files(tmp_path):
+    target = tmp_path / "existing.py"
+    target.write_text("keep = True\n", encoding="utf-8")
+    context = ToolContext(cwd=tmp_path)
+    permissions = PermissionManager(mode="ask", interactive=False)
+    registry = build_registry(context, permissions)
+
+    result = call(registry, "write", path="existing.py", content="replace = True\n")
+
+    assert "refusee" in result
+    assert target.read_text(encoding="utf-8") == "keep = True\n"
+
+
+def test_auto_shell_allows_safe_commands_and_blocks_arbitrary_commands(tmp_path):
+    context = ToolContext(cwd=tmp_path)
+    permissions = PermissionManager(mode="ask", interactive=False)
+    registry = build_registry(context, permissions)
+
+    safe = call(registry, "bash", command="pwd")
+    assert "exit_code: 0" in safe
+    assert "Action refusee" not in safe
+
+    unsafe = call(registry, "bash", command="rm -rf build")
+    assert "Action refusee" in unsafe
+
+    compound = call(registry, "bash", command="pwd; touch unexpected.txt")
+    assert "Action refusee" in compound
+    assert not (tmp_path / "unexpected.txt").exists()
+
