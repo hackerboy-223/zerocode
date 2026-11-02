@@ -37,7 +37,7 @@ def _safe_workspace_arguments(
             or candidate.startswith("../")
             or "/../" in candidate
             or "\\..\\" in candidate
-            or re.match(r"^[A-Za-z]:[\\/]", candidate)
+            or re.match(r"^[A-Za-z]:", candidate)
         ):
             return False
         if check_bare_paths or "/" in candidate or "\\" in candidate:
