@@ -32,7 +32,7 @@ Une seule commande :
 curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.sh | bash
 ```
 
-Ou télécharge le dépôt et lance `./install.sh`.
+Ou télécharge le dépôt et lance `bash install.sh`.
 
 ### Windows · PowerShell
 
