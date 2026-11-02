@@ -29,6 +29,19 @@ class FakeClient:
         return None
 
 
+class FailOnceClient(FakeClient):
+    def stream(self, provider, model, messages, tools, callbacks=None):
+        self.calls += 1
+        if self.calls == 1:
+            raise RateLimitError("temporary quota", retryable=True, retry_after=1)
+        return Completion(
+            content="ok",
+            provider=provider.name,
+            model=model.id,
+            usage=Usage(prompt_tokens=1, completion_tokens=1, total_tokens=2, requests=1),
+        )
+
+
 def test_auto_prefers_keyless_kilo():
     router = Router(Config(model="auto"))
     try:
@@ -74,31 +87,22 @@ def test_unknown_provider_raises():
         router.close()
 
 
-def test_complete_falls_back_after_rate_limit(monkeypatch):
-    monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
+def test_complete_falls_back_after_rate_limit():
     config = Config(model="auto", free_only=True, fallback=True)
-    clients = {
-        "kilo": FakeClient(error=RateLimitError("quota", retryable=True, retry_after=30)),
-        "nvidia": FakeClient(provider="nvidia"),
-    }
+    clients = {"kilo": FailOnceClient()}
     router = Router(config, clients=clients)
     try:
         completion = router.complete([{"role": "user", "content": "hi"}])
     finally:
         router.close()
-    assert completion.provider == "nvidia"
-    assert clients["kilo"].calls == 1
-    assert clients["nvidia"].calls == 1
+    assert completion.provider == "kilo"
+    assert clients["kilo"].calls == 2
     assert router.last is completion
 
 
-def test_complete_reports_all_failures(monkeypatch):
-    monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
+def test_complete_reports_all_failures():
     config = Config(model="auto", free_only=True, fallback=True)
-    clients = {
-        "kilo": FakeClient(error=RateLimitError("quota", retryable=True)),
-        "nvidia": FakeClient(error=ProviderError("down", retryable=True)),
-    }
+    clients = {"kilo": FakeClient(error=RateLimitError("quota", retryable=True))}
     router = Router(config, clients=clients)
     try:
         with pytest.raises(Exception) as exc_info:
@@ -106,11 +110,10 @@ def test_complete_reports_all_failures(monkeypatch):
     finally:
         router.close()
     assert "kilo/kilo-auto/free" in str(exc_info.value)
-    assert "nvidia" in str(exc_info.value)
+    assert "kilo/cohere/north-mini-code:free" in str(exc_info.value)
 
 
-def test_auto_router_prefers_coding_models_for_code_tasks(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+def test_auto_router_prefers_coding_models_for_code_tasks():
     router = Router(Config(model="auto", free_only=True))
     try:
         candidates = router.resolve_candidates("auto")
@@ -118,14 +121,13 @@ def test_auto_router_prefers_coding_models_for_code_tasks(monkeypatch):
             candidates,
             [{"role": "user", "content": "Code ce projet Python, corrige les bugs et ajoute des tests."}],
         )
-        assert ranked[0][0].name == "openrouter"
+        assert ranked[0][0].name == "kilo"
         assert ranked[0][1].id == "cohere/north-mini-code:free"
     finally:
         router.close()
 
 
-def test_auto_router_prefers_fast_model_for_simple_requests(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+def test_auto_router_prefers_fast_model_for_simple_requests():
     router = Router(Config(model="auto", free_only=True))
     try:
         candidates = router.resolve_candidates("auto")
@@ -133,7 +135,7 @@ def test_auto_router_prefers_fast_model_for_simple_requests(monkeypatch):
             candidates,
             [{"role": "user", "content": "Salut, presente-toi en une phrase."}],
         )
-        assert ranked[0][0].name == "openrouter"
+        assert ranked[0][0].name == "kilo"
         assert ranked[0][1].id == "nvidia/nemotron-3.5-lightning:free"
     finally:
         router.close()
