@@ -302,6 +302,15 @@ def run_agent(
         if not prompt and not interactive:
             prompt = sys.stdin.read().strip()
 
+        if args.json and not prompt:
+            console.print(
+                Text(
+                    "ERREUR: --json necessite un prompt ou une entree stdin.",
+                    style="bold red",
+                )
+            )
+            return 1
+
         if args.image:
             if not prompt:
                 ui.error("--image necessite un prompt.")

@@ -58,7 +58,10 @@ def _rank(path: str, query: str) -> tuple[int, int, int, str]:
 
 def _options(options: Iterable[tuple[str, str]]) -> list[Option]:
     return [
-        Option(Text.assemble((value, "bold cyan"), ("  " + label, "dim")), id=value)
+        Option(
+            Text.assemble((value, "bold #7dd3fc"), ("  " + label, "#7d8998")),
+            id=value,
+        )
         for value, label in options
     ]
 
@@ -68,9 +71,9 @@ def _file_options(paths: Iterable[str]) -> list[Option]:
     for path in paths:
         parent, _, name = path.rpartition("/")
         label = Text()
-        label.append(name or path, style="bold cyan")
+        label.append(name or path, style="bold #e6edf3")
         if parent:
-            label.append("  " + parent, style="dim")
+            label.append("  " + parent, style="#6f7c8e")
         options.append(Option(label, id=path))
     return options
 
@@ -90,9 +93,12 @@ class ConfirmScreen(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         body = Text()
         body.append(self.preview, style="bold")
-        body.append("\n\n⚠ Cette action peut modifier les fichiers ou exécuter une commande.", style="dim")
+        body.append(
+            "\n\nCette action peut modifier les fichiers ou exécuter une commande.",
+            style="#7d8998",
+        )
         with Vertical(id="confirm-dialog"):
-            yield Label(f"🛡️ Autorisation Web Agent · {self.tool_name}", id="confirm-title")
+            yield Label(f"Autorisation · {self.tool_name}", id="confirm-title")
             with VerticalScroll(id="confirm-scroll"):
                 yield Static(body, id="confirm-body")
             yield Static(
@@ -101,8 +107,8 @@ class ConfirmScreen(ModalScreen[bool]):
                 classes="palette-hint",
             )
             with Horizontal(id="confirm-actions"):
-                yield Button("✕ Refuser", id="deny", variant="default")
-                yield Button("✓ Autoriser", id="allow", variant="success")
+                yield Button("Refuser", id="deny", variant="default")
+                yield Button("Autoriser", id="allow", variant="success")
 
     def on_mount(self) -> None:
         self.query_one("#allow", Button).focus()
@@ -126,11 +132,11 @@ class PasswordScreen(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         body = Text()
-        body.append("🔐 Commande privilégiée détectée\n\n", style="bold yellow")
+        body.append("Commande privilégiée détectée\n\n", style="bold #fbbf24")
         body.append(self.command, style="bold")
         body.append(
             "\n\nTon mot de passe reste en local et n'est jamais envoyé au modèle.",
-            style="dim",
+            style="#7d8998",
         )
         with Vertical(id="password-dialog"):
             yield Label("Mot de passe sudo", id="password-title")
@@ -147,8 +153,8 @@ class PasswordScreen(ModalScreen[str | None]):
                 classes="palette-hint",
             )
             with Horizontal(id="password-actions"):
-                yield Button("✕ Annuler", id="password-cancel", variant="default")
-                yield Button("✓ Valider", id="password-allow", variant="success")
+                yield Button("Annuler", id="password-cancel", variant="default")
+                yield Button("Valider", id="password-allow", variant="success")
 
     def on_mount(self) -> None:
         self.query_one("#password-input", Input).focus()

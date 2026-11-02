@@ -121,6 +121,7 @@ def test_tui_mounts_with_branding(tmp_path):
             assert app.query_one("#prompt", Input) is not None
             assert app.context.show_diff.__self__ is app.bridge
             assert app.context.request_sudo_password.__self__ is app.bridge
+            assert app.context.stream_output.__self__ is app.bridge
             app.store.save(app.agent.session)
             app._refresh_sessions()
             assert any(item.has_class("current") for item in app.query(SessionItem))

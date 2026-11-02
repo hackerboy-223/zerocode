@@ -43,6 +43,22 @@ for line in sys.stdin:
 '''
 
 
+def test_mcp_invalid_timeout_is_skipped(tmp_path):
+    context = ToolContext(cwd=tmp_path)
+    permissions = PermissionManager(mode="allow", interactive=False)
+    registry = build_registry(context, permissions)
+    manager = register_mcp_tools(
+        registry,
+        {"demo": {"command": sys.executable, "timeout": "soon"}},
+        cwd=tmp_path,
+    )
+    try:
+        assert manager.clients == []
+        assert not any(name.startswith("mcp_") for name in registry.names())
+    finally:
+        manager.close()
+
+
 def test_mcp_stdio_tool_roundtrip(tmp_path):
     server = tmp_path / "server.py"
     server.write_text(SERVER, encoding="utf-8")

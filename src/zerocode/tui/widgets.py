@@ -10,18 +10,6 @@ from textual.widgets import Collapsible, Input, Static
 from ..tokens import truncate_text
 from ..ui import _safe
 
-TOOL_ICONS: dict[str, str] = {
-    "read": "📄",
-    "write": "📝",
-    "edit": "✏️",
-    "list": "📂",
-    "grep": "🔎",
-    "bash": "🐚",
-    "todo_write": "☑️",
-    "fetch": "🌐",
-    "web_search": "🔍",
-}
-
 
 class PromptInput(Input):
     """Champ de saisie style Web Composer avec historique navigable aux flèches."""
@@ -97,10 +85,9 @@ class ThinkingIndicator(Static):
         dots = "." * (self._index % 4)
         elapsed = time.monotonic() - self._started
         text = Text()
-        text.append(" ✦ AGENT ", style="bold black on cyan")
-        text.append(f"  {frame} ", style="bold yellow")
-        text.append("réflexion en cours" + f"{dots:<3}", style="italic cyan")
-        text.append(f"  ·  {elapsed:4.1f}s", style="dim")
+        text.append(f"  {frame}  ", style="bold #fbbf24")
+        text.append("réflexion en cours" + f"{dots:<3}", style="#c9d1d9")
+        text.append(f"   {elapsed:4.1f}s", style="#6f7c8e")
         self.update(text)
         self._index += 1
 
@@ -118,12 +105,12 @@ class ToolCard(Collapsible):
         self.diff_removed = 0
         self._stream = ""
         self._body = Static(
-            Text("⏳ Exécution de l'outil en cours…", style="dim italic"),
+            Text("Exécution en cours…", style="#6f7c8e italic"),
             classes="tool-output",
         )
         super().__init__(
             self._body,
-            title=self._header("◌", "bold yellow", badge="EN COURS"),
+            title=self._header("·", "bold #fbbf24", badge="en cours"),
             collapsed=False,
             classes="tool-card running",
         )
@@ -154,10 +141,10 @@ class ToolCard(Collapsible):
         suffix = f"{len(lines)} ligne{'s' if len(lines) > 1 else ''}"
         if self.diff:
             suffix += f" · +{self.diff_added} −{self.diff_removed}"
-        badge = "ERREUR" if is_error else "OK"
+        badge = "erreur" if is_error else "ok"
         self.title = self._header(
-            "✗" if is_error else "✓",
-            "bold red" if is_error else "bold green",
+            "✕" if is_error else "✓",
+            "bold #f87171" if is_error else "bold #34d399",
             suffix=suffix,
             badge=badge,
         )
@@ -165,22 +152,22 @@ class ToolCard(Collapsible):
         body = Text()
         for index, line in enumerate(rendered):
             if is_error and index == 0:
-                style = "bold red"
+                style = "bold #f87171"
             elif line.startswith("+") and not line.startswith("+++"):
-                style = "green"
+                style = "#34d399"
             elif line.startswith("-") and not line.startswith("---"):
-                style = "red"
+                style = "#f87171"
             elif line.startswith("exit_code:"):
-                style = "cyan"
+                style = "#7dd3fc"
             else:
-                style = "dim"
+                style = "#7d8998"
             body.append(line + "\n", style=style)
         diff_lines = self.diff.splitlines()
         if diff_lines:
             body.append("\n")
-            body.append("📄 " + self.diff_path, style="bold cyan")
-            body.append(f"  +{self.diff_added}", style="bold green")
-            body.append(f"  −{self.diff_removed}\n", style="bold red")
+            body.append("fichier " + self.diff_path, style="bold #7dd3fc")
+            body.append(f"  +{self.diff_added}", style="bold #34d399")
+            body.append(f"  −{self.diff_removed}\n", style="bold #f87171")
             for line in diff_lines:
                 body.append(line + "\n", style=_diff_style(line))
         self._body.update(body)
@@ -193,23 +180,22 @@ class ToolCard(Collapsible):
         suffix: str = "",
         badge: str = "",
     ) -> Text:
-        tool_emoji = TOOL_ICONS.get(self.tool_name, "🔧")
         title = Text()
         title.append(f"{icon} ", style=icon_style)
-        title.append(f"{tool_emoji} {self.tool_name}", style="bold cyan")
+        title.append(self.tool_name, style="bold #e6edf3")
         if badge:
             badge_style = (
-                "bold black on green"
-                if badge == "OK"
-                else "bold white on red"
-                if badge == "ERREUR"
-                else "bold black on yellow"
+                "bold #071016 on #34d399"
+                if badge == "ok"
+                else "bold #071016 on #f87171"
+                if badge == "erreur"
+                else "bold #071016 on #fbbf24"
             )
             title.append(f"  {badge} ", style=badge_style)
         if self.preview:
-            title.append("  " + truncate_text(self.preview, 92), style="dim")
+            title.append("  " + truncate_text(self.preview, 92), style="#7d8998")
         if suffix:
-            title.append("  ·  " + suffix, style="dim")
+            title.append("  ·  " + suffix, style="#6f7c8e")
         return title
 
 
@@ -217,12 +203,12 @@ def _diff_style(line: str) -> str:
     if line.startswith(("+++", "---")):
         return "bold"
     if line.startswith("+"):
-        return "green"
+        return "#34d399"
     if line.startswith("-"):
-        return "red"
+        return "#f87171"
     if line.startswith("@@"):
-        return "cyan"
-    return "dim"
+        return "#7dd3fc"
+    return "#7d8998"
 
 
 def _is_tool_error(result: str) -> bool:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from pathlib import Path
@@ -16,6 +17,10 @@ def make_registry(tmp_path, *, mode="allow", allow_outside=False):
 
 def call(registry, name, **arguments):
     return registry.execute(ToolCall(id="call-1", name=name, arguments=arguments))
+
+
+def python_command(code: str) -> str:
+    return f'"{sys.executable}" -c "{code}"'
 
 
 def test_write_read_edit_and_list(tmp_path):
@@ -97,9 +102,26 @@ def test_todo_write_replaces_plan(tmp_path):
 
 def test_bash_runs_in_workspace(tmp_path):
     registry, _ = make_registry(tmp_path)
-    result = call(registry, "bash", command="printf hello")
+    result = call(registry, "bash", command=python_command("print('hello')"))
     assert "exit_code: 0" in result
     assert "hello" in result
+
+
+def test_bash_does_not_read_parent_stdin(tmp_path):
+    registry, _ = make_registry(tmp_path)
+    command = python_command("import sys; print(len(sys.stdin.read()))")
+    result = call(registry, "bash", command=command, timeout=5)
+    assert "exit_code: 0" in result
+    assert "\n0" in result or "stdout:\n0" in result
+
+
+def test_ripgrep_line_path_supports_windows_drive_and_colons():
+    from zerocode.tools.search import _ripgrep_line_path
+
+    assert _ripgrep_line_path(r"C:\repo\src\app.py:12:match") == r"C:\repo\src\app.py"
+    assert _ripgrep_line_path("src/app.py:3:foo:bar") == "src/app.py"
+    assert _ripgrep_line_path("src/app.py:4:2: value") == "src/app.py"
+    assert _ripgrep_line_path("no-match") == "no-match"
 
 
 def test_permissions_deny_mutation_but_allow_read(tmp_path):
@@ -162,7 +184,12 @@ def test_bash_command_can_be_interrupted(tmp_path):
     result: dict[str, str] = {}
 
     def worker() -> None:
-        result["output"] = call(registry, "bash", command="sleep 30", timeout=60)
+        result["output"] = call(
+            registry,
+            "bash",
+            command=python_command("import time; time.sleep(30)"),
+            timeout=60,
+        )
 
     thread = threading.Thread(target=worker)
     thread.start()
@@ -208,7 +235,12 @@ def test_gitignore_is_respected(tmp_path):
 def test_bash_timeout_terminates_command(tmp_path):
     registry, _ = make_registry(tmp_path)
     started = time.monotonic()
-    result = call(registry, "bash", command="sleep 5", timeout=1)
+    result = call(
+        registry,
+        "bash",
+        command=python_command("import time; time.sleep(5)"),
+        timeout=1,
+    )
     assert "exit_code: 124" in result
     assert time.monotonic() - started < 4
 
@@ -218,7 +250,7 @@ def test_bash_streams_output(tmp_path):
     context = ToolContext(cwd=tmp_path, stream_output=lambda name, chunk: chunks.append((name, chunk)))
     permissions = PermissionManager(mode="allow", interactive=False)
     registry = build_registry(context, permissions)
-    result = call(registry, "bash", command="printf 'un\\ndeux\\n'")
+    result = call(registry, "bash", command=python_command("print('un'); print('deux')"))
     assert "exit_code: 0" in result
     assert any("un" in chunk for _, chunk in chunks)
     assert any("deux" in chunk for _, chunk in chunks)
@@ -234,12 +266,10 @@ def test_web_tools_are_registered_and_block_localhost(tmp_path):
 
 
 def test_bash_output_is_bounded_without_streaming(tmp_path):
-    import sys
-
     context = ToolContext(cwd=tmp_path, max_output_chars=4_000)
     permissions = PermissionManager(mode="allow", interactive=False)
     registry = build_registry(context, permissions)
-    command = f'"{sys.executable}" -c "print(\'x\' * 100000)"'
+    command = python_command("print('x' * 100000)")
 
     result = call(registry, "bash", command=command)
 
@@ -249,8 +279,6 @@ def test_bash_output_is_bounded_without_streaming(tmp_path):
 
 
 def test_bash_output_is_bounded_with_streaming(tmp_path):
-    import sys
-
     chunks: list[tuple[str, str]] = []
     context = ToolContext(
         cwd=tmp_path,
@@ -259,7 +287,7 @@ def test_bash_output_is_bounded_with_streaming(tmp_path):
     )
     permissions = PermissionManager(mode="allow", interactive=False)
     registry = build_registry(context, permissions)
-    command = f'"{sys.executable}" -c "print(\'x\' * 100000)"'
+    command = python_command("print('x' * 100000)")
 
     result = call(registry, "bash", command=command)
 

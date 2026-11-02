@@ -90,15 +90,24 @@ class Usage:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> Usage:
-        data = data or {}
+    def from_dict(cls, data: Any) -> Usage:
+        if not isinstance(data, dict):
+            data = {}
+        estimated = data.get("estimated")
         return cls(
-            prompt_tokens=int(data.get("prompt_tokens", 0) or 0),
-            completion_tokens=int(data.get("completion_tokens", 0) or 0),
-            total_tokens=int(data.get("total_tokens", 0) or 0),
-            requests=int(data.get("requests", 0) or 0),
-            estimated=bool(data.get("estimated", False)),
+            prompt_tokens=_int_or_zero(data.get("prompt_tokens")),
+            completion_tokens=_int_or_zero(data.get("completion_tokens")),
+            total_tokens=_int_or_zero(data.get("total_tokens")),
+            requests=_int_or_zero(data.get("requests")),
+            estimated=estimated if isinstance(estimated, bool) else False,
         )
+
+
+def _int_or_zero(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 @dataclass(slots=True)

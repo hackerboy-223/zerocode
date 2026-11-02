@@ -98,6 +98,32 @@ def test_provider_url_validation(tmp_path):
         load_config(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "server",
+    [
+        {"command": "true", "timeout": "soon"},
+        {"command": "true", "timeout": 0},
+        {"command": "true", "timeout": True},
+        {"command": "true", "cwd": 42},
+    ],
+)
+def test_invalid_mcp_server_options_are_rejected(tmp_path, server):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"mcp_servers": {"demo": server}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_config(tmp_path)
+
+
+def test_provider_alias_is_normalized(tmp_path):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"provider": " AUTO "}),
+        encoding="utf-8",
+    )
+    assert load_config(tmp_path).provider is None
+
+
 def test_key_store_roundtrip_and_mode(tmp_path):
     path = store_key("groq", "gsk-secret-value")
     assert path == keys_path()

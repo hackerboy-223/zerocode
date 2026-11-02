@@ -224,9 +224,24 @@ def register_mcp_tools(
         if not command:
             _warn(ui, f"MCP {server_name}: commande absente.")
             continue
-        args = [str(item) for item in config.get("args") or []]
+        raw_args = config.get("args") or []
+        if not isinstance(raw_args, list):
+            _warn(ui, f"MCP {server_name}: args doit etre une liste.")
+            continue
+        args = [str(item) for item in raw_args]
         env = config.get("env") if isinstance(config.get("env"), dict) else {}
-        timeout = float(config.get("timeout") or DEFAULT_TIMEOUT)
+        raw_timeout = config.get("timeout")
+        if raw_timeout in (None, ""):
+            timeout = DEFAULT_TIMEOUT
+        else:
+            try:
+                timeout = float(raw_timeout)
+            except (TypeError, ValueError):
+                _warn(ui, f"MCP {server_name}: timeout invalide ({raw_timeout!r}).")
+                continue
+            if timeout <= 0:
+                _warn(ui, f"MCP {server_name}: timeout doit etre positif.")
+                continue
         server_cwd = config.get("cwd")
         client = MCPClient(
             str(server_name),

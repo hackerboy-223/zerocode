@@ -31,6 +31,7 @@ SECRET_NAMES = {
 }
 SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks")
 SAFE_ENV_NAMES = {".env.example", ".env.sample", ".env.template", ".env.dist"}
+FORCE_KILL_SIGNAL = getattr(signal, "SIGKILL", signal.SIGTERM)
 
 
 def is_secret_path(path: Path) -> bool:
@@ -90,7 +91,7 @@ class ToolContext:
         process = self._active_process
         if process is None or process.poll() is not None:
             return
-        _signal_process_group(process, signal.SIGKILL)
+        _signal_process_group(process, FORCE_KILL_SIGNAL)
 
     def check_secret(self, path: Path) -> None:
         if not self.protect_secrets or self.allow_secrets:
@@ -260,7 +261,7 @@ def _signal_process_group(process: Any, sig: int) -> None:
 def _force_kill_after(process: Any, grace: float) -> None:
     time.sleep(grace)
     if process.poll() is None:
-        _signal_process_group(process, signal.SIGKILL)
+        _signal_process_group(process, FORCE_KILL_SIGNAL)
 
 
 def _validate_arguments(schema: dict[str, Any], args: dict[str, Any]) -> None:

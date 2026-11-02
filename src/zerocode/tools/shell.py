@@ -50,6 +50,7 @@ def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
             command,
             shell=True,
             cwd=ctx.cwd,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

@@ -202,6 +202,10 @@ class Config:
 def validate_config(config: Config) -> None:
     if not config.model or not isinstance(config.model, str):
         raise ConfigError("model doit etre une chaine non vide.")
+    if config.provider is not None and (
+        not isinstance(config.provider, str) or not config.provider.strip()
+    ):
+        raise ConfigError("provider doit etre une chaine non vide ou null.")
     if config.reasoning_effort not in VALID_REASONING:
         raise ConfigError(
             f"reasoning_effort doit valoir {', '.join(sorted(VALID_REASONING))}."
@@ -255,6 +259,22 @@ def validate_config(config: Config) -> None:
             raise ConfigError(f"mcp_servers.{name}.env doit etre un objet JSON.")
         if "enabled" in server and not isinstance(server["enabled"], bool):
             raise ConfigError(f"mcp_servers.{name}.enabled doit etre un booleen.")
+        if "cwd" in server:
+            value = server["cwd"]
+            if not isinstance(value, str) or not value.strip():
+                raise ConfigError(
+                    f"mcp_servers.{name}.cwd doit etre une chaine non vide."
+                )
+        if "timeout" in server:
+            value = server["timeout"]
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not 1 <= float(value) <= 3_600
+            ):
+                raise ConfigError(
+                    f"mcp_servers.{name}.timeout doit etre un nombre entre 1 et 3600."
+                )
 
 
 def load_config(
@@ -298,8 +318,11 @@ def load_config(
         data.get("compact_threshold", 0.75), "compact_threshold"
     )
     provider = data.get("provider")
-    if provider in ("", "none", "null", "auto"):
-        data["provider"] = None
+    if isinstance(provider, str):
+        provider = provider.strip()
+        if provider.lower() in {"", "none", "null", "auto"}:
+            provider = None
+    data["provider"] = provider
 
     config = Config(**data, base_dir=cwd, sources=sources)
     validate_config(config)
