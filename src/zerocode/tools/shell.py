@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import threading
@@ -17,6 +18,102 @@ SUDO_COMMAND_RE = re.compile(
     r"(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*)?)"
     r"(?P<sudo>(?:[\w./-]*/)?sudo)(?P<suffix>(?=\s|$|[;&|)]))"
 )
+
+
+def _safe_workspace_arguments(arguments: list[str], ctx: ToolContext) -> bool:
+    for argument in arguments:
+        if argument.startswith("-"):
+            continue
+        if (
+            argument.startswith(("/", "~"))
+            or argument == ".."
+            or argument.startswith("../")
+            or "/../" in argument
+            or "\\..\\" in argument
+            or re.match(r"^[A-Za-z]:[\\/]", argument)
+        ):
+            return False
+        if "/" in argument or "\\" in argument:
+            try:
+                path = ctx.resolve_path(argument)
+                ctx.check_secret(path)
+            except Exception:
+                return False
+    return True
+
+
+def is_safe_auto_command(command: str, ctx: ToolContext) -> bool:
+    """Return true only for simple, non-mutating inspection and dev-check commands."""
+    raw = command.strip()
+    if not raw or any(char in raw for char in (";", "&", "|", "<", ">", "`", "$", "\n", "\r")):
+        return False
+    try:
+        parts = shlex.split(raw)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+
+    executable = os.path.basename(parts[0]).lower()
+    arguments = parts[1:]
+    if not _safe_workspace_arguments(arguments, ctx):
+        return False
+
+    if executable == "pwd":
+        return not arguments
+    if executable == "ls":
+        return True
+    if executable == "git" and arguments:
+        subcommand = arguments[0]
+        options = arguments[1:]
+        if subcommand == "status":
+            return all(option in {"--short", "--porcelain", "--branch", "--ignored"} for option in options)
+        if subcommand == "diff":
+            return bool(options) and all(
+                option in {"--check", "--stat", "--name-only", "--no-ext-diff", "--"}
+                for option in options
+            )
+        if subcommand == "log":
+            return bool(options) and all(
+                option == "--oneline" or option.startswith(("-n", "--max-count="))
+                for option in options
+            )
+        if subcommand == "branch":
+            return options == ["--show-current"]
+        if subcommand == "rev-parse":
+            return options == ["--show-toplevel"]
+        return False
+
+    test_commands = {
+        ("pytest",),
+        ("ruff", "check"),
+        ("python", "-m", "pytest"),
+        ("python3", "-m", "pytest"),
+        ("python", "-m", "ruff", "check"),
+        ("python3", "-m", "ruff", "check"),
+        ("uv", "run", "pytest"),
+        ("uv", "run", "ruff", "check"),
+        ("npm", "test"),
+        ("pnpm", "test"),
+        ("yarn", "test"),
+        ("bun", "test"),
+        ("cargo", "test"),
+        ("cargo", "check"),
+        ("go", "test"),
+        ("composer", "test"),
+        ("php", "artisan", "test"),
+    }
+    if any(tuple(parts[: len(prefix)]) == prefix for prefix in test_commands):
+        return True
+
+    script_runners = {"npm", "pnpm", "yarn", "bun"}
+    safe_scripts = {"test", "lint", "build", "typecheck", "check"}
+    if executable in script_runners and arguments:
+        if arguments[0] in safe_scripts:
+            return True
+        if len(arguments) >= 2 and arguments[0] == "run" and arguments[1] in safe_scripts:
+            return True
+    return False
 
 
 def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
@@ -239,6 +336,6 @@ def register_shell_tools(registry: ToolRegistry) -> None:
                 "required": ["command"],
             },
             handler=run_bash,
-            approval="ask",
+            approval="auto",
         )
     )
