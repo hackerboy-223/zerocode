@@ -300,8 +300,18 @@ class Agent:
             self.ui.show_reasoning = self.config.show_reasoning
 
     def _refresh_system_mode(self) -> None:
-        if self.messages and self.messages[0].get("role") == "system":
-            self.messages[0]["content"] = self._system_message()["content"]
+        if not self.messages or self.messages[0].get("role") != "system":
+            return
+        current = str(self.messages[0].get("content") or "")
+        title = "## Contexte anterieur (resume automatique)"
+        summary = ""
+        if title in current:
+            _, summary = current.split(title, 1)
+            summary = summary.strip()
+        content = self._system_message()["content"]
+        if summary:
+            content = f"{content.rstrip()}\\n\\n{title}\\n{summary}"
+        self.messages[0]["content"] = content
 
     def set_model(self, model: str, provider: str | None = None) -> None:
         self.config.model = model
