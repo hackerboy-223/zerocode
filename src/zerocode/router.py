@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -180,6 +181,9 @@ class Router:
             needs_tools=bool(tools),
             needs_vision=needs_vision,
         )
+        requested_model = (model or self.config.model).strip().lower()
+        if requested_model == "auto" and not (provider or self.config.provider):
+            candidates = self._rank_auto_candidates(candidates, messages)
         failures: list[tuple[str, Exception]] = []
 
         for spec, model_spec in candidates:
@@ -213,6 +217,76 @@ class Router:
                 "Reessaie dans quelques minutes ou lance `zerocode doctor`."
             )
         raise AllProvidersFailed(failures)
+
+    @staticmethod
+    def _rank_auto_candidates(
+        candidates: list[tuple[ProviderSpec, ModelSpec]],
+        messages: list[dict[str, Any]],
+    ) -> list[tuple[ProviderSpec, ModelSpec]]:
+        """Prefer a model family suited to the latest request, keeping fallback order stable."""
+        user_text = ""
+        for message in reversed(messages):
+            if message.get("role") != "user":
+                continue
+            content = message.get("content")
+            if isinstance(content, str):
+                user_text = content
+            elif isinstance(content, list):
+                user_text = " ".join(
+                    str(item.get("text", ""))
+                    for item in content
+                    if isinstance(item, dict) and isinstance(item.get("text"), str)
+                )
+            break
+
+        text = user_text.lower()
+        complex_task = bool(
+            re.search(
+                r"\b(securit|security|audit|architecture|architect|refactor|"
+                r"raisonnement|reasoning|analyse|analyze|debug|debog|incident)\w*\b",
+                text,
+            )
+        )
+        coding_task = complex_task or bool(
+            re.search(
+                r"\b(code|coding|coder|bug|fix|corrig|test|build|implement|"
+                r"repo|repository|projet|project|fonction|develop|dévelop|"
+                r"application|website|site|performance|optimis)\w*\b",
+                text,
+            )
+        )
+
+        if complex_task:
+            preferred = (
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+                "xingchen-agi/xing4.0-29b-a4b:free",
+                "cohere/north-mini-code:free",
+                "nvidia/nemotron-3.5-lightning:free",
+            )
+        elif coding_task:
+            preferred = (
+                "cohere/north-mini-code:free",
+                "xingchen-agi/xing4.0-29b-a4b:free",
+                "nvidia/nemotron-3.5-lightning:free",
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+            )
+        else:
+            preferred = (
+                "nvidia/nemotron-3.5-lightning:free",
+                "cohere/north-mini-code:free",
+                "xingchen-agi/xing4.0-29b-a4b:free",
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+            )
+
+        priority = {model_id: index for index, model_id in enumerate(preferred)}
+        indexed = list(enumerate(candidates))
+        indexed.sort(
+            key=lambda item: (
+                priority.get(item[1][1].id, len(priority)),
+                item[0],
+            )
+        )
+        return [candidate for _, candidate in indexed]
 
     def _exact_matches(self, requested: str) -> list[tuple[ProviderSpec, ModelSpec]]:
         result: list[tuple[ProviderSpec, ModelSpec]] = []

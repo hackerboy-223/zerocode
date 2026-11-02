@@ -22,7 +22,7 @@ def _now() -> str:
 def _as_int(value: Any) -> int:
     try:
         return int(value or 0)
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return 0
 
 

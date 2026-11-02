@@ -106,7 +106,7 @@ class Usage:
 def _int_or_zero(value: Any) -> int:
     try:
         return int(value or 0)
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return 0
 
 

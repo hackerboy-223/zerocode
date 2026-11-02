@@ -78,7 +78,7 @@ class OpenAICompatibleClient:
         self.config = config
         self._http = http_client or httpx.Client(
             timeout=DEFAULT_TIMEOUT,
-            follow_redirects=True,
+            follow_redirects=False,
             limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
         )
 
@@ -172,7 +172,7 @@ class OpenAICompatibleClient:
                 headers=self._headers(provider),
                 json=body,
             ) as response:
-                if response.status_code >= 400:
+                if response.status_code >= 300:
                     raw = response.read()
                     text = raw.decode("utf-8", errors="replace")
                     sanitized = (
@@ -434,9 +434,9 @@ def fetch_models(
     if key:
         headers["Authorization"] = f"Bearer {key}"
     url = f"{provider.base_url.rstrip('/')}/models"
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+    with httpx.Client(timeout=timeout, follow_redirects=False) as client:
         response = client.get(url, headers=headers)
-        if response.status_code >= 400:
+        if response.status_code >= 300:
             raise ProviderError(
                 _error_message(response.text) or "Impossible de lister les modeles.",
                 provider=provider.name,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -239,8 +240,8 @@ def register_mcp_tools(
             except (TypeError, ValueError):
                 _warn(ui, f"MCP {server_name}: timeout invalide ({raw_timeout!r}).")
                 continue
-            if timeout <= 0:
-                _warn(ui, f"MCP {server_name}: timeout doit etre positif.")
+            if not math.isfinite(timeout) or not 1 <= timeout <= 3_600:
+                _warn(ui, f"MCP {server_name}: timeout doit etre entre 1 et 3600 secondes.")
                 continue
         server_cwd = config.get("cwd")
         client = MCPClient(

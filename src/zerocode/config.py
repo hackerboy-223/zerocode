@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import getpass
 import json
+import math
 import os
 import subprocess
 import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .errors import ConfigError
 
@@ -15,6 +17,19 @@ APP_NAME = "zerocode"
 PROJECT_CONFIG_NAMES = (".zerocode.json", "zerocode.json")
 VALID_REASONING = {"low", "high", "max"}
 VALID_PERMISSIONS = {"ask", "allow", "deny"}
+PROVIDER_HOSTS = {
+    "kilo": "ai-gateway.kilo.ai",
+    "nvidia": "integrate.api.nvidia.com",
+    "opencode-zen": "opencode.ai",
+    "zai": "api.z.ai",
+    "openrouter": "openrouter.ai",
+    "groq": "api.groq.com",
+    "gemini": "generativelanguage.googleapis.com",
+    "mistral": "api.mistral.ai",
+    "sambanova": "api.sambanova.ai",
+    "together": "api.together.xyz",
+}
+LOCAL_MODEL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": "glm-5.3",
@@ -235,8 +250,38 @@ def validate_config(config: Config) -> None:
             )
         if "base_url" in override:
             value = override["base_url"]
-            if not isinstance(value, str) or not value.startswith(("http://", "https://")):
-                raise ConfigError(f"providers.{name}.base_url doit etre une URL HTTP(S).")
+            if not isinstance(value, str):
+                raise ConfigError(f"providers.{name}.base_url doit etre une URL valide.")
+            parsed = urlsplit(value)
+            hostname = (parsed.hostname or "").lower()
+            if (
+                parsed.username is not None
+                or parsed.password is not None
+                or parsed.query
+                or parsed.fragment
+                or not hostname
+            ):
+                raise ConfigError(
+                    f"providers.{name}.base_url ne doit contenir ni identifiants, "
+                    "ni query string, ni fragment."
+                )
+            if name == "ollama":
+                if parsed.scheme not in {"http", "https"} or hostname not in LOCAL_MODEL_HOSTS:
+                    raise ConfigError(
+                        "providers.ollama.base_url doit pointer vers localhost ou une "
+                        "adresse loopback; les endpoints Ollama distants ne sont pas autorises."
+                    )
+            else:
+                expected_host = PROVIDER_HOSTS.get(name)
+                if (
+                    parsed.scheme != "https"
+                    or hostname != expected_host
+                    or parsed.port not in (None, 443)
+                ):
+                    raise ConfigError(
+                        f"providers.{name}.base_url doit utiliser HTTPS sur le domaine "
+                        "officiel du fournisseur."
+                    )
         if "enabled" in override and not isinstance(override["enabled"], bool):
             raise ConfigError(f"providers.{name}.enabled doit etre un booleen.")
 
@@ -267,10 +312,15 @@ def validate_config(config: Config) -> None:
                 )
         if "timeout" in server:
             value = server["timeout"]
+            try:
+                timeout_value = float(value)
+            except (OverflowError, TypeError, ValueError):
+                timeout_value = float("nan")
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
-                or not 1 <= float(value) <= 3_600
+                or not math.isfinite(timeout_value)
+                or not 1 <= timeout_value <= 3_600
             ):
                 raise ConfigError(
                     f"mcp_servers.{name}.timeout doit etre un nombre entre 1 et 3600."
