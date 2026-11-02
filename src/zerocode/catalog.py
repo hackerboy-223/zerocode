@@ -639,25 +639,14 @@ GLM53_FLASH_CHAIN: tuple[tuple[str, str], ...] = (
     ("kilo", "kilo-auto/free"),
 )
 
+# The default route deliberately uses only Kilo's anonymous free gateway.
+# Other providers remain available only when explicitly selected/configured.
+# Ollama is local and can be enabled separately without any hosted API.
 AUTO_CHAIN: tuple[tuple[str, str], ...] = (
     ("kilo", "kilo-auto/free"),
-    ("openrouter", "cohere/north-mini-code:free"),
-    ("openrouter", "xingchen-agi/xing4.0-29b-a4b:free"),
-    ("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"),
-    ("openrouter", "nvidia/nemotron-3.5-lightning:free"),
-    ("openrouter", "nvidia/nemotron-3.5-super-vl:free"),
-    ("openrouter", "thinkingmachines/inkling-small:free"),
-    ("openrouter", "google/gemma-4-26b-a4b:free"),
-    ("nvidia", "z-ai/glm-5.3-flash"),
-    ("opencode-zen", "glm-5.3-flash-free"),
-    ("zai", "glm-4.7-flash"),
-    ("openrouter", "openrouter/free"),
-    ("groq", "openai/gpt-oss-120b"),
-    ("gemini", "gemini-2.5-flash"),
-    ("mistral", "devstral-medium-latest"),
-    ("sambanova", "DeepSeek-V3.1"),
-    ("together", "zai-org/GLM-5.3-FP8"),
-    ("ollama", "qwen2.5-coder:7b"),
+    ("kilo", "cohere/north-mini-code:free"),
+    ("kilo", "poolside/laguna-s-2.1:free"),
+    ("kilo", "nvidia/nemotron-3.5-lightning:free"),
 )
 
 
