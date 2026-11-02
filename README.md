@@ -10,7 +10,7 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 - Démarre sans clé API personnelle grâce à Kilo Gateway en accès anonyme (quota et disponibilité soumis aux conditions du fournisseur).
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
-- GLM 5.3 Flash gratuit, plus GLM 4.7/4.5 Flash, Kimi/Kilo, Groq, Gemini, OpenRouter, etc.
+- Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
 - Outils intégrés : lecture, écriture, édition, liste, recherche regex, shell et plan de tâches.
 - Sessions reprenables, compaction du contexte et estimation des jetons.
 - Interface TUI Textual : sidebar projet/sessions, chat Markdown, streaming et approbations.
@@ -124,11 +124,17 @@ Le mode plan masque `write`, `edit` et `bash`, ajoute une consigne de lecture se
 
 Les réponses et le raisonnement sont diffusés en streaming via un worker, avec une animation de réflexion visible pendant l'attente, sans figer l'interface. Les confirmations de sécurité restent actives en mode `ask`.
 
-## Modèles gratuits puissants
+## Modèles et routage gratuit
 
-Avec une clé OpenRouter, ZeroCode expose aussi plusieurs modèles gratuits spécialisés : Cohere North Mini Code pour le développement agentique, Xing4.0 pour les tâches d'ingénierie, Nemotron 3 Ultra pour le raisonnement et l'orchestration, Nemotron 3.5 Lightning pour les tours rapides, Nemotron 3.5 Super VL et Gemma 4 pour les tâches multimodales, ainsi qu'Inkling Small pour les harness agents.
+Le mode `auto` est le choix recommandé pour commencer : il utilise exclusivement les routes anonymes gratuites de Kilo Gateway, sans clé API personnelle, sans compte OpenRouter et sans carte bancaire. Le routeur adapte l'ordre des modèles gratuits à la demande (code, raisonnement ou requête simple).
 
-Le routeur `auto` utilise uniquement les routes gratuites anonymes de Kilo : aucun compte OpenRouter ni clé personnelle n'est requis. Le fournisseur peut appliquer des quotas, des limites ou modifier la disponibilité de son offre gratuite. Les autres fournisseurs nécessitant une clé ne sont jamais utilisés automatiquement. Pour une confidentialité maximale, installe Ollama et utilise un modèle local : les prompts restent sur ta machine.
+**À retenir :** Kilo Gateway est un service distant. Ses quotas, sa disponibilité et ses conditions peuvent évoluer. Si le quota est atteint ou si le service est indisponible, ZeroCode ne bascule pas silencieusement vers un modèle payant ni vers un fournisseur qui réclame une clé : il signale l'échec. La gratuité ne garantit donc pas une disponibilité illimitée.
+
+Les modèles gratuits d'OpenRouter et les autres fournisseurs restent accessibles si tu les configures volontairement avec leurs propres identifiants. Ils ne font pas partie du routage automatique sans clé.
+
+### Utilisation 100 % locale
+
+Pour ne dépendre d'aucun fournisseur distant, installe [Ollama](https://ollama.com), télécharge un modèle compatible (par exemple `ollama pull qwen2.5-coder:7b`) et sélectionne le fournisseur local dans la configuration. Aucun compte ni clé API n'est requis ; les performances dépendent de la mémoire et du processeur de ta machine.
 
 Détails, identifiants et limites : [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
@@ -143,9 +149,9 @@ Il n'existe pas d'API gratuite permanente pour GLM 5.3 complet. Les routes gratu
 | GLM 4.7 Flash | Z.AI | Gratuit en permanence sur l'API publique |
 | GLM 4.5 Flash | Z.AI | Gratuit en permanence sur l'API publique |
 | Modèles `:free` | OpenRouter | Quota gratuit, conditions variables |
-| Kilo Auto Free | Kilo Gateway | Sans clé, 200 requêtes/heure/IP |
+| Kilo Auto Free | Kilo Gateway | Route anonyme gratuite, quotas susceptibles d'évoluer |
 
-L'endpoint NVIDIA de GLM 5.3 est annoncé en fin de vie le **27/10/2026**. Privilégiez GLM 5.3 Flash ou les modèles gratuits des autres fournisseurs pour un usage durable.
+Ces offres concernent des accès fournisseurs optionnels : elles ne sont pas utilisées par le routage automatique sans clé de ZeroCode. Vérifie les conditions actuelles auprès de chaque fournisseur avant de les sélectionner.
 
 Détails et identifiants exacts : [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
