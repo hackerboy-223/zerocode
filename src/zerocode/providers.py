@@ -86,6 +86,9 @@ class OpenAICompatibleClient:
 
     def __init__(self, config: Config, *, http_client: httpx.Client | None = None) -> None:
         self.config = config
+        if http_client is not None:
+            # Callers injecting a client cannot silently re-enable credential-bearing redirects.
+            http_client.follow_redirects = False
         self._http = http_client or httpx.Client(
             timeout=DEFAULT_TIMEOUT,
             follow_redirects=False,

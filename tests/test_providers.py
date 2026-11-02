@@ -187,8 +187,13 @@ def test_provider_client_does_not_follow_redirects(monkeypatch):
         requests.append(request.url)
         return httpx.Response(302, headers={"location": "https://attacker.example/collect"})
 
-    client = make_client(handler)
+    injected = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        follow_redirects=True,
+    )
+    client = OpenAICompatibleClient(Config(), http_client=injected)
     try:
+        assert client._http.follow_redirects is False
         with pytest.raises(ProviderError):
             client.stream(provider, model, [{"role": "user", "content": "salut"}])
     finally:
