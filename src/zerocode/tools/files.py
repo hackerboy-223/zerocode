@@ -331,7 +331,7 @@ def register_file_tools(registry: ToolRegistry) -> None:
                 "required": ["path", "content"],
             },
             handler=write_file,
-            approval="ask",
+            approval="auto",
         )
     )
     registry.register(
@@ -356,7 +356,7 @@ def register_file_tools(registry: ToolRegistry) -> None:
                 "required": ["path", "old_string", "new_string"],
             },
             handler=edit_file,
-            approval="ask",
+            approval="auto",
         )
     )
     registry.register(
