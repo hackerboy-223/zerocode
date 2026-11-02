@@ -310,7 +310,7 @@ class Agent:
             summary = summary.strip()
         content = self._system_message()["content"]
         if summary:
-            content = f"{content.rstrip()}\\n\\n{title}\\n{summary}"
+            content = f"{content.rstrip()}\n\n{title}\n{summary}"
         self.messages[0]["content"] = content
 
     def set_model(self, model: str, provider: str | None = None) -> None:
