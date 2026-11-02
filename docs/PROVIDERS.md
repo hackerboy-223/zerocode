@@ -16,7 +16,7 @@ zerocode parle le protocole OpenAI (`/chat/completions`, streaming SSE, appels d
 
 | Fournisseur | Clé | Offre gratuite | Base URL |
 | --- | --- | --- | --- |
-| Kilo Gateway | facultative | `kilo-auto/free`, 200 req/h/IP en anonyme | `https://ai-gateway.kilo.ai/api/v1` |
+| Kilo Gateway | facultative | Routes anonymes gratuites, quotas variables | `https://ai-gateway.kilo.ai/api/v1` |
 | NVIDIA Build | `NVIDIA_API_KEY` | GLM 5.3 / 5.3 Flash en essai | `https://integrate.api.nvidia.com/v1` |
 | OpenCode Zen | `OPENCODE_ZEN_API_KEY` | `glm-5.3-flash-free` et autres `-free` | `https://opencode.ai/zen/v1` |
 | Z.AI | `ZAI_API_KEY` | GLM 4.7 Flash, GLM 4.5 Flash | `https://api.z.ai/api/paas/v4` |
@@ -34,7 +34,9 @@ zerocode parle le protocole OpenAI (`/chat/completions`, streaming SSE, appels d
 
 - Accès anonyme : aucune clé nécessaire pour les modèles gratuits.
 - `kilo-auto/free` route automatiquement vers un modèle gratuit disponible.
-- `KILO_API_KEY` augmente les quotas.
+- En mode `auto`, ZeroCode limite volontairement son routage aux routes anonymes gratuites de Kilo : `kilo-auto/free`, Cohere North Mini Code, Poolside Laguna S 2.1 et NVIDIA Nemotron 3.5 Lightning via Kilo.
+- Aucun fournisseur demandant une clé personnelle n'est ajouté automatiquement à cette chaîne.
+- `KILO_API_KEY` peut modifier les quotas selon les conditions du fournisseur ; elle n'est pas requise pour le démarrage.
 - Les données peuvent être journalisées. Évitez les secrets et les données personnelles.
 
 ### NVIDIA Build
@@ -94,12 +96,12 @@ Ou dans la configuration :
 
 Elles sont définies dans `catalog.py` :
 
-- `AUTO_CHAIN` : Kilo, modèles spécialisés OpenRouter (North Mini Code, Xing4.0, Nemotron), NVIDIA Flash, OpenCode Zen, Z.AI Flash, OpenRouter Free, Groq, Gemini, Mistral, SambaNova, Together, Ollama.
-- En mode `auto`, le routeur adapte l'ordre des candidats à la demande : modèle de code pour les tâches de développement, raisonnement profond pour les audits/architectures, modèle léger pour les questions simples.
+- `AUTO_CHAIN` : uniquement les routes gratuites anonymes de Kilo (`kilo-auto/free`, Cohere North Mini Code, Poolside Laguna S 2.1 et NVIDIA Nemotron 3.5 Lightning via Kilo). Les fournisseurs nécessitant une clé ne sont jamais utilisés automatiquement.
+- En mode `auto`, le routeur adapte l'ordre des routes Kilo à la demande : modèle de code pour les tâches de développement, modèle léger pour les questions simples. La sélection reste gratuite et sans clé personnelle.
 - `GLM53_FLASH_CHAIN` : NVIDIA Flash, OpenCode Zen, Kilo.
 - `GLM53_CHAIN` : NVIDIA, Together, Z.AI, OpenRouter, Kilo (GLM 5.3 complet).
 
-Le routeur ignore les fournisseurs sans clé, les modèles payants quand `free_only` est actif, et les modèles incompatibles avec les outils quand l'agent en a besoin. En cas d'échec, il applique un cooldown et passe au candidat suivant.
+Le routeur ignore les fournisseurs sans clé, les modèles payants quand `free_only` est actif, et les modèles incompatibles avec les outils quand l'agent en a besoin. En cas d'échec, il applique un cooldown et passe au candidat suivant de la chaîne gratuite Kilo. Si tous les candidats sont indisponibles, il signale l'échec sans basculer vers une route payante.
 
 ## Vérification
 
