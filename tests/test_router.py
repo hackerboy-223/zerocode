@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from zerocode.config import Config
-from zerocode.errors import ConfigError, ProviderError, RateLimitError
+from zerocode.errors import ConfigError, RateLimitError
 from zerocode.router import Router
 from zerocode.types import Completion, Usage
 
