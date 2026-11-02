@@ -293,3 +293,37 @@ def test_mode_switch_preserves_compacted_context(tmp_path):
         "## Contexte anterieur (resume automatique)"
     ) == 1
 
+def test_agent_stops_after_repeated_identical_tool_failure(tmp_path):
+    failed_call = ToolCall(
+        id="call-failed",
+        name="read",
+        arguments={"path": "missing.txt"},
+    )
+    first = Completion(
+        content="",
+        tool_calls=[failed_call],
+        finish_reason="tool_calls",
+    )
+    second = Completion(
+        content="",
+        tool_calls=[
+            ToolCall(
+                id="call-failed-again",
+                name="read",
+                arguments={"path": "missing.txt"},
+            )
+        ],
+        finish_reason="tool_calls",
+    )
+    unreachable = Completion(content="Cela ne doit pas être appelé.")
+
+    agent, router, _, _ = build_agent(tmp_path, [first, second, unreachable])
+
+    result = agent.run_turn("lis le fichier absent")
+
+    assert "arrêté la boucle" in result
+    assert router.calls == 2
+    tool_results = [message for message in agent.messages if message.get("role") == "tool"]
+    assert len(tool_results) == 2
+    assert all(message["content"].startswith("ERREUR:") for message in tool_results)
+
