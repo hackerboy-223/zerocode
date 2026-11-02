@@ -120,3 +120,12 @@ zerocode -m auto "réponds uniquement OK"
 4. Ajouter un test si la logique de routage est particulière.
 
 Aucun code spécifique n'est nécessaire si l'API respecte le protocole OpenAI.
+
+
+## Mode sans clé API personnelle
+
+Sur une installation neuve, `model=auto` et `free_only=true`. La chaîne automatique utilise exclusivement les routes gratuites anonymes du fournisseur Kilo Gateway. Elle ne bascule pas vers OpenRouter, NVIDIA, Z.AI, Gemini ou un autre fournisseur nécessitant une clé personnelle. Elle n'inclut aucun modèle payant.
+
+Kilo Gateway est un service distant : l'absence de clé personnelle ne signifie pas une absence de fournisseur, de réseau ou de quotas. La disponibilité, les limites et les conditions de gratuité peuvent évoluer indépendamment de ZeroCode. Si le service gratuit est indisponible, ZeroCode signale l'échec au lieu de choisir silencieusement une route payante.
+
+Pour une exécution sans fournisseur distant, installe Ollama et télécharge un modèle local, par exemple `ollama pull qwen2.5-coder:7b`, puis active le fournisseur local dans la configuration. Le modèle est alors exécuté sur la machine et ne nécessite aucune clé API ; les performances dépendent du matériel disponible.
