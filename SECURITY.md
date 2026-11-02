@@ -21,3 +21,9 @@ Do not include real API keys, passwords, private keys, or personal data in a rep
 ZeroCode can execute shell commands with the permissions of the operating-system account running it. Its file-tool restrictions do not sandbox shell processes, MCP servers, or code launched by those processes. Approval mode reduces accidental execution but is not an operating-system security boundary.
 
 Use a disposable virtual machine or container for untrusted repositories. Avoid `--yolo` and `/full-stack` when working with untrusted code. Never expose production credentials to an agent session.
+
+## Provider endpoint protection
+
+Provider API keys are sent only to the configured provider endpoint. Custom base URLs are restricted to the provider's official HTTPS hostname; Ollama is restricted to loopback addresses. HTTP redirects are not followed for inference or model discovery, preventing credentials from being forwarded to an unexpected redirect destination.
+
+Free model endpoints are not automatically private. Some upstream providers log prompts and outputs or use them to improve services. Do not send API keys, private source code, credentials, personal data, or other confidential information to free endpoints unless the provider's current terms explicitly meet your requirements.

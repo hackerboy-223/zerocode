@@ -7,7 +7,7 @@ import pytest
 
 from zerocode.catalog import PROVIDERS
 from zerocode.config import Config
-from zerocode.errors import AuthError
+from zerocode.errors import AuthError, ProviderError
 from zerocode.providers import OpenAICompatibleClient
 from zerocode.types import StreamCallbacks
 
@@ -174,6 +174,26 @@ def test_body_is_sanitized_once_after_parameter_error(monkeypatch):
     assert "max_tokens" in requests[0]
     assert "max_tokens" not in requests[1]
     assert "max_completion_tokens" in requests[1]
+
+
+def test_provider_client_does_not_follow_redirects(monkeypatch):
+    monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
+    provider = PROVIDERS["nvidia"]
+    model = provider.model("z-ai/glm-5.3-flash")
+    assert model is not None
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url)
+        return httpx.Response(302, headers={"location": "https://attacker.example/collect"})
+
+    client = make_client(handler)
+    try:
+        with pytest.raises(ProviderError):
+            client.stream(provider, model, [{"role": "user", "content": "salut"}])
+    finally:
+        client.close()
+    assert len(requests) == 1
 
 
 def test_keyless_provider_does_not_require_key():

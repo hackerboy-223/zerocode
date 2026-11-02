@@ -14,6 +14,8 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Outils intégrés : lecture, écriture, édition, liste, recherche regex, shell et plan de tâches.
 - Sessions reprenables, compaction du contexte et estimation des jetons.
 - Interface TUI Textual : sidebar projet/sessions, chat Markdown, streaming et approbations.
+- Mascotte animée **LUPUS**, un loup veilleur qui rappelle d'observer avant d'agir.
+- Routage adaptatif : modèle spécialisé pour le code, raisonnement renforcé pour les audits et modèle rapide pour les demandes simples.
 - Mode `/full-stack` : projet complet autonome avec raisonnement, contexte, étapes et timeouts maximaux.
 - Palette de commandes, recherche de fichiers `@` et panneaux de tâches/outils.
 - Aucun secret affiché ; clés stockées avec des permissions restrictives.
@@ -127,6 +129,14 @@ Le mode plan masque `write`, `edit` et `bash`, ajoute une consigne de lecture se
 `/full-stack` active un preset autonome : raisonnement `max`, 500 étapes, 128k jetons de sortie (plafonnés par le modèle), timeout de commande d'une heure, compaction à 95 %, raisonnement affiché et permissions `allow`. L'agent est invité à planifier, scaffolder, implémenter, installer les dépendances locales, tester, corriger et livrer un projet complet sans demander confirmation à chaque étape. Un retour en `BUILD`, `PLAN` ou `/safe` restaure automatiquement les réglages et permissions précédents. Les outils de fichiers vérifient les chemins et bloquent les fichiers de secrets par défaut. Attention : le shell exécute des commandes avec les droits de votre compte et n'est pas une sandbox ; une commande peut accéder à des fichiers hors du projet, y compris des secrets. N'activez `--yolo` ou `/full-stack` que dans un environnement de confiance.
 
 Les réponses et le raisonnement sont diffusés en streaming via un worker, avec une animation de réflexion visible pendant l'attente, sans figer l'interface. Les confirmations de sécurité restent actives en mode `ask`.
+
+## Modèles gratuits puissants
+
+Avec une clé OpenRouter, ZeroCode expose aussi plusieurs modèles gratuits spécialisés : Cohere North Mini Code pour le développement agentique, Xing4.0 pour les tâches d'ingénierie, Nemotron 3 Ultra pour le raisonnement et l'orchestration, Nemotron 3.5 Lightning pour les tours rapides, Nemotron 3.5 Super VL et Gemma 4 pour les tâches multimodales, ainsi qu'Inkling Small pour les harness agents.
+
+Le routeur `auto` choisit un ordre de priorité selon la demande : vitesse pour les questions simples, modèles code pour les tâches de développement, raisonnement plus profond pour les audits et architectures. Les modèles gratuits ont des quotas et des politiques de données variables. NVIDIA et Thinking Machines signalent la journalisation de certains endpoints gratuits : ne leur envoyez aucun secret ni code privé.
+
+Détails, identifiants et limites : [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
 ## GLM 5.3 et offre gratuite
 
@@ -252,7 +262,7 @@ Les tests n'effectuent aucun appel réseau. Les fournisseurs sont simulés avec 
 ## Limites
 
 - Les offres gratuites, quotas et identifiants de modèles changent fréquemment.
-- Les données envoyées à un fournisseur anonyme ou gratuit peuvent être journalisées.
+- Les données envoyées à un fournisseur anonyme ou gratuit peuvent être journalisées ou utilisées pour améliorer ses services; les notes de confidentialité varient par modèle.
 - La qualité et le respect des appels d'outils varient selon le modèle.
 - Le mode gratuit peut être plus lent ou temporairement saturé.
 - La compaction du contexte est une estimation, pas un comptage exact de jetons.

@@ -43,6 +43,23 @@ for line in sys.stdin:
 '''
 
 
+@pytest.mark.parametrize("timeout", [float("inf"), float("nan"), 3_601])
+def test_mcp_non_finite_or_excessive_timeout_is_skipped(tmp_path, timeout):
+    context = ToolContext(cwd=tmp_path)
+    permissions = PermissionManager(mode="allow", interactive=False)
+    registry = build_registry(context, permissions)
+    manager = register_mcp_tools(
+        registry,
+        {"demo": {"command": sys.executable, "timeout": timeout}},
+        cwd=tmp_path,
+    )
+    try:
+        assert manager.clients == []
+        assert not any(name.startswith("mcp_") for name in registry.names())
+    finally:
+        manager.close()
+
+
 def test_mcp_invalid_timeout_is_skipped(tmp_path):
     context = ToolContext(cwd=tmp_path)
     permissions = PermissionManager(mode="allow", interactive=False)

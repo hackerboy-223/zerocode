@@ -122,6 +122,23 @@ def test_session_from_dict_tolerates_invalid_usage_and_provider(tmp_path):
     assert session.usage.total_tokens == 0
 
 
+def test_session_list_tolerates_infinite_usage(tmp_path):
+    root = tmp_path / "sessions"
+    root.mkdir()
+    (root / "infinite.json").write_text(
+        json.dumps(
+            {
+                "id": "infinite",
+                "cwd": str(tmp_path),
+                "model": "auto",
+                "usage": {"total_tokens": float("inf")},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert SessionStore(root).list()[0]["total_tokens"] == 0
+
+
 def test_session_id_cannot_escape_session_store(tmp_path):
     root = tmp_path / "sessions"
     root.mkdir()

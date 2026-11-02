@@ -109,6 +109,36 @@ def test_complete_reports_all_failures(monkeypatch):
     assert "nvidia" in str(exc_info.value)
 
 
+def test_auto_router_prefers_coding_models_for_code_tasks(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    router = Router(Config(model="auto", free_only=True))
+    try:
+        candidates = router.resolve_candidates("auto")
+        ranked = router._rank_auto_candidates(
+            candidates,
+            [{"role": "user", "content": "Code ce projet Python, corrige les bugs et ajoute des tests."}],
+        )
+        assert ranked[0][0].name == "openrouter"
+        assert ranked[0][1].id == "cohere/north-mini-code:free"
+    finally:
+        router.close()
+
+
+def test_auto_router_prefers_fast_model_for_simple_requests(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    router = Router(Config(model="auto", free_only=True))
+    try:
+        candidates = router.resolve_candidates("auto")
+        ranked = router._rank_auto_candidates(
+            candidates,
+            [{"role": "user", "content": "Salut, presente-toi en une phrase."}],
+        )
+        assert ranked[0][0].name == "openrouter"
+        assert ranked[0][1].id == "nvidia/nemotron-3.5-lightning:free"
+    finally:
+        router.close()
+
+
 def test_context_window_uses_candidates():
     router = Router(Config(model="auto"))
     try:

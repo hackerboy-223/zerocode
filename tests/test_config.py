@@ -105,6 +105,8 @@ def test_provider_url_validation(tmp_path):
         {"command": "true", "timeout": 0},
         {"command": "true", "timeout": True},
         {"command": "true", "cwd": 42},
+        {"command": "true", "timeout": float("inf")},
+        {"command": "true", "timeout": float("nan")},
     ],
 )
 def test_invalid_mcp_server_options_are_rejected(tmp_path, server):
@@ -114,6 +116,41 @@ def test_invalid_mcp_server_options_are_rejected(tmp_path, server):
     )
     with pytest.raises(ConfigError):
         load_config(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://api.groq.com/openai/v1",
+        "https://evil.example/v1",
+        "https://user:password@api.groq.com/openai/v1",
+        "https://api.groq.com/openai/v1?forward=1",
+    ],
+)
+def test_provider_override_cannot_redirect_api_keys_to_untrusted_hosts(tmp_path, base_url):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"providers": {"groq": {"base_url": base_url}}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="base_url"):
+        load_config(tmp_path)
+
+
+def test_ollama_override_must_be_loopback(tmp_path):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"providers": {"ollama": {"base_url": "http://10.0.0.5:11434/v1"}}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="loopback"):
+        load_config(tmp_path)
+
+
+def test_official_provider_override_is_allowed(tmp_path):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"providers": {"groq": {"base_url": "https://api.groq.com/openai/v1"}}}),
+        encoding="utf-8",
+    )
+    assert load_config(tmp_path).provider_config("groq")["base_url"].startswith("https://")
 
 
 def test_provider_alias_is_normalized(tmp_path):

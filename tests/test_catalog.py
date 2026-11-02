@@ -24,6 +24,23 @@ def test_free_models_exist():
     assert "glm-4.7-flash" in {model.id for model in PROVIDERS["zai"].free_models}
 
 
+def test_new_openrouter_free_models_are_tool_capable():
+    expected = {
+        "cohere/north-mini-code:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3.5-lightning:free",
+        "nvidia/nemotron-3.5-super-vl:free",
+        "thinkingmachines/inkling-small:free",
+        "xingchen-agi/xing4.0-29b-a4b:free",
+        "google/gemma-4-26b-a4b:free",
+    }
+    openrouter_ids = {model.id for model in PROVIDERS["openrouter"].free_models}
+    assert expected <= openrouter_ids
+    for model_id in expected:
+        model = PROVIDERS["openrouter"].model(model_id)
+        assert model is not None and model.tools
+
+
 def test_alias_chains():
     assert model_chain("auto") == AUTO_CHAIN
     assert model_chain("glm-5.3")[: len(GLM53_CHAIN)] == GLM53_CHAIN

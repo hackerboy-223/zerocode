@@ -42,7 +42,7 @@ from .screens import (
     HelpScreen,
     PasswordScreen,
 )
-from .widgets import PromptInput, ThinkingIndicator, ToolCard
+from .widgets import PromptInput, ThinkingIndicator, ToolCard, WolfMascot
 
 THINK_MODES = ("off", "low", "high", "max")
 
@@ -1498,6 +1498,7 @@ class ZeroCodeApp(App[None]):
             padding=(1, 2),
             expand=True,
         )
+        self._mount(WolfMascot())
         self._mount(Static(panel, classes="welcome"))
         self._scroll_chat()
 

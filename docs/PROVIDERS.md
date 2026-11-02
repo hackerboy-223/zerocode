@@ -1,6 +1,6 @@
 # Fournisseurs et modèles
 
-État vérifié le **26 octobre 2026**. Les offres gratuites, quotas et identifiants changent souvent : utilisez `zerocode doctor --live` et `zerocode models --live` avant de vous appuyer sur une offre.
+État vérifié le **2 novembre 2026**. Les offres gratuites, quotas et identifiants changent souvent : utilisez `zerocode doctor --live` et `zerocode models --live` avant de vous appuyer sur une offre.
 
 ## Principe
 
@@ -20,7 +20,7 @@ zerocode parle le protocole OpenAI (`/chat/completions`, streaming SSE, appels d
 | NVIDIA Build | `NVIDIA_API_KEY` | GLM 5.3 / 5.3 Flash en essai | `https://integrate.api.nvidia.com/v1` |
 | OpenCode Zen | `OPENCODE_ZEN_API_KEY` | `glm-5.3-flash-free` et autres `-free` | `https://opencode.ai/zen/v1` |
 | Z.AI | `ZAI_API_KEY` | GLM 4.7 Flash, GLM 4.5 Flash | `https://api.z.ai/api/paas/v4` |
-| OpenRouter | `OPENROUTER_API_KEY` | modèles `:free` | `https://openrouter.ai/api/v1` |
+| OpenRouter | `OPENROUTER_API_KEY` | Nemotron 3 Ultra, Nemotron 3.5, North Mini Code, Xing4.0, Gemma 4 et autres `:free` | `https://openrouter.ai/api/v1` |
 | Groq | `GROQ_API_KEY` | GPT OSS, Qwen, quotas journaliers | `https://api.groq.com/openai/v1` |
 | Google AI Studio | `GEMINI_API_KEY` | Gemini Flash, palier gratuit | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | Mistral | `MISTRAL_API_KEY` | crédit mensuel | `https://api.mistral.ai/v1` |
@@ -59,9 +59,11 @@ zerocode parle le protocole OpenAI (`/chat/completions`, streaming SSE, appels d
 
 ### OpenRouter
 
-- Les modèles gratuits se terminent souvent par `:free`.
-- Le quota est d'environ 50 requêtes/jour, porté à 1000/jour après un achat de 10 $.
-- `openrouter/free` choisit automatiquement un modèle gratuit.
+- Modèles gratuits vérifiés le 2 novembre 2026 : Nemotron 3 Ultra, Nemotron 3.5 Lightning/Super VL, Cohere North Mini Code, Xing4.0 29B A4B, Inkling Small et Gemma 4 26B A4B.
+- Les modèles `:free` sont limités à 20 requêtes/minute et 50 requêtes/jour; le plafond quotidien passe à 1000 après au moins 10 $ d'achats cumulés.
+- `openrouter/free` choisit automatiquement un modèle gratuit compatible.
+- Les conditions de confidentialité dépendent du fournisseur amont. NVIDIA journalise l'usage de ses endpoints gratuits; Thinking Machines indique que les prompts et sorties d'Inkling Small sont journalisés et utilisés pour améliorer ses modèles. Ne leur envoyez jamais de secrets, clés API, dépôts privés ou données personnelles.
+- La disponibilité et les limites peuvent changer; utilisez `zerocode models --live` avant de choisir un modèle.
 
 ### Groq, Gemini, SambaNova
 
@@ -92,7 +94,8 @@ Ou dans la configuration :
 
 Elles sont définies dans `catalog.py` :
 
-- `AUTO_CHAIN` : Kilo, NVIDIA Flash, OpenCode Zen, Z.AI Flash, OpenRouter, Groq, Gemini, Mistral, SambaNova, Together, Ollama.
+- `AUTO_CHAIN` : Kilo, modèles spécialisés OpenRouter (North Mini Code, Xing4.0, Nemotron), NVIDIA Flash, OpenCode Zen, Z.AI Flash, OpenRouter Free, Groq, Gemini, Mistral, SambaNova, Together, Ollama.
+- En mode `auto`, le routeur adapte l'ordre des candidats à la demande : modèle de code pour les tâches de développement, raisonnement profond pour les audits/architectures, modèle léger pour les questions simples.
 - `GLM53_FLASH_CHAIN` : NVIDIA Flash, OpenCode Zen, Kilo.
 - `GLM53_CHAIN` : NVIDIA, Together, Z.AI, OpenRouter, Kilo (GLM 5.3 complet).
 

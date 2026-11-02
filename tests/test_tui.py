@@ -18,7 +18,7 @@ from zerocode.tui.screens import (
     FilePickerScreen,
     PasswordScreen,
 )
-from zerocode.tui.widgets import PromptInput, ThinkingIndicator, ToolCard
+from zerocode.tui.widgets import PromptInput, ThinkingIndicator, ToolCard, WolfMascot
 from zerocode.types import ToolCall, Usage
 
 
@@ -118,6 +118,11 @@ def test_tui_mounts_with_branding(tmp_path):
             assert "github.com/hackerboy-223" in brand
             assert "kilo/kilo-auto/free" in status
             assert "CHAT" in str(app.query_one("#modebar", Static).content)
+            mascot = app.query_one(WolfMascot)
+            assert "LUPUS" in str(mascot.content)
+            first_frame = str(mascot.content)
+            mascot._tick()
+            assert str(mascot.content) != first_frame
             assert app.query_one("#prompt", Input) is not None
             assert app.context.show_diff.__self__ is app.bridge
             assert app.context.request_sudo_password.__self__ is app.bridge
