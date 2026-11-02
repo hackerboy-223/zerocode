@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from .catalog import PROVIDERS
-from .config import Config, load_key_store
+from .config import Config, load_key_store, validate_config
 from .errors import AuthError, ProviderError, RateLimitError
 from .tokens import estimate_messages, estimate_tokens
 from .types import Completion, ModelSpec, ProviderSpec, StreamCallbacks, ToolCall, Usage
@@ -59,6 +59,16 @@ def provider_available(provider: ProviderSpec, config: Config) -> bool:
 
 
 def applied_providers(config: Config) -> dict[str, ProviderSpec]:
+    # Validate even directly constructed Config objects before attaching API credentials.
+    validate_config(config)
+    ollama_env = os.environ.get("OLLAMA_BASE_URL")
+    if ollama_env:
+        overrides = dict(config.providers)
+        overrides["ollama"] = {
+            **config.provider_config("ollama"),
+            "base_url": ollama_env,
+        }
+        validate_config(replace(config, providers=overrides))
     result: dict[str, ProviderSpec] = {}
     for name, provider in PROVIDERS.items():
         override = config.provider_config(name)
@@ -76,9 +86,12 @@ class OpenAICompatibleClient:
 
     def __init__(self, config: Config, *, http_client: httpx.Client | None = None) -> None:
         self.config = config
+        if http_client is not None:
+            # Callers injecting a client cannot silently re-enable credential-bearing redirects.
+            http_client.follow_redirects = False
         self._http = http_client or httpx.Client(
             timeout=DEFAULT_TIMEOUT,
-            follow_redirects=True,
+            follow_redirects=False,
             limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
         )
 
@@ -172,7 +185,7 @@ class OpenAICompatibleClient:
                 headers=self._headers(provider),
                 json=body,
             ) as response:
-                if response.status_code >= 400:
+                if response.status_code >= 300:
                     raw = response.read()
                     text = raw.decode("utf-8", errors="replace")
                     sanitized = (
@@ -434,9 +447,9 @@ def fetch_models(
     if key:
         headers["Authorization"] = f"Bearer {key}"
     url = f"{provider.base_url.rstrip('/')}/models"
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+    with httpx.Client(timeout=timeout, follow_redirects=False) as client:
         response = client.get(url, headers=headers)
-        if response.status_code >= 400:
+        if response.status_code >= 300:
             raise ProviderError(
                 _error_message(response.text) or "Impossible de lister les modeles.",
                 provider=provider.name,

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import data_dir
+from .config import _set_private_permissions, data_dir
 
 MAX_CHECKPOINT_CHARS = 1_000_000
 MAX_ENTRIES = 50
@@ -140,7 +140,7 @@ class CheckpointStore:
                 handle.write(payload + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
-            os.chmod(temp, 0o600)
+            _set_private_permissions(temp, 0o600)
             os.replace(temp, path)
         finally:
             temp.unlink(missing_ok=True)

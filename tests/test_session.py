@@ -88,6 +88,62 @@ def test_session_list_handles_bad_json(tmp_path):
     assert [item["id"] for item in store.list()] == ["good"]
 
 
+def test_session_list_tolerates_invalid_usage(tmp_path):
+    root = tmp_path / "sessions"
+    root.mkdir()
+    (root / "weird.json").write_text(
+        json.dumps(
+            {
+                "id": "weird",
+                "cwd": str(tmp_path),
+                "model": "auto",
+                "usage": {"total_tokens": "beaucoup"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = SessionStore(root)
+    items = store.list()
+    assert items[0]["id"] == "weird"
+    assert items[0]["total_tokens"] == 0
+
+
+def test_session_from_dict_tolerates_invalid_usage_and_provider(tmp_path):
+    session = Session.from_dict(
+        {
+            "id": "abc",
+            "cwd": str(tmp_path),
+            "model": "auto",
+            "provider": ["not", "a", "string"],
+            "usage": ["not", "an", "object"],
+        }
+    )
+    assert session.provider is None
+    assert session.usage.total_tokens == 0
+
+
+def test_session_list_tolerates_infinite_usage(tmp_path):
+    root = tmp_path / "sessions"
+    root.mkdir()
+    (root / "infinite.json").write_text(
+        json.dumps(
+            {
+                "id": "infinite",
+                "cwd": str(tmp_path),
+                "model": "auto",
+                "usage": {"total_tokens": float("inf")},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert SessionStore(root).list()[0]["total_tokens"] == 0
+
+
+def test_usage_from_dict_tolerates_infinite_values():
+    usage = Usage.from_dict({"total_tokens": float("inf")})
+    assert usage.total_tokens == 0
+
+
 def test_session_id_cannot_escape_session_store(tmp_path):
     root = tmp_path / "sessions"
     root.mkdir()

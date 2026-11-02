@@ -19,6 +19,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _as_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (OverflowError, TypeError, ValueError):
+        return 0
+
+
 @dataclass
 class Session:
     id: str
@@ -62,11 +69,14 @@ class Session:
         todos = data.get("todos") or []
         if not isinstance(todos, list):
             todos = []
+        provider = data.get("provider")
+        if not isinstance(provider, str) or not provider.strip():
+            provider = None
         return cls(
             id=session_id,
             cwd=cwd,
             model=model,
-            provider=data.get("provider"),
+            provider=provider,
             created_at=str(data.get("created_at") or _now()),
             updated_at=str(data.get("updated_at") or _now()),
             messages=[message for message in messages if isinstance(message, dict)],
@@ -163,18 +173,26 @@ class SessionStore:
                 continue
             if not isinstance(data, dict):
                 continue
+            messages = data.get("messages")
+            if not isinstance(messages, list):
+                messages = []
+            usage = data.get("usage")
+            if not isinstance(usage, dict):
+                usage = {}
             result.append(
                 {
                     "id": str(data.get("id", path.stem)),
                     "path": str(path),
                     "cwd": str(data.get("cwd", "")),
                     "model": str(data.get("model", "")),
-                    "provider": data.get("provider"),
+                    "provider": data.get("provider")
+                    if isinstance(data.get("provider"), str)
+                    else None,
                     "created_at": str(data.get("created_at", "")),
                     "updated_at": str(data.get("updated_at", "")),
-                    "messages": len(data.get("messages") or []),
-                    "total_tokens": int((data.get("usage") or {}).get("total_tokens", 0) or 0),
-                    "title": _session_title(data.get("messages") or []),
+                    "messages": len(messages),
+                    "total_tokens": _as_int(usage.get("total_tokens")),
+                    "title": _session_title(messages),
                 }
             )
         result.sort(key=lambda item: item["updated_at"], reverse=True)

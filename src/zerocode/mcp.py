@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -224,9 +225,27 @@ def register_mcp_tools(
         if not command:
             _warn(ui, f"MCP {server_name}: commande absente.")
             continue
-        args = [str(item) for item in config.get("args") or []]
+        raw_args = config.get("args") or []
+        if not isinstance(raw_args, list):
+            _warn(ui, f"MCP {server_name}: args doit etre une liste.")
+            continue
+        args = [str(item) for item in raw_args]
         env = config.get("env") if isinstance(config.get("env"), dict) else {}
-        timeout = float(config.get("timeout") or DEFAULT_TIMEOUT)
+        raw_timeout = config.get("timeout")
+        if raw_timeout in (None, ""):
+            timeout = DEFAULT_TIMEOUT
+        else:
+            if isinstance(raw_timeout, bool):
+                _warn(ui, f"MCP {server_name}: timeout invalide ({raw_timeout!r}).")
+                continue
+            try:
+                timeout = float(raw_timeout)
+            except (OverflowError, TypeError, ValueError):
+                _warn(ui, f"MCP {server_name}: timeout invalide ({raw_timeout!r}).")
+                continue
+            if not math.isfinite(timeout) or not 1 <= timeout <= 3_600:
+                _warn(ui, f"MCP {server_name}: timeout doit etre entre 1 et 3600 secondes.")
+                continue
         server_cwd = config.get("cwd")
         client = MCPClient(
             str(server_name),

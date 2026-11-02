@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import getpass
 import json
+import math
 import os
 import subprocess
 import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .errors import ConfigError
 
@@ -15,9 +17,22 @@ APP_NAME = "zerocode"
 PROJECT_CONFIG_NAMES = (".zerocode.json", "zerocode.json")
 VALID_REASONING = {"low", "high", "max"}
 VALID_PERMISSIONS = {"ask", "allow", "deny"}
+PROVIDER_HOSTS = {
+    "kilo": "ai-gateway.kilo.ai",
+    "nvidia": "integrate.api.nvidia.com",
+    "opencode-zen": "opencode.ai",
+    "zai": "api.z.ai",
+    "openrouter": "openrouter.ai",
+    "groq": "api.groq.com",
+    "gemini": "generativelanguage.googleapis.com",
+    "mistral": "api.mistral.ai",
+    "sambanova": "api.sambanova.ai",
+    "together": "api.together.xyz",
+}
+LOCAL_MODEL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "model": "glm-5.3",
+    "model": "auto",
     "provider": None,
     "free_only": True,
     "fallback": True,
@@ -120,7 +135,7 @@ def _as_bool(value: Any, key: str) -> bool:
 def _as_int(value: Any, key: str) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError) as exc:
+    except (OverflowError, TypeError, ValueError) as exc:
         raise ConfigError(f"Valeur entiere invalide pour {key}: {value!r}") from exc
 
 
@@ -167,7 +182,7 @@ def _env_overrides() -> dict[str, Any]:
 
 @dataclass
 class Config:
-    model: str = "glm-5.3"
+    model: str = "auto"
     provider: str | None = None
     free_only: bool = True
     fallback: bool = True
@@ -202,6 +217,10 @@ class Config:
 def validate_config(config: Config) -> None:
     if not config.model or not isinstance(config.model, str):
         raise ConfigError("model doit etre une chaine non vide.")
+    if config.provider is not None and (
+        not isinstance(config.provider, str) or not config.provider.strip()
+    ):
+        raise ConfigError("provider doit etre une chaine non vide ou null.")
     if config.reasoning_effort not in VALID_REASONING:
         raise ConfigError(
             f"reasoning_effort doit valoir {', '.join(sorted(VALID_REASONING))}."
@@ -231,8 +250,42 @@ def validate_config(config: Config) -> None:
             )
         if "base_url" in override:
             value = override["base_url"]
-            if not isinstance(value, str) or not value.startswith(("http://", "https://")):
-                raise ConfigError(f"providers.{name}.base_url doit etre une URL HTTP(S).")
+            if not isinstance(value, str):
+                raise ConfigError(f"providers.{name}.base_url doit etre une URL valide.")
+            try:
+                parsed = urlsplit(value)
+                port = parsed.port
+            except ValueError as exc:
+                raise ConfigError(f"providers.{name}.base_url contient un port invalide.") from exc
+            hostname = (parsed.hostname or "").lower()
+            if (
+                parsed.username is not None
+                or parsed.password is not None
+                or parsed.query
+                or parsed.fragment
+                or not hostname
+            ):
+                raise ConfigError(
+                    f"providers.{name}.base_url ne doit contenir ni identifiants, "
+                    "ni query string, ni fragment."
+                )
+            if name == "ollama":
+                if parsed.scheme not in {"http", "https"} or hostname not in LOCAL_MODEL_HOSTS:
+                    raise ConfigError(
+                        "providers.ollama.base_url doit pointer vers localhost ou une "
+                        "adresse loopback; les endpoints Ollama distants ne sont pas autorises."
+                    )
+            else:
+                expected_host = PROVIDER_HOSTS.get(name)
+                if (
+                    parsed.scheme != "https"
+                    or hostname != expected_host
+                    or port not in (None, 443)
+                ):
+                    raise ConfigError(
+                        f"providers.{name}.base_url doit utiliser HTTPS sur le domaine "
+                        "officiel du fournisseur."
+                    )
         if "enabled" in override and not isinstance(override["enabled"], bool):
             raise ConfigError(f"providers.{name}.enabled doit etre un booleen.")
 
@@ -255,6 +308,27 @@ def validate_config(config: Config) -> None:
             raise ConfigError(f"mcp_servers.{name}.env doit etre un objet JSON.")
         if "enabled" in server and not isinstance(server["enabled"], bool):
             raise ConfigError(f"mcp_servers.{name}.enabled doit etre un booleen.")
+        if "cwd" in server:
+            value = server["cwd"]
+            if not isinstance(value, str) or not value.strip():
+                raise ConfigError(
+                    f"mcp_servers.{name}.cwd doit etre une chaine non vide."
+                )
+        if "timeout" in server:
+            value = server["timeout"]
+            try:
+                timeout_value = float(value)
+            except (OverflowError, TypeError, ValueError):
+                timeout_value = float("nan")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(timeout_value)
+                or not 1 <= timeout_value <= 3_600
+            ):
+                raise ConfigError(
+                    f"mcp_servers.{name}.timeout doit etre un nombre entre 1 et 3600."
+                )
 
 
 def load_config(
@@ -298,8 +372,11 @@ def load_config(
         data.get("compact_threshold", 0.75), "compact_threshold"
     )
     provider = data.get("provider")
-    if provider in ("", "none", "null", "auto"):
-        data["provider"] = None
+    if isinstance(provider, str):
+        provider = provider.strip()
+        if provider.lower() in {"", "none", "null", "auto"}:
+            provider = None
+    data["provider"] = provider
 
     config = Config(**data, base_dir=cwd, sources=sources)
     validate_config(config)

@@ -1,6 +1,6 @@
 # zerocode
 
-Agent de codage autonome pour le terminal, gratuit par défaut et compatible avec plusieurs fournisseurs de modèles.
+Agent de codage autonome pour le terminal, gratuit par défaut et compatible avec plusieurs fournisseurs de modèles. Le mode `auto` sélectionne une route adaptée à la demande.
 
 Créé par **H@CKERBOY** · [GitHub](https://github.com/hackerboy-223) · [Portfolio](https://hackerboy-223.vercel.app)
 
@@ -8,64 +8,60 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 ## Points clés
 
-- Démarre sans clé API grâce à Kilo Gateway en accès anonyme.
+- Démarre sans clé API personnelle grâce à Kilo Gateway en accès anonyme (quota et disponibilité soumis aux conditions du fournisseur).
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
-- GLM 5.3 Flash gratuit, plus GLM 4.7/4.5 Flash, Kimi/Kilo, Groq, Gemini, OpenRouter, etc.
+- Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
 - Outils intégrés : lecture, écriture, édition, liste, recherche regex, shell et plan de tâches.
 - Sessions reprenables, compaction du contexte et estimation des jetons.
 - Interface TUI Textual : sidebar projet/sessions, chat Markdown, streaming et approbations.
+- Mascotte animée **LUPUS**, un loup veilleur qui rappelle d'observer avant d'agir.
+- Routage adaptatif : modèle spécialisé pour le code, raisonnement renforcé pour les audits et modèle rapide pour les demandes simples.
 - Mode `/full-stack` : projet complet autonome avec raisonnement, contexte, étapes et timeouts maximaux.
 - Palette de commandes, recherche de fichiers `@` et panneaux de tâches/outils.
 - Aucun secret affiché ; clés stockées avec des permissions restrictives.
 
-## Installation
+## Installation automatique
 
-Prérequis : **Python 3.10 ou plus récent** et Git. Pour une installation isolée, `pipx` est recommandé : il installe ZeroCode dans son propre environnement et expose la commande `zerocode` sans modifier les dépendances Python des autres projets.
+ZeroCode installe ses dépendances Python dans un environnement isolé via **pipx**. Aucune clé API, aucun compte OpenRouter et aucune carte bancaire ne sont nécessaires pour démarrer.
 
 ### Linux et macOS
 
+Une seule commande :
+
 ```bash
-python3 -m pip install --user pipx
-python3 -m pipx ensurepath
-# Redémarre le terminal si nécessaire, puis :
-pipx install git+https://github.com/hackerboy-223/zerocode.git
-zerocode --version
-zerocode doctor
+curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.sh | bash
 ```
+
+Ou télécharge le dépôt et lance `bash install.sh`.
 
 ### Windows · PowerShell
 
 ```powershell
-py -m pip install --user pipx
-py -m pipx ensurepath
-# Redémarre PowerShell si nécessaire, puis :
-pipx install git+https://github.com/hackerboy-223/zerocode.git
-zerocode --version
-zerocode doctor
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
 ```
 
-### Installer depuis le code source
+Le script vérifie Python 3.10+, installe pipx si nécessaire, installe ZeroCode avec toutes ses dépendances déclarées, puis vérifie la commande. Ferme et rouvre le terminal si Windows ou ton shell ne trouve pas encore `zerocode`.
 
-Cette méthode convient aux personnes qui souhaitent contribuer ou modifier ZeroCode :
+### Installation manuelle
+
+```bash
+python -m pip install --user pipx
+python -m pipx ensurepath
+pipx install git+https://github.com/hackerboy-223/zerocode.git
+```
+
+Pour contribuer au code source :
 
 ```bash
 git clone https://github.com/hackerboy-223/zerocode.git
 cd zerocode
 python -m venv .venv
-```
-
-Active l’environnement virtuel, puis installe le projet :
-
-```bash
-# Linux / macOS
-source .venv/bin/activate
-# Windows PowerShell : .venv\Scripts\Activate.ps1
+# Linux/macOS : source .venv/bin/activate
+# Windows : .venv\\Scripts\\Activate.ps1
 python -m pip install -e ".[dev]"
 pytest
 ruff check src tests
 ```
-
-Si l’accès public au dépôt n’est pas encore activé, l’installation directe depuis GitHub ne fonctionnera pas pour les personnes qui n’ont pas l’autorisation d’y accéder.
 
 ## Démarrage rapide
 
@@ -128,6 +124,20 @@ Le mode plan masque `write`, `edit` et `bash`, ajoute une consigne de lecture se
 
 Les réponses et le raisonnement sont diffusés en streaming via un worker, avec une animation de réflexion visible pendant l'attente, sans figer l'interface. Les confirmations de sécurité restent actives en mode `ask`.
 
+## Modèles et routage gratuit
+
+Le mode `auto` est le choix recommandé pour commencer : il utilise exclusivement les routes anonymes gratuites de Kilo Gateway, sans clé API personnelle, sans compte OpenRouter et sans carte bancaire. Le routeur adapte l'ordre des modèles gratuits à la demande (code, raisonnement ou requête simple).
+
+**À retenir :** Kilo Gateway est un service distant. Ses quotas, sa disponibilité et ses conditions peuvent évoluer. Si le quota est atteint ou si le service est indisponible, ZeroCode ne bascule pas silencieusement vers un modèle payant ni vers un fournisseur qui réclame une clé : il signale l'échec. La gratuité ne garantit donc pas une disponibilité illimitée.
+
+Les modèles gratuits d'OpenRouter et les autres fournisseurs restent accessibles si tu les configures volontairement avec leurs propres identifiants. Ils ne font pas partie du routage automatique sans clé.
+
+### Utilisation 100 % locale
+
+Pour ne dépendre d'aucun fournisseur distant, installe [Ollama](https://ollama.com), télécharge un modèle compatible (par exemple `ollama pull qwen2.5-coder:7b`) et sélectionne le fournisseur local dans la configuration. Aucun compte ni clé API n'est requis ; les performances dépendent de la mémoire et du processeur de ta machine.
+
+Détails, identifiants et limites : [docs/PROVIDERS.md](docs/PROVIDERS.md).
+
 ## GLM 5.3 et offre gratuite
 
 Il n'existe pas d'API gratuite permanente pour GLM 5.3 complet. Les routes gratuites ou d'essai dépendent des fournisseurs et peuvent changer.
@@ -139,9 +149,9 @@ Il n'existe pas d'API gratuite permanente pour GLM 5.3 complet. Les routes gratu
 | GLM 4.7 Flash | Z.AI | Gratuit en permanence sur l'API publique |
 | GLM 4.5 Flash | Z.AI | Gratuit en permanence sur l'API publique |
 | Modèles `:free` | OpenRouter | Quota gratuit, conditions variables |
-| Kilo Auto Free | Kilo Gateway | Sans clé, 200 requêtes/heure/IP |
+| Kilo Auto Free | Kilo Gateway | Route anonyme gratuite, quotas susceptibles d'évoluer |
 
-L'endpoint NVIDIA de GLM 5.3 est annoncé en fin de vie le **27/10/2026**. Privilégiez GLM 5.3 Flash ou les modèles gratuits des autres fournisseurs pour un usage durable.
+Ces offres concernent des accès fournisseurs optionnels : elles ne sont pas utilisées par le routage automatique sans clé de ZeroCode. Vérifie les conditions actuelles auprès de chaque fournisseur avant de les sélectionner.
 
 Détails et identifiants exacts : [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
@@ -252,7 +262,7 @@ Les tests n'effectuent aucun appel réseau. Les fournisseurs sont simulés avec 
 ## Limites
 
 - Les offres gratuites, quotas et identifiants de modèles changent fréquemment.
-- Les données envoyées à un fournisseur anonyme ou gratuit peuvent être journalisées.
+- Les données envoyées à un fournisseur anonyme ou gratuit peuvent être journalisées ou utilisées pour améliorer ses services; les notes de confidentialité varient par modèle.
 - La qualité et le respect des appels d'outils varient selon le modèle.
 - Le mode gratuit peut être plus lent ou temporairement saturé.
 - La compaction du contexte est une estimation, pas un comptage exact de jetons.

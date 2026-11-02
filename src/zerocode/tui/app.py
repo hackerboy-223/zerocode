@@ -42,7 +42,7 @@ from .screens import (
     HelpScreen,
     PasswordScreen,
 )
-from .widgets import TOOL_ICONS, PromptInput, ThinkingIndicator, ToolCard
+from .widgets import PromptInput, ThinkingIndicator, ToolCard, WolfMascot
 
 THINK_MODES = ("off", "low", "high", "max")
 
@@ -76,9 +76,12 @@ class SessionItem(ListItem):
         current: bool = False,
     ) -> None:
         body = Text()
-        body.append("● " if current else "○ ", style="bold cyan" if current else "dim")
-        body.append(title, style="bold" if current else "")
-        body.append("\n   " + meta, style="dim")
+        body.append(
+            "● " if current else "○ ",
+            style="bold #7dd3fc" if current else "#4d5867",
+        )
+        body.append(title, style="bold #e6edf3" if current else "#c9d1d9")
+        body.append("\n   " + meta, style="#6f7c8e")
         super().__init__(Static(body, classes="session-label"))
         self.session_id = session_id
         if current:
@@ -87,7 +90,7 @@ class SessionItem(ListItem):
 
 class ZeroCodeApp(App[None]):
     TITLE = "zerocode"
-    SUB_TITLE = f"Web Agent Studio · par {__author__}"
+    SUB_TITLE = f"Agent de codage · par {__author__}"
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
         Binding("ctrl+k", "command_palette", "Commandes", priority=True),
@@ -528,6 +531,401 @@ class ZeroCodeApp(App[None]):
         height: 1;
         color: #8b949e;
     }
+
+    /* ------------------------------------------------------------------
+       Refonte moderne et sobre
+       ------------------------------------------------------------------ */
+    Screen {
+        background: #0b0f14;
+        color: #c9d1d9;
+    }
+
+    #brandbar {
+        height: 2;
+        padding: 0 2;
+        background: #0b0f14;
+        color: #7d8998;
+        border-bottom: solid #151d27;
+    }
+
+    #body {
+        height: 1fr;
+    }
+
+    #modebar-row {
+        height: 1;
+        background: #0b0f14;
+        border-bottom: none;
+    }
+
+    #modebar {
+        height: 1;
+        padding: 0 2;
+        background: #0b0f14;
+    }
+
+    #web-toolbar {
+        height: auto;
+        padding: 0 1;
+        background: #0b0f14;
+        border-bottom: solid #151d27;
+    }
+
+    .web-chip {
+        min-width: 0;
+        height: 1;
+        margin: 0;
+        padding: 0 1;
+        border: none;
+        background: transparent;
+        color: #7d8998;
+    }
+
+    .web-chip:hover {
+        background: #121a24;
+        color: #7dd3fc;
+    }
+
+    .web-chip.primary-chip {
+        background: #7dd3fc;
+        color: #071016;
+    }
+
+    .web-chip.primary-chip:hover {
+        background: #a5e4ff;
+    }
+
+    .web-chip.accent-chip {
+        background: transparent;
+        color: #a78bfa;
+        text-style: bold;
+    }
+
+    .web-chip.accent-chip:hover {
+        background: #171326;
+        color: #c4b5fd;
+    }
+
+    .think-chip {
+        min-width: 0;
+        height: 1;
+        margin-right: 1;
+    }
+
+    .think-chip.thinking-on {
+        background: #171326;
+        color: #c4b5fd;
+        text-style: bold;
+    }
+
+    #sidebar {
+        width: 28;
+        min-width: 22;
+        padding: 0 1;
+        border-right: solid #151d27;
+        background: #0d1117;
+    }
+
+    .section {
+        margin-top: 1;
+        margin-bottom: 0;
+        color: #7d8998;
+        text-style: bold;
+    }
+
+    #files {
+        height: 1fr;
+        min-height: 8;
+        background: transparent;
+        scrollbar-size-vertical: 1;
+    }
+
+    #sessions {
+        height: 9;
+        background: transparent;
+        scrollbar-size-vertical: 1;
+    }
+
+    SessionItem {
+        padding: 0 1;
+        background: transparent;
+    }
+
+    SessionItem.current {
+        background: #111a24;
+        border-left: thick #7dd3fc;
+    }
+
+    .session-label {
+        width: 100%;
+        height: auto;
+    }
+
+    SessionItem.current .session-label {
+        color: #7dd3fc;
+    }
+
+    #main {
+        width: 1fr;
+        background: #0b0f14;
+    }
+
+    #chat {
+        height: 1fr;
+        padding: 1 3;
+        scrollbar-size-vertical: 1;
+    }
+
+    #inspector {
+        height: 12;
+        border-top: solid #151d27;
+        padding: 1 3;
+        background: #0d1117;
+    }
+
+    #inspector-title {
+        color: #7d8998;
+        text-style: bold;
+        margin-top: 0;
+    }
+
+    #inspector-content {
+        height: 1fr;
+        overflow-y: auto;
+        scrollbar-size-vertical: 1;
+    }
+
+    #status {
+        height: 2;
+        padding: 0 2;
+        background: #0b0f14;
+        color: #6f7c8e;
+        border-top: solid #151d27;
+    }
+
+    #prompt {
+        margin: 0 2;
+        border: round #263244;
+        background: #0f1620;
+        color: #e6edf3;
+    }
+
+    #prompt:focus {
+        border: round #7dd3fc;
+        background: #111a24;
+    }
+
+    .welcome {
+        margin: 1 0;
+    }
+
+    .user-message {
+        margin: 1 0;
+        padding: 1 2;
+        background: #0f1620;
+        border: solid #151d27;
+        border-left: thick #7dd3fc;
+    }
+
+    .agent-header {
+        margin: 1 0 0 0;
+        color: #7d8998;
+    }
+
+    .assistant {
+        margin: 0 0 1 0;
+        padding: 0 1;
+        border-left: thick #151d27;
+        background: transparent;
+    }
+
+    .reasoning {
+        color: #8b97a8;
+        text-style: italic;
+        margin: 0 0 1 0;
+        padding: 0 1;
+        border-left: thick #a78bfa;
+        background: transparent;
+    }
+
+    .thinking {
+        color: #8b97a8;
+        margin: 0 0 1 0;
+        padding: 0 1;
+        background: transparent;
+        border-left: thick #fbbf24;
+    }
+
+    .tool-line {
+        color: #7d8998;
+        margin: 0;
+    }
+
+    ToolCard {
+        height: auto;
+        margin: 0 0 1 0;
+        padding: 0;
+        border: none;
+        border-left: thick #263244;
+        background: #0f1620;
+    }
+
+    ToolCard.running {
+        border-left: thick #fbbf24;
+        background: #121722;
+    }
+
+    ToolCard.success {
+        border-left: thick #34d399;
+        background: #0f1714;
+    }
+
+    ToolCard.error {
+        border-left: thick #f87171;
+        background: #1a1012;
+    }
+
+    ToolCard CollapsibleTitle {
+        height: auto;
+        padding: 0 1;
+        background: transparent;
+    }
+
+    ToolCard > Contents {
+        padding: 0 1 0 3;
+    }
+
+    .tool-output {
+        color: #8b97a8;
+        height: auto;
+    }
+
+    .notice {
+        margin: 0 0 1 0;
+        padding: 0 1;
+        background: transparent;
+        border-left: thick #263244;
+    }
+
+    .notice.warning {
+        color: #fbbf24;
+        border-left: thick #fbbf24;
+    }
+
+    .notice.error {
+        color: #f87171;
+        text-style: bold;
+        border-left: thick #f87171;
+    }
+
+    .notice.success {
+        color: #34d399;
+        border-left: thick #34d399;
+    }
+
+    .notice.info {
+        color: #7d8998;
+        border-left: thick #7dd3fc;
+    }
+
+    ConfirmScreen, PasswordScreen, FilePickerScreen, CommandPaletteScreen, HelpScreen {
+        align: center middle;
+        background: #05080c 82%;
+    }
+
+    #confirm-dialog,
+    #password-dialog,
+    #palette-dialog,
+    #help-dialog {
+        padding: 1 2;
+        border: round #263244;
+        background: #0f1620;
+    }
+
+    #confirm-dialog {
+        width: 70;
+        max-width: 92%;
+        height: auto;
+    }
+
+    #password-dialog {
+        width: 70;
+        max-width: 92%;
+        height: auto;
+    }
+
+    #palette-dialog {
+        width: 70;
+        max-width: 92%;
+        height: 72%;
+    }
+
+    #help-dialog {
+        width: 78;
+        max-width: 94%;
+        height: 82%;
+    }
+
+    #confirm-title,
+    #password-title,
+    .palette-title {
+        color: #7dd3fc;
+        text-style: bold;
+        height: 1;
+    }
+
+    #confirm-scroll,
+    #password-scroll {
+        height: auto;
+        max-height: 15;
+        margin: 1 0;
+        scrollbar-size-vertical: 1;
+    }
+
+    #confirm-body,
+    #password-body {
+        height: auto;
+    }
+
+    #confirm-hint,
+    #password-hint {
+        height: 1;
+        color: #6f7c8e;
+    }
+
+    #confirm-actions,
+    #password-actions {
+        height: auto;
+        align-horizontal: right;
+        margin-top: 1;
+    }
+
+    #confirm-actions Button,
+    #password-actions Button {
+        margin-left: 1;
+        min-width: 12;
+    }
+
+    #file-filter,
+    #command-filter {
+        margin-bottom: 1;
+    }
+
+    #file-options,
+    #command-options {
+        height: 1fr;
+        scrollbar-size-vertical: 1;
+    }
+
+    #help-scroll {
+        height: 1fr;
+        scrollbar-size-vertical: 1;
+    }
+
+    .palette-hint {
+        height: 1;
+        color: #6f7c8e;
+    }
     """
 
     def __init__(
@@ -563,6 +961,8 @@ class ZeroCodeApp(App[None]):
             self.context.request_sudo_password = self.bridge.request_sudo_password
         if hasattr(self.context, "show_diff"):
             self.context.show_diff = self.bridge.show_diff
+        if hasattr(self.context, "stream_output"):
+            self.context.stream_output = self.bridge.stream_tool_output
         self._thread_id = threading.get_ident()
         self._assistant: Markdown | None = None
         self._assistant_buffer = ""
@@ -589,9 +989,9 @@ class ZeroCodeApp(App[None]):
         yield Static("", id="brandbar")
         with Horizontal(id="body"):
             with Vertical(id="sidebar"):
-                yield Label("EXPLORATEUR", id="project-title", classes="section")
+                yield Label("PROJET", id="project-title", classes="section")
                 yield DirectoryTree(str(self.context.cwd), id="files")
-                yield Label("HISTORIQUE SESSIONS", classes="section")
+                yield Label("SESSIONS", classes="section")
                 yield ListView(id="sessions")
             with Vertical(id="main"):
                 with Horizontal(id="modebar-row"):
@@ -604,16 +1004,16 @@ class ZeroCodeApp(App[None]):
                     btn_think.can_focus = False
                     yield btn_think
                 with Horizontal(id="web-toolbar"):
-                    btn_build = Button("🛠 Build", id="chip-build", classes="web-chip")
+                    btn_build = Button("Build", id="chip-build", classes="web-chip")
                     btn_build.can_focus = False
                     yield btn_build
 
-                    btn_plan = Button("📐 Plan", id="chip-plan", classes="web-chip")
+                    btn_plan = Button("Plan", id="chip-plan", classes="web-chip")
                     btn_plan.can_focus = False
                     yield btn_plan
 
                     btn_fs = Button(
-                        "🚀 Full-Stack",
+                        "Full-stack",
                         id="chip-fullstack",
                         classes="web-chip accent-chip",
                     )
@@ -621,19 +1021,19 @@ class ZeroCodeApp(App[None]):
                     yield btn_fs
 
                     btn_files = Button(
-                        "📎 @Fichier", id="chip-files", classes="web-chip"
+                        "Fichier", id="chip-files", classes="web-chip"
                     )
                     btn_files.can_focus = False
                     yield btn_files
 
                     btn_todos = Button(
-                        "☑️ Tâches", id="chip-todos", classes="web-chip"
+                        "Tâches", id="chip-todos", classes="web-chip"
                     )
                     btn_todos.can_focus = False
                     yield btn_todos
 
                     btn_palette = Button(
-                        "⌘K Commandes",
+                        "Commandes",
                         id="chip-palette",
                         classes="web-chip primary-chip",
                     )
@@ -646,7 +1046,7 @@ class ZeroCodeApp(App[None]):
                     yield Static("", id="inspector-content")
                 yield Static("", id="status")
                 yield PromptInput(
-                    placeholder="💬 Demandez à l'agent web…  @ fichiers  ·  Ctrl+K commandes",
+                    placeholder="Demandez quelque chose…  @ fichiers  ·  Ctrl+K commandes",
                     id="prompt",
                 )
 
@@ -875,7 +1275,7 @@ class ZeroCodeApp(App[None]):
 
     def _think_label(self) -> str:
         mode = self.current_think_mode()
-        return "🧠 Think: off" if mode == "off" else f"🧠 Think: {mode}"
+        return "Think off" if mode == "off" else f"Think {mode}"
 
     def set_think_mode(self, mode: str, *, quiet: bool = False) -> None:
         if mode not in THINK_MODES:
@@ -1006,7 +1406,7 @@ class ZeroCodeApp(App[None]):
 
     def show_help(self) -> None:
         body = Text()
-        body.append("Raccourcis Web Studio\n", style="bold cyan")
+        body.append("Raccourcis\n", style="bold #7dd3fc")
         for key, description in (
             ("Ctrl+K", "palette de commandes"),
             ("@", "rechercher un fichier"),
@@ -1021,87 +1421,84 @@ class ZeroCodeApp(App[None]):
             ("F1", "aide et commandes"),
             ("Ctrl+Q", "quitter"),
         ):
-            body.append(f"  {key:<10}", style="bold")
-            body.append(description + "\n")
-        body.append("\nCommandes\n", style="bold cyan")
+            body.append(f"  {key:<10}", style="bold #e6edf3")
+            body.append(description + "\n", style="#c9d1d9")
+        body.append("\nCommandes\n", style="bold #7dd3fc")
         for command, description in COMMANDS:
-            body.append(f"  {command:<34}", style="bold")
-            body.append(description + "\n")
-        body.append("\nCréé par ", style="dim")
-        body.append(__author__, style="bold")
-        body.append("\nGitHub     ", style="dim")
-        body.append(__github__, style=f"cyan underline link {__github__}")
-        body.append("\nPortfolio  ", style="dim")
-        body.append(__portfolio__, style=f"cyan underline link {__portfolio__}")
+            body.append(f"  {command:<34}", style="bold #e6edf3")
+            body.append(description + "\n", style="#c9d1d9")
+        body.append("\nCréé par ", style="#6f7c8e")
+        body.append(__author__, style="bold #e6edf3")
+        body.append("\nGitHub     ", style="#6f7c8e")
+        body.append(__github__, style=f"#7dd3fc underline link {__github__}")
+        body.append("\nPortfolio  ", style="#6f7c8e")
+        body.append(__portfolio__, style=f"#7dd3fc underline link {__portfolio__}")
         self.push_screen(HelpScreen(body, self.context.cwd))
 
     def show_welcome(self) -> None:
         grid = Table.grid(padding=(0, 2))
-        grid.add_column(style="dim", width=14)
+        grid.add_column(style="#6f7c8e", width=13)
         grid.add_column()
 
-        model_pill = Text()
-        model_pill.append(f" {self.config.model} ", style="bold black on cyan")
-        model_pill.append(
-            f"  via {self.config.provider or 'routeur auto'}", style="dim"
-        )
-        grid.add_row("Modèle actif", model_pill)
+        model = Text(self.config.model, style="bold #e6edf3")
+        if self.config.provider:
+            model.append(f"  ·  {self.config.provider}", style="#7d8998")
+        grid.add_row("Modèle", model)
 
-        if self.chain:
-            grid.add_row("Route Web", Text(" → ".join(self.chain[:3]), style="cyan"))
+        route = Text(
+            " → ".join(self.chain[:3]) if self.chain else "routeur automatique",
+            style="#7dd3fc",
+        )
+        grid.add_row("Route", route)
 
         mode_style = {
-            "build": "bold black on green",
-            "plan": "bold black on yellow",
-            "full-stack": "bold white on magenta",
-        }.get(self.work_mode, "bold cyan")
+            "build": "bold #071016 on #34d399",
+            "plan": "bold #071016 on #fbbf24",
+            "full-stack": "bold #071016 on #a78bfa",
+        }.get(self.work_mode, "bold #7dd3fc")
         mode_row = Text()
         mode_row.append(f" {self.work_mode.upper()} ", style=mode_style)
-        mode_row.append(f"  ·  permissions : {self.permissions.mode}", style="dim")
-        grid.add_row("Mode Agent", mode_row)
+        mode_row.append(f"  ·  permissions {self.permissions.mode}", style="#7d8998")
+        grid.add_row("Mode", mode_row)
 
-        ws_text = Text(str(self.context.cwd), style="bold")
+        workspace = Text(str(self.context.cwd), style="bold #e6edf3")
         if self._branch:
-            ws_text.append(f"  (⎇ {self._branch})", style="cyan")
-        grid.add_row("Workspace", ws_text)
+            workspace.append(f"  ⎇ {self._branch}", style="#7dd3fc")
+        grid.add_row("Workspace", workspace)
 
         header = Text()
-        header.append(" ✦ ZEROCODE WEB STUDIO ", style="bold white on blue")
-        header.append(
-            "  Agent de codage autonome dans le terminal\n\n", style="bold cyan"
-        )
+        header.append("zerocode", style="bold #e6edf3")
+        header.append(f"  v{__version__}\n", style="#6f7c8e")
+        header.append("Agent de codage autonome dans le terminal", style="#7d8998")
 
         footer = Text()
-        footer.append("\nActions rapides : ", style="bold cyan")
-        footer.append("[/full-stack]", style="bold magenta")
-        footer.append(" Projet complet  ·  ", style="dim")
-        footer.append("[/plan]", style="bold yellow")
-        footer.append(" Lecture seule  ·  ", style="dim")
-        footer.append("[@]", style="bold cyan")
-        footer.append(" Joindre un fichier  ·  ", style="dim")
-        footer.append("[Ctrl+K]", style="bold green")
-        footer.append(" Palette\n", style="dim")
-        footer.append("Créé par ", style="dim")
-        footer.append(__author__, style="bold")
-        footer.append("  ·  GitHub : ", style="dim")
-        footer.append(__github__, style=f"cyan underline link {__github__}")
-        footer.append("  ·  Portfolio : ", style="dim")
-        footer.append(__portfolio__, style=f"cyan underline link {__portfolio__}")
+        footer.append(
+            "\nEntrée envoyer  ·  @ joindre un fichier  ·  Ctrl+K commandes  ·  F1 aide\n",
+            style="#6f7c8e",
+        )
+        footer.append("Créé par ", style="#6f7c8e")
+        footer.append(__author__, style="bold #e6edf3")
+        footer.append("  ·  ", style="#6f7c8e")
+        footer.append(__github__, style=f"#7dd3fc underline link {__github__}")
+        footer.append("  ·  ", style="#6f7c8e")
+        footer.append(__portfolio__, style=f"#7dd3fc underline link {__portfolio__}")
 
         wrapper = Table.grid()
         wrapper.add_row(header)
+        wrapper.add_row(Text(""))
         wrapper.add_row(grid)
         wrapper.add_row(footer)
 
         panel = Panel(
             wrapper,
-            title=f"🌐 zerocode://studio  ·  v{__version__}",
-            title_align="left",
-            border_style="bright_blue",
+            title=f"v{__version__}",
+            title_align="right",
+            border_style="#263244",
             box=box.ROUNDED,
-            padding=(0, 2),
+            padding=(1, 2),
             expand=True,
         )
+        self._mount(WolfMascot())
         self._mount(Static(panel, classes="welcome"))
         self._scroll_chat()
 
@@ -1130,16 +1527,16 @@ class ZeroCodeApp(App[None]):
 
     def notice(self, message: str, kind: str = "info") -> None:
         style = {
-            "warning": "yellow",
-            "error": "bold red",
-            "success": "green",
-            "info": "dim",
-        }.get(kind, "dim")
+            "warning": "#fbbf24",
+            "error": "bold #f87171",
+            "success": "#34d399",
+            "info": "#7d8998",
+        }.get(kind, "#7d8998")
         badge = {
-            "warning": "⚠ ",
-            "error": "✗ ERREUR ",
+            "warning": "! ",
+            "error": "× ",
             "success": "✓ ",
-            "info": "ℹ ",
+            "info": "· ",
         }.get(kind, "")
         self._mount(
             Static(Text(badge + _safe(message), style=style), classes=f"notice {kind}")
@@ -1148,9 +1545,9 @@ class ZeroCodeApp(App[None]):
 
     def show_list(self, title: str, lines: list[str]) -> None:
         body = Text()
-        body.append("📋 " + _safe(title) + "\n\n", style="bold cyan")
+        body.append(_safe(title) + "\n\n", style="bold #7dd3fc")
         cleaned = "\n".join(_safe(line) for line in lines)
-        body.append(cleaned if lines else "Aucun résultat.", style="")
+        body.append(cleaned if lines else "Aucun résultat.", style="#c9d1d9")
         self._mount(Static(body, classes="notice"))
         self._scroll_chat()
 
@@ -1184,17 +1581,17 @@ class ZeroCodeApp(App[None]):
         if images:
             label += f"\n[{len(images)} image(s) jointe(s)]"
         body = Text.assemble(
-            (" 👤 VOUS ", "bold black on bright_cyan"),
-            (f"  {stamp}\n", "dim"),
-            (label, ""),
+            ("Vous", "bold #7dd3fc"),
+            (f"  {stamp}\n", "#6f7c8e"),
+            (label, "#e6edf3"),
         )
         self._mount(Static(body, classes="user-message"))
 
     def _mount_agent_header(self) -> None:
         stamp = datetime.now().strftime("%H:%M")
         hdr = Text.assemble(
-            (" ✦ ZEROCODE ", "bold black on green"),
-            (f"  {self.config.model}  ·  {stamp}", "dim"),
+            ("Zerocode", "bold #34d399"),
+            (f"  {self.config.model}  ·  {stamp}", "#6f7c8e"),
         )
         self._mount(Static(hdr, classes="agent-header"))
 
@@ -1247,7 +1644,7 @@ class ZeroCodeApp(App[None]):
             self._mount(self._reasoning)
         now = time.monotonic()
         if now - self._last_reasoning_render >= 0.08:
-            text = Text("💭 réflexion  " + self._reasoning_buffer, style="dim italic")
+            text = Text("Réflexion · " + self._reasoning_buffer, style="#8b97a8 italic")
             self._reasoning.update(text)
             self._last_reasoning_render = now
             if follow:
@@ -1286,7 +1683,7 @@ class ZeroCodeApp(App[None]):
             self._assistant_buffer = ""
             self._assistant_rendered = 0
         if self._reasoning is not None:
-            text = Text("💭 réflexion  " + self._reasoning_buffer, style="dim italic")
+            text = Text("Réflexion · " + self._reasoning_buffer, style="#8b97a8 italic")
             self._reasoning.update(text)
             self._reasoning = None
             self._reasoning_buffer = ""
@@ -1382,35 +1779,35 @@ class ZeroCodeApp(App[None]):
         usage = self.agent.usage
         width = self.size.width
         text = Text()
-        text.append("● ", style="bold green" if route else "bold red")
-        text.append(f"{self.config.model}", style="bold cyan")
+        text.append("● ", style="bold #34d399" if route else "bold #f87171")
+        text.append(f"{self.config.model}", style="bold #e6edf3")
         if width >= 70:
-            text.append(f"  {self.config.provider or 'auto'}", style="dim")
+            text.append(f"  {self.config.provider or 'auto'}", style="#6f7c8e")
         if width >= 92:
-            text.append("  ·  ", style="dim")
+            text.append("  ·  ", style="#263244")
             text.append(
-                " → ".join(route[:2]) if route else "aucune route", style="dim"
+                " → ".join(route[:2]) if route else "aucune route", style="#7dd3fc"
             )
         if width >= 64:
-            text.append("  ·  ", style="dim")
+            text.append("  ·  ", style="#263244")
             text.append(
                 f"perms {self.permissions.mode}",
-                style="yellow" if self.permissions.mode != "allow" else "green",
+                style="#fbbf24" if self.permissions.mode != "allow" else "#34d399",
             )
         if width >= 108:
-            text.append("  ·  ", style="dim")
-            text.append(f"session {self.agent.session.id[-8:]}", style="dim")
+            text.append("  ·  ", style="#263244")
+            text.append(f"session {self.agent.session.id[-8:]}", style="#6f7c8e")
         if width >= 96:
-            text.append("  ·  ", style="dim")
+            text.append("  ·  ", style="#263244")
             text.append(
-                f"{usage.total_tokens:,} jetons".replace(",", " "), style="dim"
+                f"{usage.total_tokens:,} jetons".replace(",", " "), style="#6f7c8e"
             )
         if self._busy:
             if self._interrupt_requested:
-                text.append("  ·  ⏹ interruption…", style="bold red")
+                text.append("  ·  interruption…", style="bold #f87171")
             else:
                 frame = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[self._spinner_index]
-                text.append(f"  ·  {frame} travail…", style="bold yellow")
+                text.append(f"  ·  {frame} travail…", style="bold #fbbf24")
         status.update(text)
 
     def _refresh_brandbar(self) -> None:
@@ -1419,18 +1816,18 @@ class ZeroCodeApp(App[None]):
         except Exception:  # noqa: BLE001 - montage initial
             return
         text = Text()
-        text.append("● ", style="bold red")
-        text.append("● ", style="bold yellow")
-        text.append("●  ", style="bold green")
-        text.append(f"🌐 zerocode {__version__}", style="bold cyan")
-        text.append(f"  /{self.context.cwd.name}", style="bold white")
-        text.append("  ·  par ", style="dim")
-        text.append(__author__, style="bold")
-        text.append("  ·  ", style="dim")
-        text.append(__github__, style=f"cyan underline link {__github__}")
+        text.append("zerocode", style="bold #e6edf3")
+        text.append(f"  {__version__}", style="#6f7c8e")
+        text.append(f"   /{self.context.cwd.name}", style="bold #c9d1d9")
+        if self._branch:
+            text.append(f"   ⎇ {self._branch}", style="#7dd3fc")
+        text.append("   ·   ", style="#263244")
+        text.append(__author__, style="#7d8998")
+        text.append("   ", style="#6f7c8e")
+        text.append(__github__, style=f"#7dd3fc underline link {__github__}")
         if self.size.width >= 110:
-            text.append("  ·  ", style="dim")
-            text.append(__portfolio__, style=f"cyan underline link {__portfolio__}")
+            text.append("   ·   ", style="#263244")
+            text.append(__portfolio__, style=f"#7dd3fc underline link {__portfolio__}")
         bar.update(text)
 
     def _refresh_project_title(self) -> None:
@@ -1438,10 +1835,10 @@ class ZeroCodeApp(App[None]):
             title = self.query_one("#project-title", Label)
         except Exception:  # noqa: BLE001 - montage initial
             return
-        text = Text("📂 PROJET", style="bold")
-        text.append("  " + self.context.cwd.name, style="dim")
+        text = Text("PROJET", style="bold #7d8998")
+        text.append("   " + self.context.cwd.name, style="#c9d1d9")
         if self._branch:
-            text.append(f"  ⎇ {self._branch}", style="cyan")
+            text.append(f"  ⎇ {self._branch}", style="#7dd3fc")
         title.update(text)
 
     def _refresh_modebar(self) -> None:
@@ -1458,15 +1855,15 @@ class ZeroCodeApp(App[None]):
             active = self.work_mode == mode
             if active:
                 style = {
-                    "build": "bold black on green",
-                    "plan": "bold black on yellow",
-                    "full-stack": "bold white on magenta",
+                    "build": "bold #071016 on #34d399",
+                    "plan": "bold #071016 on #fbbf24",
+                    "full-stack": "bold #071016 on #a78bfa",
                 }[mode]
             else:
-                style = "dim"
+                style = "#6f7c8e"
             text.append(f" {label} ", style=style)
             text.append(" ")
-        text.append("│ ", style="dim")
+        text.append("  ·  ", style="#263244")
         todo_count = len(self.context.todos)
         todo_label = f"TÂCHES ({todo_count})" if todo_count else "TÂCHES"
         for mode, label in (
@@ -1477,11 +1874,11 @@ class ZeroCodeApp(App[None]):
             active = self._mode == mode
             text.append(
                 f" {label} ",
-                style="bold black on cyan" if active else "dim",
+                style="bold #071016 on #7dd3fc" if active else "#6f7c8e",
             )
             text.append(" ")
         if self.size.width >= 116:
-            text.append(" Shift+Tab mode · Tab panneaux", style="dim")
+            text.append("  Shift+Tab mode  ·  Tab panneaux", style="#4d5867")
         bar.update(text)
 
     def _refresh_prompt_placeholder(self) -> None:
@@ -1491,17 +1888,17 @@ class ZeroCodeApp(App[None]):
             return
         if self.work_mode == "plan":
             prompt.placeholder = (
-                "📐 Mode plan (lecture seule) — décris ce que tu veux planifier…  "
+                "Mode plan (lecture seule) — décris ce que tu veux planifier…  "
                 "Ctrl+K commandes"
             )
         elif self.work_mode == "full-stack":
             prompt.placeholder = (
-                "🚀 Mode full-stack autonome — décris le projet complet à construire…  "
+                "Mode full-stack autonome — décris le projet complet à construire…  "
                 "Ctrl+K commandes"
             )
         else:
             prompt.placeholder = (
-                "💬 Demandez quelque chose…  @ fichiers  ·  Ctrl+K commandes"
+                "Demandez quelque chose…  @ fichiers  ·  Ctrl+K commandes"
             )
 
     def _refresh_sessions(self) -> None:
@@ -1525,27 +1922,26 @@ class ZeroCodeApp(App[None]):
         except Exception:  # noqa: BLE001 - montage initial
             return
         if self._mode == "todos":
-            title.update("☑️ PLAN DE TRAVAIL (PROGRESSION)")
+            title.update("PLAN DE TRAVAIL")
             content.update(_todos_text(self.context.todos))
         elif self._mode == "tools":
             suffix = {
-                "plan": " · LECTURE SEULE",
-                "full-stack": " · AUTONOME",
+                "plan": "  ·  LECTURE SEULE",
+                "full-stack": "  ·  AUTONOME",
             }.get(self.work_mode, "")
-            title.update("🔧 OUTILS WEB AGENT" + suffix)
+            title.update("OUTILS DISPONIBLES" + suffix)
             tools = self.agent.tools.tools()
             if self.work_mode == "plan":
                 tools = [tool for tool in tools if tool.approval == "never"]
             text = Text()
             for tool in tools:
-                icon = TOOL_ICONS.get(tool.name, "🔧")
-                text.append(f"{icon} {tool.name:<12}", style="bold cyan")
+                text.append(f"{tool.name:<12}", style="bold #e6edf3")
                 perm_badge = "AUTO" if tool.approval == "never" else "CONFIRM"
                 text.append(
                     f" [{perm_badge:<7}] ",
-                    style="green" if tool.approval == "never" else "yellow",
+                    style="#34d399" if tool.approval == "never" else "#fbbf24",
                 )
-                text.append(tool.description + "\n", style="dim")
+                text.append(tool.description + "\n", style="#7d8998")
             content.update(text)
         else:
             title.update("")
@@ -1599,19 +1995,22 @@ def _todos_text(todos: list[dict[str, Any]]) -> Text:
     bar = "━" * filled + "─" * (bar_width - filled)
 
     text = Text()
-    text.append(f"Progression : {bar} {pct}% ({done_count}/{total})\n\n", style="bold cyan")
+    text.append(
+        f"Progression  {bar}  {pct}%  ({done_count}/{total})\n\n",
+        style="bold #7dd3fc",
+    )
 
     markers = {
-        "pending": ("○ ATTENTE", "dim"),
-        "in_progress": ("⟳ EN COURS", "bold yellow"),
-        "completed": ("✓ TERMINÉ", "bold green"),
-        "cancelled": ("✕ ANNULÉ", "red"),
+        "pending": ("○ ATTENTE", "#6f7c8e"),
+        "in_progress": ("⟳ EN COURS", "bold #fbbf24"),
+        "completed": ("✓ TERMINÉ", "bold #34d399"),
+        "cancelled": ("✕ ANNULÉ", "#f87171"),
     }
     for todo in todos:
         status = str(todo.get("status", "pending"))
-        badge, style = markers.get(status, ("○ ATTENTE", "dim"))
+        badge, style = markers.get(status, ("○ ATTENTE", "#6f7c8e"))
         text.append(f"  {badge:<11} ", style=style)
-        text.append(str(todo.get("content", "")) + "\n")
+        text.append(str(todo.get("content", "")) + "\n", style="#c9d1d9")
     return text
 
 

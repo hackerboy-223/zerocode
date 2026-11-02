@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import stat
+import subprocess
+
 from zerocode.checkpoints import CheckpointStore
 
 
@@ -29,3 +33,23 @@ def test_checkpoint_rejects_oversized_content(tmp_path):
     target = tmp_path / "big.txt"
     store = CheckpointStore(tmp_path / "checkpoints")
     assert not store.record("s1", target, "x" * 1_000_001, "write")
+
+
+def test_checkpoint_file_is_private(tmp_path):
+    target = tmp_path / "file.txt"
+    target.write_text("contenu", encoding="utf-8")
+    store = CheckpointStore(tmp_path / "checkpoints")
+    assert store.record("s1", target, "avant", "edit")
+
+    path = tmp_path / "checkpoints" / "s1.json"
+    assert path.is_file()
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) & 0o077 == 0
+    else:
+        acl = subprocess.run(
+            ["icacls", str(path)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.lower()
+        assert (os.environ.get("USERNAME") or "").lower() in acl

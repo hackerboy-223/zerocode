@@ -1,6 +1,6 @@
 # Fournisseurs et modèles
 
-État vérifié le **26 octobre 2026**. Les offres gratuites, quotas et identifiants changent souvent : utilisez `zerocode doctor --live` et `zerocode models --live` avant de vous appuyer sur une offre.
+État vérifié le **2 novembre 2026**. Les offres gratuites, quotas et identifiants changent souvent : utilisez `zerocode doctor --live` et `zerocode models --live` avant de vous appuyer sur une offre.
 
 ## Principe
 
@@ -16,11 +16,11 @@ zerocode parle le protocole OpenAI (`/chat/completions`, streaming SSE, appels d
 
 | Fournisseur | Clé | Offre gratuite | Base URL |
 | --- | --- | --- | --- |
-| Kilo Gateway | facultative | `kilo-auto/free`, 200 req/h/IP en anonyme | `https://ai-gateway.kilo.ai/api/v1` |
+| Kilo Gateway | facultative | Routes anonymes gratuites, quotas variables | `https://ai-gateway.kilo.ai/api/v1` |
 | NVIDIA Build | `NVIDIA_API_KEY` | GLM 5.3 / 5.3 Flash en essai | `https://integrate.api.nvidia.com/v1` |
 | OpenCode Zen | `OPENCODE_ZEN_API_KEY` | `glm-5.3-flash-free` et autres `-free` | `https://opencode.ai/zen/v1` |
 | Z.AI | `ZAI_API_KEY` | GLM 4.7 Flash, GLM 4.5 Flash | `https://api.z.ai/api/paas/v4` |
-| OpenRouter | `OPENROUTER_API_KEY` | modèles `:free` | `https://openrouter.ai/api/v1` |
+| OpenRouter | `OPENROUTER_API_KEY` | Nemotron 3 Ultra, Nemotron 3.5, North Mini Code, Xing4.0, Gemma 4 et autres `:free` | `https://openrouter.ai/api/v1` |
 | Groq | `GROQ_API_KEY` | GPT OSS, Qwen, quotas journaliers | `https://api.groq.com/openai/v1` |
 | Google AI Studio | `GEMINI_API_KEY` | Gemini Flash, palier gratuit | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | Mistral | `MISTRAL_API_KEY` | crédit mensuel | `https://api.mistral.ai/v1` |
@@ -34,7 +34,9 @@ zerocode parle le protocole OpenAI (`/chat/completions`, streaming SSE, appels d
 
 - Accès anonyme : aucune clé nécessaire pour les modèles gratuits.
 - `kilo-auto/free` route automatiquement vers un modèle gratuit disponible.
-- `KILO_API_KEY` augmente les quotas.
+- En mode `auto`, ZeroCode limite volontairement son routage aux routes anonymes gratuites de Kilo : `kilo-auto/free`, Cohere North Mini Code, Poolside Laguna S 2.1 et NVIDIA Nemotron 3.5 Lightning via Kilo.
+- Aucun fournisseur demandant une clé personnelle n'est ajouté automatiquement à cette chaîne.
+- `KILO_API_KEY` peut modifier les quotas selon les conditions du fournisseur ; elle n'est pas requise pour le démarrage.
 - Les données peuvent être journalisées. Évitez les secrets et les données personnelles.
 
 ### NVIDIA Build
@@ -59,9 +61,11 @@ zerocode parle le protocole OpenAI (`/chat/completions`, streaming SSE, appels d
 
 ### OpenRouter
 
-- Les modèles gratuits se terminent souvent par `:free`.
-- Le quota est d'environ 50 requêtes/jour, porté à 1000/jour après un achat de 10 $.
-- `openrouter/free` choisit automatiquement un modèle gratuit.
+- Modèles gratuits vérifiés le 2 novembre 2026 : Nemotron 3 Ultra, Nemotron 3.5 Lightning/Super VL, Cohere North Mini Code, Xing4.0 29B A4B, Inkling Small et Gemma 4 26B A4B.
+- Les modèles `:free` sont limités à 20 requêtes/minute et 50 requêtes/jour; le plafond quotidien passe à 1000 après au moins 10 $ d'achats cumulés.
+- `openrouter/free` choisit automatiquement un modèle gratuit compatible.
+- Les conditions de confidentialité dépendent du fournisseur amont. NVIDIA journalise l'usage de ses endpoints gratuits; Thinking Machines indique que les prompts et sorties d'Inkling Small sont journalisés et utilisés pour améliorer ses modèles. Ne leur envoyez jamais de secrets, clés API, dépôts privés ou données personnelles.
+- La disponibilité et les limites peuvent changer; utilisez `zerocode models --live` avant de choisir un modèle.
 
 ### Groq, Gemini, SambaNova
 
@@ -92,11 +96,12 @@ Ou dans la configuration :
 
 Elles sont définies dans `catalog.py` :
 
-- `AUTO_CHAIN` : Kilo, NVIDIA Flash, OpenCode Zen, Z.AI Flash, OpenRouter, Groq, Gemini, Mistral, SambaNova, Together, Ollama.
+- `AUTO_CHAIN` : uniquement les routes gratuites anonymes de Kilo (`kilo-auto/free`, Cohere North Mini Code, Poolside Laguna S 2.1 et NVIDIA Nemotron 3.5 Lightning via Kilo). Les fournisseurs nécessitant une clé ne sont jamais utilisés automatiquement.
+- En mode `auto`, le routeur adapte l'ordre des routes Kilo à la demande : modèle de code pour les tâches de développement, modèle léger pour les questions simples. La sélection reste gratuite et sans clé personnelle.
 - `GLM53_FLASH_CHAIN` : NVIDIA Flash, OpenCode Zen, Kilo.
 - `GLM53_CHAIN` : NVIDIA, Together, Z.AI, OpenRouter, Kilo (GLM 5.3 complet).
 
-Le routeur ignore les fournisseurs sans clé, les modèles payants quand `free_only` est actif, et les modèles incompatibles avec les outils quand l'agent en a besoin. En cas d'échec, il applique un cooldown et passe au candidat suivant.
+Le routeur ignore les fournisseurs sans clé, les modèles payants quand `free_only` est actif, et les modèles incompatibles avec les outils quand l'agent en a besoin. En cas d'échec, il applique un cooldown et passe au candidat suivant de la chaîne gratuite Kilo. Si tous les candidats sont indisponibles, il signale l'échec sans basculer vers une route payante.
 
 ## Vérification
 
@@ -117,3 +122,12 @@ zerocode -m auto "réponds uniquement OK"
 4. Ajouter un test si la logique de routage est particulière.
 
 Aucun code spécifique n'est nécessaire si l'API respecte le protocole OpenAI.
+
+
+## Mode sans clé API personnelle
+
+Sur une installation neuve, `model=auto` et `free_only=true`. La chaîne automatique utilise exclusivement les routes gratuites anonymes du fournisseur Kilo Gateway. Elle ne bascule pas vers OpenRouter, NVIDIA, Z.AI, Gemini ou un autre fournisseur nécessitant une clé personnelle. Elle n'inclut aucun modèle payant.
+
+Kilo Gateway est un service distant : l'absence de clé personnelle ne signifie pas une absence de fournisseur, de réseau ou de quotas. La disponibilité, les limites et les conditions de gratuité peuvent évoluer indépendamment de ZeroCode. Si le service gratuit est indisponible, ZeroCode signale l'échec au lieu de choisir silencieusement une route payante.
+
+Pour une exécution sans fournisseur distant, installe Ollama et télécharge un modèle local, par exemple `ollama pull qwen2.5-coder:7b`, puis active le fournisseur local dans la configuration. Le modèle est alors exécuté sur la machine et ne nécessite aucune clé API ; les performances dépendent du matériel disponible.

@@ -89,13 +89,23 @@ def _grep_with_ripgrep(
     for line in process.stdout.splitlines():
         if not line.strip():
             continue
-        path_text = line.split(":", 1)[0]
-        if protect and is_secret_path(Path(path_text)):
+        if protect and is_secret_path(Path(_ripgrep_line_path(line))):
             continue
         result.append(line)
         if len(result) >= max_results:
             break
     return result
+
+
+_RIPGREP_LINE_RE = re.compile(r"^(?P<path>.*?):(?P<line>\d+):")
+
+
+def _ripgrep_line_path(line: str) -> str:
+    """Extract the file path from `rg -n` output, including Windows drive paths."""
+    match = _RIPGREP_LINE_RE.match(line)
+    if match is not None:
+        return match.group("path")
+    return line.split(":", 1)[0]
 
 
 def _walk_files(root: Path) -> list[Path]:

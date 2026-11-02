@@ -23,7 +23,7 @@ from zerocode.config import (
 
 def test_defaults(tmp_path):
     config = load_config(tmp_path)
-    assert config.model == "glm-5.3"
+    assert config.model == "auto"
     assert config.free_only is True
     assert config.fallback is True
     assert config.permissions == "ask"
@@ -96,6 +96,87 @@ def test_provider_url_validation(tmp_path):
     )
     with pytest.raises(ConfigError):
         load_config(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "server",
+    [
+        {"command": "true", "timeout": "soon"},
+        {"command": "true", "timeout": 0},
+        {"command": "true", "timeout": True},
+        {"command": "true", "cwd": 42},
+        {"command": "true", "timeout": float("inf")},
+        {"command": "true", "timeout": float("nan")},
+    ],
+)
+def test_invalid_mcp_server_options_are_rejected(tmp_path, server):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"mcp_servers": {"demo": server}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_config(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://api.groq.com/openai/v1",
+        "https://evil.example/v1",
+        "https://user:password@api.groq.com/openai/v1",
+        "https://api.groq.com/openai/v1?forward=1",
+        "https://api.groq.com:99999/openai/v1",
+    ],
+)
+def test_provider_override_cannot_redirect_api_keys_to_untrusted_hosts(tmp_path, base_url):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"providers": {"groq": {"base_url": base_url}}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="base_url"):
+        load_config(tmp_path)
+
+
+def test_ollama_override_must_be_loopback(tmp_path):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"providers": {"ollama": {"base_url": "http://10.0.0.5:11434/v1"}}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="loopback"):
+        load_config(tmp_path)
+
+
+def test_ollama_environment_override_cannot_target_remote_hosts(monkeypatch):
+    from zerocode.providers import applied_providers
+
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://10.0.0.5:11434/v1")
+    with pytest.raises(ConfigError, match="loopback"):
+        applied_providers(Config())
+
+
+def test_official_provider_override_is_allowed(tmp_path):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"providers": {"groq": {"base_url": "https://api.groq.com/openai/v1"}}}),
+        encoding="utf-8",
+    )
+    assert load_config(tmp_path).provider_config("groq")["base_url"].startswith("https://")
+
+
+def test_non_finite_integer_config_is_reported(tmp_path):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"max_tokens": float("inf")}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_config(tmp_path)
+
+
+def test_provider_alias_is_normalized(tmp_path):
+    (tmp_path / "zerocode.json").write_text(
+        json.dumps({"provider": " AUTO "}),
+        encoding="utf-8",
+    )
+    assert load_config(tmp_path).provider is None
 
 
 def test_key_store_roundtrip_and_mode(tmp_path):
