@@ -179,7 +179,14 @@ def compact_messages(
     base_system = str(system.get("content") or "")
     if summary:
         title = "## Contexte anterieur (resume automatique)"
-        system["content"] = f"{base_system}\n\n{title}\n{summary}".strip()
+        if title in base_system:
+            base_system, previous_summary = base_system.split(title, 1)
+            summary = truncate_text(
+                f"{previous_summary.strip()}\n{summary}",
+                summary_budget,
+                head_ratio=0.4,
+            )
+        system["content"] = f"{base_system.rstrip()}\n\n{title}\n{summary}".strip()
 
     result = [system, *kept]
     _shrink_contents(result)
