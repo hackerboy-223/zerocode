@@ -56,3 +56,14 @@ def test_lookup_helpers():
     assert matches
     assert all("glm-4.7" in model.id for _, model in matches)
     assert any(model.id == "glm-5.3-flash-free" for _, model in all_choices())
+
+
+def test_auto_chain_uses_only_anonymous_free_routes():
+    assert AUTO_CHAIN
+    for provider_name, model_id in AUTO_CHAIN:
+        provider = PROVIDERS[provider_name]
+        model = provider.model(model_id)
+        assert provider.keyless, provider_name
+        assert model is not None and model.is_free, (provider_name, model_id)
+    assert {provider for provider, _ in AUTO_CHAIN} == {"kilo"}
+    assert all(provider != "openrouter" for provider, _ in AUTO_CHAIN)
