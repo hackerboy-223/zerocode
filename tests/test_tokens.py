@@ -105,3 +105,29 @@ def test_compaction_preserves_tool_arguments_and_useful_results():
     assert "src/auth/session.py" in summary
     assert "SessionManager" in summary
 
+def test_repeated_compaction_keeps_one_bounded_rolling_summary():
+    messages = [
+        {"role": "system", "content": "system prompt"},
+        {"role": "user", "content": "Initial objective: preserve the login flow. " + ("a" * 900)},
+        {"role": "assistant", "content": "Decision: keep the existing session contract. " + ("b" * 900)},
+        {"role": "user", "content": "Intermediate notes " + ("c" * 900)},
+        {"role": "assistant", "content": "Intermediate response " + ("d" * 900)},
+        {"role": "user", "content": "Current question"},
+        {"role": "assistant", "content": "Current answer"},
+    ]
+    first = compact_messages(messages, 1_000, keep_last=2, force=True)
+    first.extend([
+        {"role": "user", "content": "New implementation detail: refresh tokens are rotated."},
+        {"role": "assistant", "content": "The rotation path is now verified."},
+        {"role": "user", "content": "Continue the task"},
+        {"role": "assistant", "content": "Ready."},
+    ])
+
+    second = compact_messages(first, 1_000, keep_last=2, force=True)
+    system = second[0]["content"]
+
+    assert system.count("## Contexte anterieur (resume automatique)") == 1
+    assert "Initial objective" in system
+    assert "New implementation detail" in system
+    assert len(system) < 20_000
+
