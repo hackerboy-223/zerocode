@@ -4,6 +4,7 @@ import platform
 from datetime import date
 from pathlib import Path
 
+from .security import redact_secrets
 from .tokens import truncate_text
 
 INSTRUCTION_FILES = (
@@ -32,6 +33,28 @@ def load_project_instructions(cwd: Path) -> str:
     if not parts:
         return ""
     return truncate_text("\n\n".join(parts), MAX_INSTRUCTIONS_CHARS)
+
+
+def remember_project_instruction(cwd: Path, note: str) -> Path:
+    """Enregistre une consigne persistante dans .zerocode/instructions.md."""
+    cleaned = " ".join(redact_secrets(note).strip().split())
+    if not cleaned:
+        raise ValueError("La consigne a memoriser ne peut pas etre vide.")
+    target = cwd.resolve() / ".zerocode" / "instructions.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    existing = ""
+    if target.is_file():
+        existing = target.read_text(encoding="utf-8", errors="replace").rstrip()
+    header = "# Instructions projet ZeroCode\n"
+    line = f"- {cleaned}"
+    if not existing:
+        updated = f"{header}\n{line}\n"
+    elif line in existing.splitlines():
+        updated = existing + "\n"
+    else:
+        updated = f"{existing}\n{line}\n"
+    target.write_text(updated, encoding="utf-8")
+    return target
 
 
 def build_system_prompt(cwd: Path, instructions: str | None = None) -> str:

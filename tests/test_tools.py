@@ -408,6 +408,9 @@ def test_syntax_diagnostics_on_write_and_edit(tmp_path):
     broken_toml = call(registry, "write", path="broken.toml", content="[section\nx = 1\n")
     assert "DIAGNOSTIC TOML" in broken_toml
 
+    broken_sh = call(registry, "write", path="broken.sh", content="if [ 1 -eq 1 ]; then\n  echo hi\n")
+    assert "DIAGNOSTIC SHELL" in broken_sh
+
 
 def test_dlp_secret_redaction_and_catastrophic_shell_block(tmp_path):
     (tmp_path / "notes.txt").write_text(

@@ -224,3 +224,33 @@ def test_keyless_provider_does_not_require_key():
     finally:
         client.close()
     assert completion.content == "ok"
+
+
+def test_provider_client_retries_once_on_502():
+    provider = PROVIDERS["kilo"]
+    model = provider.model("kilo-auto/free")
+    assert model is not None
+    attempts = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return httpx.Response(502, text="Bad Gateway")
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sse(
+                {"choices": [{"delta": {"content": "retried-ok"}}]},
+                {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                "[DONE]",
+            ),
+        )
+
+    client = make_client(handler)
+    try:
+        completion = client.stream(provider, model, [{"role": "user", "content": "salut"}])
+    finally:
+        client.close()
+    assert completion.content == "retried-ok"
+    assert attempts["count"] == 2
+

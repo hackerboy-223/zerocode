@@ -419,4 +419,27 @@ def test_agent_executes_read_only_tools_in_parallel_and_supports_subagent(tmp_pa
     assert any("Synthese sous-agent: alpha + beta." in out for out in tool_outputs)
 
 
+def test_agent_expands_at_file_mentions_and_remember_instruction(tmp_path):
+    from zerocode.prompts import load_project_instructions, remember_project_instruction
+
+    (tmp_path / "module.py").write_text("def hello():\n    return 'world'\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("SECRET=123\n", encoding="utf-8")
+
+    completion = Completion(content="Vu module.py", finish_reason="stop")
+    agent, router, _, _ = build_agent(tmp_path, [completion])
+
+    result = agent.run_turn("Explique @module.py et ignore @.env")
+    assert result == "Vu module.py"
+    user_msg = [m for m in router.messages if m["role"] == "user"][-1]["content"]
+    assert "<referenced-files>" in user_msg
+    assert "def hello():" in user_msg
+    assert "SECRET=123" not in user_msg
+    assert agent.last_assistant_text() == "Vu module.py"
+
+    saved_path = remember_project_instruction(tmp_path, "Toujours utiliser pytest -q")
+    assert saved_path.is_file()
+    assert "Toujours utiliser pytest -q" in load_project_instructions(tmp_path)
+
+
+
 

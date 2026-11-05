@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from .config import Config
-from .errors import ConfigError
+from .errors import ConfigError, ToolError
 from .prompts import build_system_prompt
+from .security import redact_secrets
 from .session import Session, SessionStore
 from .tokens import compact_messages, estimate_messages, truncate_text
 from .tools import PermissionManager, ToolContext, build_registry
+from .tools.files import _is_binary
 from .types import StreamCallbacks, Usage
+
+FILE_MENTION_RE = re.compile(r"(?:^|(?<=\s))@([A-Za-z0-9_./-]+)")
 
 PLAN_MODE_INSTRUCTION = """
 MODE PLAN ACTIF (lecture seule):
@@ -82,9 +87,10 @@ class Agent:
         text = user_text.strip()
         if not text:
             return ""
-        content: str | list[dict[str, Any]] = text
+        expanded_text = self._expand_file_mentions(text)
+        content: str | list[dict[str, Any]] = expanded_text
         if images:
-            content = [{"type": "text", "text": text}]
+            content = [{"type": "text", "text": expanded_text}]
             content.extend(
                 {"type": "image_url", "image_url": {"url": image}} for image in images
             )
@@ -433,6 +439,50 @@ class Agent:
             isinstance(todo, dict) and todo.get("status") in {"pending", "in_progress"}
             for todo in self.tools.context.todos
         )
+
+    def last_assistant_text(self) -> str:
+        for message in reversed(self.messages):
+            if message.get("role") != "assistant":
+                continue
+            content = str(message.get("content") or "").strip()
+            if content:
+                return content
+        return ""
+
+    def _expand_file_mentions(self, text: str) -> str:
+        matches = FILE_MENTION_RE.findall(text)
+        if not matches:
+            return text
+        seen: set[Path] = set()
+        snippets: list[str] = []
+        ctx = self.tools.context
+        for raw_ref in matches:
+            if len(snippets) >= 5:
+                break
+            cleaned_ref = raw_ref.rstrip(".,;:!?")
+            if not cleaned_ref:
+                continue
+            try:
+                path = ctx.resolve_path(cleaned_ref)
+                ctx.check_secret(path)
+                if path in seen or not path.is_file() or path.stat().st_size > 200_000:
+                    continue
+                if _is_binary(path):
+                    continue
+                file_text = path.read_text(encoding="utf-8", errors="replace")
+            except (ToolError, OSError):
+                continue
+            seen.add(path)
+            if ctx.protect_secrets and not ctx.allow_secrets:
+                file_text = redact_secrets(file_text)
+            label = ctx.display_path(path)
+            snippets.append(
+                f"### {label}\n```\n{truncate_text(file_text, 10_000)}\n```"
+            )
+        if not snippets:
+            return text
+        joined = "\n\n".join(snippets)
+        return f"{text}\n\n<referenced-files>\n{joined}\n</referenced-files>"
 
     def _can_parallelize_calls(self, calls: list[Any]) -> bool:
         if len(calls) < 2:

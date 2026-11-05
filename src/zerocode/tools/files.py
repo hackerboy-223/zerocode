@@ -5,6 +5,7 @@ import contextlib
 import difflib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -222,6 +223,34 @@ def _syntax_diagnostic(path: Path, content: str) -> str:
             tomllib.loads(content)
         except tomllib.TOMLDecodeError as exc:
             return f"\nDIAGNOSTIC TOML: {exc}"
+    elif suffix in {".sh", ".bash"} and path.is_file():
+        shell_bin = shutil.which("bash") or shutil.which("sh")
+        if shell_bin:
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                check = subprocess.run(
+                    [shell_bin, "-n", str(path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    check=False,
+                )
+                if check.returncode != 0 and check.stderr.strip():
+                    first = check.stderr.strip().splitlines()[0]
+                    return f"\nDIAGNOSTIC SHELL: {first}"
+    elif suffix in {".js", ".mjs", ".cjs"} and path.is_file():
+        node_bin = shutil.which("node")
+        if node_bin:
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                check = subprocess.run(
+                    [node_bin, "--check", str(path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    check=False,
+                )
+                if check.returncode != 0 and check.stderr.strip():
+                    first = check.stderr.strip().splitlines()[0]
+                    return f"\nDIAGNOSTIC JS: {first}"
     return ""
 
 

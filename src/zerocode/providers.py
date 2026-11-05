@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
@@ -176,6 +177,7 @@ class OpenAICompatibleClient:
         callbacks: StreamCallbacks,
         *,
         allow_sanitize: bool,
+        allow_retry: bool = True,
     ) -> Completion:
         url = f"{provider.base_url.rstrip('/')}/chat/completions"
         try:
@@ -201,6 +203,18 @@ class OpenAICompatibleClient:
                             sanitized,
                             callbacks,
                             allow_sanitize=False,
+                            allow_retry=allow_retry,
+                        )
+                    if allow_retry and response.status_code in (502, 503, 504):
+                        time.sleep(0.2)
+                        return self._request(
+                            provider,
+                            model,
+                            messages,
+                            body,
+                            callbacks,
+                            allow_sanitize=allow_sanitize,
+                            allow_retry=False,
                         )
                     raise self._http_error(provider, model, response, text)
                 return self._consume(provider, model, messages, response, callbacks)
@@ -209,6 +223,24 @@ class OpenAICompatibleClient:
         except httpx.TimeoutException as exc:
             raise ProviderError(
                 "Delai depasse pendant la reponse du fournisseur.",
+                provider=provider.name,
+                model=model.id,
+                retryable=True,
+            ) from exc
+        except httpx.TransportError as exc:
+            if allow_retry:
+                time.sleep(0.2)
+                return self._request(
+                    provider,
+                    model,
+                    messages,
+                    body,
+                    callbacks,
+                    allow_sanitize=allow_sanitize,
+                    allow_retry=False,
+                )
+            raise ProviderError(
+                f"Erreur reseau: {exc.__class__.__name__}.",
                 provider=provider.name,
                 model=model.id,
                 retryable=True,

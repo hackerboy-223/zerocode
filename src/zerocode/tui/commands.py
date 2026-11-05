@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..catalog import PROVIDERS, all_choices
 from ..config import mask_key
+from ..prompts import remember_project_instruction
 from ..providers import (
     applied_providers,
     provider_available,
@@ -44,6 +45,8 @@ COMMANDS: list[tuple[str, str]] = [
     ("/providers", "État des fournisseurs"),
     ("/cd [chemin]", "Changer de répertoire"),
     ("/init", "Créer ZEROCODE.md"),
+    ("/remember [règle]", "Mémoriser une consigne durable du projet"),
+    ("/copy", "Copier la dernière réponse de l'assistant"),
     ("/undo", "Annuler la dernière modification de fichier"),
     ("/image [fichier|clear]", "Joindre une image au prochain message"),
     ("/clear", "Effacer la conversation"),
@@ -60,6 +63,7 @@ ARG_COMMANDS = {
     "/resume",
     "/cd",
     "/image",
+    "/remember",
 }
 
 
@@ -228,6 +232,10 @@ class CommandHandler:
             app.notice(f"{len(app.store.list())} session(s) dans {app.store.root}", "info")
         elif command == "init":
             self._init_project_file()
+        elif command == "remember":
+            self._remember(rest)
+        elif command == "copy":
+            app.copy_last_response()
         elif command == "image":
             self._image(rest)
         elif command == "undo":
@@ -370,6 +378,20 @@ class CommandHandler:
             return
         path.write_text(_PROJECT_TEMPLATE, encoding="utf-8")
         self.app.notice(f"Créé : {path}", "success")
+
+    def _remember(self, rest: str) -> None:
+        if not rest:
+            self.app.notice("Usage : /remember <consigne durable du projet>", "info")
+            return
+        try:
+            target = remember_project_instruction(self.app.context.cwd, rest)
+        except (OSError, ValueError) as exc:
+            self.app.notice(str(exc), "warning")
+            return
+        refresh = getattr(self.app.agent, "_refresh_system_mode", None)
+        if callable(refresh):
+            refresh()
+        self.app.notice(f"Consigne mémorisée dans {target}", "success")
 
 
 def usage_summary(usage: Any, completion: Any = None) -> str:

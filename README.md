@@ -11,9 +11,9 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
 - Outils intégrés : lecture (`read`), écriture (`write`), édition (`edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), shell (`bash`), web (`fetch`, `web_search`), sous-agent d'exploration isolé (`subagent`), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
-- Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`) et cache TTL Git pour accélérer l'exploration multi-fichiers.
-- Diagnostics syntaxiques instantanés (AST Python, JSON et TOML) après chaque écriture ou édition pour auto-correction immédiate.
-- Sessions reprenables, compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
+- Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`), pré-injection directe des fichiers mentionnés avec `@chemin` (0 tour réseau) et cache TTL Git.
+- Diagnostics syntaxiques instantanés (Python AST, JSON, TOML, Shell `bash -n` et JavaScript `node --check`) après chaque écriture ou édition pour auto-correction immédiate.
+- Sessions reprenables, mémoire projet persistante (`/remember`), copie rapide (`/copy`, `Ctrl+Y`), compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
 - Interface TUI Textual sobre et moderne : sidebar projet/sessions, chat Markdown, streaming temps réel, diffs intégrés et approbations.
 - Mascotte animée **LUPUS**, un loup veilleur qui rappelle d'observer avant d'agir.
 - Routage adaptatif : modèle spécialisé pour le code, raisonnement renforcé pour les audits et modèle rapide pour les demandes simples.
@@ -220,7 +220,7 @@ Les overrides disponibles : `--model`, `--provider`, `--free-only/--no-free-only
 | `zerocode config` | Afficher ou initialiser la configuration |
 | `zerocode completion [bash\|zsh\|fish]` | Générer le script d'autocomplétion shell |
 
-Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/undo`, `/image`, `/clear`, `/quit`.
+Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/remember`, `/copy`, `/undo`, `/image`, `/clear`, `/quit`.
 
 ## Outils et sécurité
 

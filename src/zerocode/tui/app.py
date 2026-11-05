@@ -102,6 +102,7 @@ class ZeroCodeApp(App[None]):
         Binding("f2", "toggle_last_tool", "Dernier outil", priority=True),
         Binding("f3", "cycle_think", "Mode think", priority=True),
         Binding("f6", "cycle_focus", "Focus suivant", priority=True),
+        Binding("ctrl+y", "copy_last", "Copier réponse", priority=True, show=False),
         Binding("escape", "interrupt_turn", "Interrompre", show=False),
         Binding("ctrl+q", "request_exit", "Quitter", priority=True),
     ]
@@ -950,6 +951,29 @@ class ZeroCodeApp(App[None]):
             return
         self.show_help()
 
+    def action_copy_last(self) -> None:
+        if isinstance(self.screen, ModalScreen):
+            return
+        self.copy_last_response()
+
+    def copy_last_response(self) -> None:
+        getter = getattr(self.agent, "last_assistant_text", None)
+        text = getter() if callable(getter) else ""
+        if not text:
+            for msg in reversed(getattr(self.agent, "messages", [])):
+                if isinstance(msg, dict) and msg.get("role") == "assistant":
+                    candidate = str(msg.get("content") or "").strip()
+                    if candidate:
+                        text = candidate
+                        break
+        if not text:
+            self.notice("Aucune réponse de l'assistant à copier.", "warning")
+            return
+        with contextlib.suppress(Exception):
+            self.copy_to_clipboard(text)
+        _copy_system_clipboard(text)
+        self.notice(f"Réponse copiée ({len(text)} caractères).", "success")
+
     def action_toggle_last_tool(self) -> None:
         if isinstance(self.screen, ModalScreen):
             return
@@ -1229,7 +1253,7 @@ class ZeroCodeApp(App[None]):
     def _file_selected(self, path: str | None) -> None:
         self._opening_picker = False
         if path:
-            self._insert_prompt(path + " ")
+            self._insert_prompt(f"@{path} ")
         self.query_one("#prompt", Input).focus()
 
     def _stream_text(self, delta: str) -> None:
@@ -1577,6 +1601,32 @@ def _git_branch(root: Path) -> str:
     except (OSError, subprocess.SubprocessError):
         return ""
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _copy_system_clipboard(text: str) -> bool:
+    import shutil
+
+    for cmd in (
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "--clipboard", "--input"],
+        ["pbcopy"],
+        ["clip"],
+    ):
+        if shutil.which(cmd[0]) is None:
+            continue
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            res = subprocess.run(
+                cmd,
+                input=text,
+                text=True,
+                capture_output=True,
+                timeout=2,
+                check=False,
+            )
+            if res.returncode == 0:
+                return True
+    return False
 
 
 def _relative_time(value: str) -> str:

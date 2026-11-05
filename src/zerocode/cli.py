@@ -35,6 +35,7 @@ from .config import (
 )
 from .errors import ConfigError, ZeroCodeError
 from .mcp import MCPManager, register_mcp_tools
+from .prompts import remember_project_instruction
 from .providers import (
     applied_providers,
     discover_free_models,
@@ -668,6 +669,28 @@ def _slash_command(
         return False
     if command == "init":
         _init_project_file(context, ui.console)
+        return False
+    if command == "remember":
+        if not rest:
+            ui.info("Usage: /remember <consigne durable du projet>")
+            return False
+        try:
+            target = remember_project_instruction(context.cwd, rest)
+        except (OSError, ValueError) as exc:
+            ui.warn(str(exc))
+        else:
+            agent._refresh_system_mode()
+            ui.success(f"Consigne memorisee dans {target}")
+        return False
+    if command == "copy":
+        text = agent.last_assistant_text()
+        if not text:
+            ui.warn("Aucune reponse de l'assistant a copier.")
+        else:
+            from .tui.app import _copy_system_clipboard
+
+            _copy_system_clipboard(text)
+            ui.success(f"Reponse copiee ({len(text)} caracteres).")
         return False
     if command == "undo":
         checkpoints = getattr(agent, "checkpoints", None)
