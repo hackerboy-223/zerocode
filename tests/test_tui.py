@@ -509,10 +509,26 @@ def test_tui_tool_card_shows_diff(tmp_path):
             body = card._body.content
             plain = getattr(body, "plain", str(body))
             assert "src/b.py" in plain
+            assert "[MODIFIÉ]" in plain
             assert "-old" in plain
             assert "+new" in plain
+            assert "📄 src/b.py" in str(card.title)
             assert "+1" in str(card.title)
             assert "−1" in str(card.title)
+
+            # Test SettingsScreen (F4 / /settings / /set / /route)
+            await pilot.press("f4")
+            await pilot.pause()
+            assert app.screen.__class__.__name__ == "SettingsScreen"
+            await pilot.press("escape")
+            await pilot.pause()
+
+            app.command_handler.handle("/set task_routing off")
+            assert app.config.task_routing is False
+            app.command_handler.handle("/set task_routing on")
+            assert app.config.task_routing is True
+            app.command_handler.handle("/route")
+            await pilot.pause()
 
     asyncio.run(scenario())
 

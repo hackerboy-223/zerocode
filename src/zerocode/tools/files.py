@@ -120,8 +120,9 @@ def _emit_diff(
     existed: bool,
 ) -> None:
     emitter = ctx.show_diff
-    if emitter is None or before == after:
+    if emitter is None or not getattr(ctx, "diff_view", True) or before == after:
         return
+    context_lines = max(1, min(15, int(getattr(ctx, "diff_context_lines", 3))))
     label = ctx.display_path(path)
     diff = difflib.unified_diff(
         _diff_source(before),
@@ -129,7 +130,7 @@ def _emit_diff(
         fromfile=f"a/{label}" if existed else "/dev/null",
         tofile=f"b/{label}",
         lineterm="",
-        n=3,
+        n=context_lines,
     )
     lines: list[str] = []
     truncated = False

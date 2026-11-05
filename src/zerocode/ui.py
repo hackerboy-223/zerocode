@@ -252,22 +252,12 @@ class ConsoleUI:
                 self.console.print(Text("  │ " + line[:400], style="dim"))
 
     def show_diff(self, path: str, diff: str) -> None:
-        if self.quiet:
+        if self.quiet or not getattr(self.config, "diff_view", True):
             return
         self.end_assistant()
-        self.console.print(Text("  " + _safe(path), style="bold cyan"))
-        for line in _safe(diff).splitlines():
-            if line.startswith(("+++", "---")):
-                style = "bold"
-            elif line.startswith("+"):
-                style = "green"
-            elif line.startswith("-"):
-                style = "red"
-            elif line.startswith("@@"):
-                style = "cyan"
-            else:
-                style = "dim"
-            self.console.print(Text("  " + line, style=style), soft_wrap=True)
+        from .tui.widgets import format_vscode_diff
+
+        self.console.print(format_vscode_diff(_safe(path), _safe(diff)), soft_wrap=True)
 
     def warn(self, message: str) -> None:
         self.end_assistant()

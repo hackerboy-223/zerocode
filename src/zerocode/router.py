@@ -15,6 +15,138 @@ from .providers import (
 )
 from .types import Completion, ModelSpec, ProviderSpec, StreamCallbacks
 
+TASK_LABELS: dict[str, str] = {
+    "security": "Cybersécurité & Audit",
+    "architecture": "Architecture & Raisonnement",
+    "coding": "Développement & Code",
+    "sysadmin": "Système, Réseau & DevOps",
+    "vision": "Analyse Multimodale (Vision)",
+    "fast": "Réponse Rapide",
+}
+
+TASK_MODEL_PRIORITIES: dict[str, tuple[str, ...]] = {
+    "vision": (
+        "nvidia/nemotron-3.5-super-vl:free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b:free",
+        "z-ai/glm-5.3-flash",
+        "glm-5.3-flash-free",
+        "kilo-auto/free",
+    ),
+    "security": (
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "stealth/crouton-alpha",
+        "xingchen-agi/xing4.0-29b-a4b:free",
+        "cohere/north-mini-code:free",
+        "reflection/beam-free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "poolside/laguna-s-2.1:free",
+        "kilo-auto/free",
+    ),
+    "architecture": (
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "reflection/beam-free",
+        "stealth/crouton-alpha",
+        "xingchen-agi/xing4.0-29b-a4b:free",
+        "cohere/north-mini-code:free",
+        "poolside/laguna-s-2.1:free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "kilo-auto/free",
+    ),
+    "coding": (
+        "cohere/north-mini-code:free",
+        "poolside/laguna-s-2.1:free",
+        "stealth/glyph-cluster",
+        "stealth/crouton-alpha",
+        "reflection/beam-free",
+        "xingchen-agi/xing4.0-29b-a4b:free",
+        "kilo-auto/free",
+        "nvidia/nemotron-3.5-lightning:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+    ),
+    "sysadmin": (
+        "cohere/north-mini-code:free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "nvidia/nemotron-3.5-lightning:free",
+        "stealth/crouton-alpha",
+        "poolside/laguna-s-2.1:free",
+        "kilo-auto/free",
+    ),
+    "fast": (
+        "nvidia/nemotron-3.5-lightning:free",
+        "kilo-auto/free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "cohere/north-mini-code:free",
+        "poolside/laguna-s-2.1:free",
+        "dots-studio/dots-3-note-preview:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+    ),
+}
+
+
+def classify_task(
+    messages: list[dict[str, Any]],
+    *,
+    needs_vision: bool = False,
+    prefer_reasoning: bool = False,
+) -> str:
+    """Classifie la demande courante pour sélectionner le modèle le plus adapté."""
+    if needs_vision:
+        return "vision"
+
+    user_text = ""
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            user_text = content
+        elif isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    if item.get("type") in {"image_url", "input_image"}:
+                        return "vision"
+                    if isinstance(item.get("text"), str):
+                        parts.append(item["text"])
+            user_text = " ".join(parts)
+        break
+
+    text = user_text.lower()
+    if re.search(
+        r"\b(securit|sécurit|security|audit|pentest|vuln|cve|cwe|owasp|xss|sqli|"
+        r"csrf|ssrf|injection|exploit|hardening|durcis|secret|auth|crypto|chiffre)\w*\b",
+        text,
+    ):
+        return "security"
+
+    if prefer_reasoning or re.search(
+        r"\b(architecture|architect|refactor|raisonnement|reasoning|analyse|"
+        r"analyze|debug|debog|débog|incident|conception|design|migration|complexe)\w*\b",
+        text,
+    ):
+        return "architecture"
+
+    if re.search(
+        r"\b(systemd|systemctl|docker|kubernetes|k8s|nginx|apache|ufw|iptables|"
+        r"journalctl|reseau|réseau|network|port|ssh|process|disque|disk|ram|"
+        r"memoire|mémoire|linux|kernel|devops|ci/cd|deploy|serveur|server)\w*\b",
+        text,
+    ):
+        return "sysadmin"
+
+    if re.search(
+        r"\b(code|coding|coder|bug|fix|corrig|test|build|implement|implément|"
+        r"repo|repository|projet|project|fonction|function|class|classe|api|"
+        r"develop|dévelop|application|website|site|performance|optimis|python|"
+        r"javascript|typescript|rust|go|sql|html|css|react|fichier|file)\w*\b",
+        text,
+    ):
+        return "coding"
+
+    return "fast"
+
 
 class Router:
     """Choisit un modele gratuit disponible et bascule en cas d'echec."""
@@ -34,6 +166,7 @@ class Router:
         self.last: Completion | None = None
         self.last_provider: ProviderSpec | None = None
         self.last_model: ModelSpec | None = None
+        self.last_task: str = "auto"
         self._cooldown: dict[str, float] = {}
 
     def close(self) -> None:
@@ -182,13 +315,25 @@ class Router:
             needs_vision=needs_vision,
         )
         requested_model = (model or self.config.model).strip().lower()
-        if requested_model == "auto" and not (provider or self.config.provider):
-            prefer_reasoning = bool(
-                self.config.show_reasoning
-                and getattr(self.config, "reasoning_effort", "high") in {"high", "max"}
-            )
+        prefer_reasoning = bool(
+            self.config.show_reasoning
+            and getattr(self.config, "reasoning_effort", "high") in {"high", "max"}
+        )
+        self.last_task = classify_task(
+            messages,
+            needs_vision=needs_vision,
+            prefer_reasoning=prefer_reasoning,
+        )
+        if (
+            requested_model == "auto"
+            and not (provider or self.config.provider)
+            and getattr(self.config, "task_routing", True)
+        ):
             candidates = self._rank_auto_candidates(
-                candidates, messages, prefer_reasoning=prefer_reasoning
+                candidates,
+                messages,
+                prefer_reasoning=prefer_reasoning,
+                needs_vision=needs_vision,
             )
         failures: list[tuple[str, Exception]] = []
 
@@ -230,68 +375,15 @@ class Router:
         messages: list[dict[str, Any]],
         *,
         prefer_reasoning: bool = False,
+        needs_vision: bool = False,
     ) -> list[tuple[ProviderSpec, ModelSpec]]:
         """Prefer a model family suited to the latest request, keeping fallback order stable."""
-        user_text = ""
-        for message in reversed(messages):
-            if message.get("role") != "user":
-                continue
-            content = message.get("content")
-            if isinstance(content, str):
-                user_text = content
-            elif isinstance(content, list):
-                user_text = " ".join(
-                    str(item.get("text", ""))
-                    for item in content
-                    if isinstance(item, dict) and isinstance(item.get("text"), str)
-                )
-            break
-
-        text = user_text.lower()
-        complex_task = prefer_reasoning or bool(
-            re.search(
-                r"\b(securit|security|audit|architecture|architect|refactor|"
-                r"raisonnement|reasoning|analyse|analyze|debug|debog|incident)\w*\b",
-                text,
-            )
+        task = classify_task(
+            messages,
+            needs_vision=needs_vision,
+            prefer_reasoning=prefer_reasoning,
         )
-        coding_task = complex_task or bool(
-            re.search(
-                r"\b(code|coding|coder|bug|fix|corrig|test|build|implement|"
-                r"repo|repository|projet|project|fonction|develop|dévelop|"
-                r"application|website|site|performance|optimis)\w*\b",
-                text,
-            )
-        )
-
-        if complex_task:
-            preferred = (
-                "nvidia/nemotron-3-ultra-550b-a55b:free",
-                "xingchen-agi/xing4.0-29b-a4b:free",
-                "cohere/north-mini-code:free",
-                "poolside/laguna-s-2.1:free",
-                "kilo-auto/free",
-                "nvidia/nemotron-3.5-lightning:free",
-            )
-        elif coding_task:
-            preferred = (
-                "cohere/north-mini-code:free",
-                "poolside/laguna-s-2.1:free",
-                "xingchen-agi/xing4.0-29b-a4b:free",
-                "kilo-auto/free",
-                "nvidia/nemotron-3.5-lightning:free",
-                "nvidia/nemotron-3-ultra-550b-a55b:free",
-            )
-        else:
-            preferred = (
-                "nvidia/nemotron-3.5-lightning:free",
-                "kilo-auto/free",
-                "cohere/north-mini-code:free",
-                "poolside/laguna-s-2.1:free",
-                "xingchen-agi/xing4.0-29b-a4b:free",
-                "nvidia/nemotron-3-ultra-550b-a55b:free",
-            )
-
+        preferred = TASK_MODEL_PRIORITIES.get(task, TASK_MODEL_PRIORITIES["fast"])
         priority = {model_id: index for index, model_id in enumerate(preferred)}
         indexed = list(enumerate(candidates))
         indexed.sort(

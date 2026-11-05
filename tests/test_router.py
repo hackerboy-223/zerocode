@@ -141,6 +141,55 @@ def test_auto_router_prefers_fast_model_for_simple_requests():
         router.close()
 
 
+def test_task_router_classifies_security_architecture_sysadmin_and_vision():
+    from zerocode.router import classify_task
+
+    assert (
+        classify_task(
+            [{"role": "user", "content": "Fais un audit de sécurité OWASP et cherche les failles SQLi."}]
+        )
+        == "security"
+    )
+    assert (
+        classify_task(
+            [{"role": "user", "content": "Propose une architecture microservices et un refactoring."}]
+        )
+        == "architecture"
+    )
+    assert (
+        classify_task(
+            [{"role": "user", "content": "Vérifie les services systemd, les ports réseau et docker."}]
+        )
+        == "sysadmin"
+    )
+    assert (
+        classify_task(
+            [{"role": "user", "content": "Analyse cette capture"}],
+            needs_vision=True,
+        )
+        == "vision"
+    )
+
+    router = Router(Config(model="auto", free_only=True))
+    try:
+        candidates = router.resolve_candidates("auto")
+        sec_ranked = router._rank_auto_candidates(
+            candidates,
+            [{"role": "user", "content": "Audit de sécurité CWE et vulnérabilités"}],
+        )
+        assert sec_ranked[0][1].id == "nvidia/nemotron-3-ultra-550b-a55b:free"
+
+        vis_candidates = router.resolve_candidates("auto", needs_vision=True)
+        vis_ranked = router._rank_auto_candidates(
+            vis_candidates,
+            [{"role": "user", "content": "Que vois-tu sur cette image ?"}],
+            needs_vision=True,
+        )
+        assert vis_ranked[0][1].id == "nvidia/nemotron-3.5-super-vl:free"
+    finally:
+        router.close()
+
+
 def test_context_window_uses_candidates():
     router = Router(Config(model="auto"))
     try:

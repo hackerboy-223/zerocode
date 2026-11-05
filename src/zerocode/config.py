@@ -47,6 +47,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "command_timeout": 120,
     "compact_threshold": 0.75,
     "show_reasoning": False,
+    "task_routing": True,
+    "diff_view": True,
+    "diff_context_lines": 3,
+    "auto_compact": True,
     "providers": {},
     "mcp_servers": {},
 }
@@ -163,6 +167,10 @@ def _env_overrides() -> dict[str, Any]:
         "ZEROCODE_COMMAND_TIMEOUT": ("command_timeout", "int"),
         "ZEROCODE_COMPACT_THRESHOLD": ("compact_threshold", "float"),
         "ZEROCODE_SHOW_REASONING": ("show_reasoning", "bool"),
+        "ZEROCODE_TASK_ROUTING": ("task_routing", "bool"),
+        "ZEROCODE_DIFF_VIEW": ("diff_view", "bool"),
+        "ZEROCODE_DIFF_CONTEXT_LINES": ("diff_context_lines", "int"),
+        "ZEROCODE_AUTO_COMPACT": ("auto_compact", "bool"),
     }
     result: dict[str, Any] = {}
     for env_name, (key, kind) in mapping.items():
@@ -197,6 +205,10 @@ class Config:
     command_timeout: int = 120
     compact_threshold: float = 0.75
     show_reasoning: bool = False
+    task_routing: bool = True
+    diff_view: bool = True
+    diff_context_lines: int = 3
+    auto_compact: bool = True
     providers: dict[str, dict[str, Any]] = field(default_factory=dict)
     mcp_servers: dict[str, dict[str, Any]] = field(default_factory=dict)
     base_dir: Path = field(default_factory=Path.cwd)
@@ -237,6 +249,8 @@ def validate_config(config: Config) -> None:
         raise ConfigError("command_timeout doit etre compris entre 1 et 3600 secondes.")
     if not 0.2 <= config.compact_threshold <= 0.95:
         raise ConfigError("compact_threshold doit etre compris entre 0.2 et 0.95.")
+    if not 1 <= config.diff_context_lines <= 15:
+        raise ConfigError("diff_context_lines doit etre compris entre 1 et 15.")
     if not isinstance(config.providers, dict):
         raise ConfigError("providers doit etre un objet JSON.")
     for name, override in config.providers.items():
@@ -363,10 +377,13 @@ def load_config(
         "protect_secrets",
         "allow_secrets",
         "show_reasoning",
+        "task_routing",
+        "diff_view",
+        "auto_compact",
     ):
         data[key] = _as_bool(data.get(key, DEFAULT_CONFIG[key]), key)
     data["temperature"] = _as_float(data.get("temperature", 0.2), "temperature")
-    for key in ("max_tokens", "max_steps", "command_timeout"):
+    for key in ("max_tokens", "max_steps", "command_timeout", "diff_context_lines"):
         data[key] = _as_int(data.get(key, DEFAULT_CONFIG[key]), key)
     data["compact_threshold"] = _as_float(
         data.get("compact_threshold", 0.75), "compact_threshold"

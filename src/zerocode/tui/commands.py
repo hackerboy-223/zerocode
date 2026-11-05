@@ -33,6 +33,9 @@ COMMANDS: list[tuple[str, str]] = [
     ("/safe", "Revenir au mode ask"),
     ("/reasoning [low|high|max]", "Effort de raisonnement"),
     ("/think [off|low|high|max]", "Mode think et affichage du raisonnement"),
+    ("/settings", "Panneau interactif de tous les paramètres (F4)"),
+    ("/set [clé] [valeur]", "Modifier ou basculer un paramètre directement"),
+    ("/route", "Voir le routage intelligent des modèles par tâche"),
     ("/temp [0-2]", "Température"),
     ("/max-steps [n]", "Étapes d'outils maximum"),
     ("/compact", "Compacter le contexte"),
@@ -73,6 +76,7 @@ ARG_COMMANDS = {
     "/remember",
     "/skill",
     "/audit",
+    "/set",
 }
 
 
@@ -231,6 +235,15 @@ class CommandHandler:
                 else:
                     app.config.max_steps = value
                     app.notice(f"Étapes maximum : {value}", "success")
+        elif command in {"settings", "params", "config"}:
+            if rest:
+                self._set_param(rest)
+            else:
+                app.open_settings()
+        elif command == "set":
+            self._set_param(rest)
+        elif command in {"route", "routing"}:
+            self._route_info()
         elif command == "cd":
             self._cd(rest)
         elif command == "tools":
@@ -456,6 +469,42 @@ class CommandHandler:
             app.notice(str(exc), "warning")
             return
         self.app.show_list("Diagnostic Système & Technicien", report.splitlines())
+
+    def _set_param(self, rest: str) -> None:
+        app = self.app
+        if not rest:
+            lines = [
+                f"{key:<20} = {val:<16} · {desc}"
+                for key, _label, val, desc in app._settings_rows()
+            ]
+            app.show_list("Paramètres actuels (/set <clé> [valeur])", lines)
+            return
+        key, _, val = rest.partition(" ")
+        try:
+            msg = app.toggle_setting(key, val.strip() if val.strip() else None)
+        except ValueError as exc:
+            app.notice(f"Valeur invalide : {exc}", "warning")
+            return
+        app.notice(msg, "warning" if msg.startswith("Paramètre inconnu") else "success")
+
+    def _route_info(self) -> None:
+        from ..router import TASK_LABELS, TASK_MODEL_PRIORITIES
+
+        app = self.app
+        enabled = getattr(app.config, "task_routing", True)
+        last_task = getattr(app.router, "last_task", "auto")
+        lines = [
+            f"Modèle configuré   : {app.config.model}",
+            f"Fournisseur        : {app.config.provider or 'auto'}",
+            f"Routage par tâche  : {'ACTIF' if enabled else 'désactivé'}",
+            f"Dernière tâche     : {last_task} ({TASK_LABELS.get(last_task, 'Auto')})",
+            "",
+            "Profils de sélection automatique par tâche :",
+        ]
+        for task_key, label in TASK_LABELS.items():
+            top_models = ", ".join(TASK_MODEL_PRIORITIES.get(task_key, ())[:3])
+            lines.append(f"  • {task_key:<13} ({label:<28}) → {top_models}")
+        app.show_list("Routage Intelligent par Tâche", lines)
 
 
 def usage_summary(usage: Any, completion: Any = None) -> str:

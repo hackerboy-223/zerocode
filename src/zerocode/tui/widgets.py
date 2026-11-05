@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 
 from rich.text import Text
@@ -244,13 +245,16 @@ class ToolCard(Collapsible):
         diff_lines = self.diff.splitlines()
         if diff_lines:
             body.append("\n")
-            body.append("fichier " + self.diff_path, style="bold #7dd3fc")
-            body.append(f"  +{self.diff_added}", style="bold #34d399")
-            body.append(f"  −{self.diff_removed}\n", style="bold #f87171")
-            for line in diff_lines:
-                body.append(line + "\n", style=_diff_style(line))
+            body.append_text(
+                format_vscode_diff(
+                    self.diff_path,
+                    self.diff,
+                    added=self.diff_added,
+                    removed=self.diff_removed,
+                )
+            )
         self._body.update(body)
-        self.collapsed = len(diff_lines) > 80 if diff_lines else len(lines) > 8
+        self.collapsed = len(diff_lines) > 120 if diff_lines else len(lines) > 8
 
     def _header(
         self,
@@ -262,13 +266,98 @@ class ToolCard(Collapsible):
         title = Text()
         title.append(f"{icon} ", style=icon_style)
         title.append(self.tool_name, style="bold #ececec")
-        if self.preview:
+        if self.diff_path:
+            title.append(f"  📄 {self.diff_path}", style="bold #7dd3fc")
+        elif self.preview:
             title.append("  " + truncate_text(self.preview, 88), style="#9b9b9b")
         if suffix:
             title.append("  ·  " + suffix, style="#676767")
         elif badge == "en cours":
             title.append("  ·  en cours…", style="#fbbf24")
         return title
+
+
+_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$")
+
+
+def format_vscode_diff(
+    path: str,
+    diff_text: str,
+    *,
+    added: int | None = None,
+    removed: int | None = None,
+) -> Text:
+    """Formate un diff unifié façon VS Code CLI / Claude Code avec numéros de lignes doubles."""
+    lines = diff_text.splitlines()
+    is_new_file = any(line.startswith("--- /dev/null") for line in lines[:3])
+    if added is None or removed is None:
+        added = sum(1 for ln in lines if ln.startswith("+") and not ln.startswith("+++"))
+        removed = sum(1 for ln in lines if ln.startswith("-") and not ln.startswith("---"))
+
+    total_changes = max(1, added + removed)
+    bar_slots = 8
+    green_slots = round((added / total_changes) * bar_slots) if added else 0
+    if added > 0 and green_slots == 0:
+        green_slots = 1
+    red_slots = max(0, min(bar_slots - green_slots, round((removed / total_changes) * bar_slots)))
+    if removed > 0 and red_slots == 0 and green_slots < bar_slots:
+        red_slots = 1
+
+    parent, sep, name = path.rpartition("/")
+    out = Text()
+    out.append("╭─ ", style="#383838")
+    out.append("📄 ", style="#7dd3fc")
+    if parent:
+        out.append(parent + sep, style="#8e8e8e")
+    out.append(name or path, style="bold #ececec")
+    badge_label = " CRÉÉ " if is_new_file else " MODIFIÉ "
+    badge_style = "bold #10a37f" if is_new_file else "bold #fbbf24"
+    out.append(f"  [{badge_label.strip()}]", style=badge_style)
+    out.append(f"  +{added}", style="bold #34d399")
+    out.append(f"  −{removed}  ", style="bold #f87171")
+    if green_slots:
+        out.append("■" * green_slots, style="#34d399")
+    if red_slots:
+        out.append("■" * red_slots, style="#f87171")
+    out.append("\n")
+
+    old_ln = 1
+    new_ln = 1
+    for line in lines:
+        if line.startswith(("+++", "---")):
+            continue
+        match = _HUNK_RE.match(line)
+        if match:
+            old_ln = int(match.group(1))
+            new_ln = int(match.group(3))
+            ctx_hint = match.group(5).strip()
+            hunk_label = f"@@ L{old_ln} → L{new_ln} @@"
+            if ctx_hint:
+                hunk_label += f"  {ctx_hint}"
+            out.append("│    ··   ·· │ ", style="#383838")
+            out.append(hunk_label + "\n", style="bold #7dd3fc")
+            continue
+        if line.startswith("+"):
+            out.append("│ ", style="#383838")
+            out.append(f"{'·':>4} {new_ln:>4} │ ", style="#34d399")
+            out.append(line + "\n", style="#34d399 on #11281f")
+            new_ln += 1
+        elif line.startswith("-"):
+            out.append("│ ", style="#383838")
+            out.append(f"{old_ln:>4} {'·':>4} │ ", style="#f87171")
+            out.append(line + "\n", style="#f87171 on #2b1418")
+            old_ln += 1
+        elif line.startswith(" "):
+            out.append("│ ", style="#383838")
+            out.append(f"{old_ln:>4} {new_ln:>4} │ ", style="#525252")
+            out.append(line + "\n", style="#9b9b9b")
+            old_ln += 1
+            new_ln += 1
+        else:
+            out.append("│           │ ", style="#383838")
+            out.append(line + "\n", style=_diff_style(line))
+    out.append("╰────────────┴" + ("─" * 44) + "\n", style="#383838")
+    return out
 
 
 def _diff_style(line: str) -> str:

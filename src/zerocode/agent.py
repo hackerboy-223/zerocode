@@ -304,6 +304,8 @@ class Agent:
         )
 
     def _maybe_compact(self) -> None:
+        if not getattr(self.config, "auto_compact", True):
+            return
         context = self.router.context_window(self.config.model)
         overhead = 2_000
         if estimate_messages(self.messages) + overhead > int(

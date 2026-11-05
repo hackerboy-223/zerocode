@@ -27,7 +27,9 @@ from textual.widgets import (
 )
 
 from ..checkpoints import CheckpointStore
+from ..config import default_config_path, save_config
 from ..errors import ZeroCodeError
+from ..router import TASK_LABELS
 from ..tools.base import is_secret_path
 from ..ui import _format_tool_args, _safe
 from ..version import __author__, __github__, __portfolio__, __version__
@@ -39,6 +41,7 @@ from .screens import (
     FilePickerScreen,
     HelpScreen,
     PasswordScreen,
+    SettingsScreen,
 )
 from .widgets import PromptInput, ThinkingIndicator, ToolCard, WolfMascot
 
@@ -98,6 +101,8 @@ class ZeroCodeApp(App[None]):
         Binding("f1", "help", "Aide", priority=True),
         Binding("f2", "toggle_last_tool", "Dernier outil", priority=True),
         Binding("f3", "cycle_think", "Mode think", priority=True),
+        Binding("f4", "open_settings", "Paramètres", priority=True),
+        Binding("ctrl+p", "open_settings", "Paramètres", priority=True, show=False),
         Binding("f6", "cycle_focus", "Focus suivant", priority=True),
         Binding("ctrl+y", "copy_last", "Copier réponse", priority=True, show=False),
         Binding("escape", "interrupt_turn", "Interrompre", show=False),
@@ -624,49 +629,23 @@ class ZeroCodeApp(App[None]):
                         classes="web-chip think-chip",
                     )
                     btn_think.can_focus = False
+                    btn_think.active_effect_duration = 0.0
                     yield btn_think
                 with Horizontal(id="web-toolbar"):
-                    btn_build = Button("Build", id="chip-build", classes="web-chip")
-                    btn_build.can_focus = False
-                    yield btn_build
-
-                    btn_plan = Button("Plan", id="chip-plan", classes="web-chip")
-                    btn_plan.can_focus = False
-                    yield btn_plan
-
-                    btn_fs = Button(
-                        "Full-stack",
-                        id="chip-fullstack",
-                        classes="web-chip accent-chip",
-                    )
-                    btn_fs.can_focus = False
-                    yield btn_fs
-
-                    btn_files = Button(
-                        "Fichier", id="chip-files", classes="web-chip"
-                    )
-                    btn_files.can_focus = False
-                    yield btn_files
-
-                    btn_todos = Button(
-                        "Tâches", id="chip-todos", classes="web-chip"
-                    )
-                    btn_todos.can_focus = False
-                    yield btn_todos
-
-                    btn_tools = Button(
-                        "Outils", id="chip-tools", classes="web-chip"
-                    )
-                    btn_tools.can_focus = False
-                    yield btn_tools
-
-                    btn_palette = Button(
-                        "Commandes",
-                        id="chip-palette",
-                        classes="web-chip primary-chip",
-                    )
-                    btn_palette.can_focus = False
-                    yield btn_palette
+                    for chip_id, chip_label, chip_cls in (
+                        ("chip-build", "Build", "web-chip"),
+                        ("chip-plan", "Plan", "web-chip"),
+                        ("chip-fullstack", "Full-stack", "web-chip accent-chip"),
+                        ("chip-files", "Fichier", "web-chip"),
+                        ("chip-todos", "Tâches", "web-chip"),
+                        ("chip-tools", "Outils", "web-chip"),
+                        ("chip-settings", "Paramètres", "web-chip"),
+                        ("chip-palette", "Commandes", "web-chip primary-chip"),
+                    ):
+                        btn = Button(chip_label, id=chip_id, classes=chip_cls)
+                        btn.can_focus = False
+                        btn.active_effect_duration = 0.0
+                        yield btn
 
                 yield VerticalScroll(id="chat")
                 with Vertical(id="inspector", classes="hidden"):
@@ -729,6 +708,8 @@ class ZeroCodeApp(App[None]):
             self.set_mode("todos" if self._mode != "todos" else "chat")
         elif btn_id == "chip-tools":
             self.set_mode("tools" if self._mode != "tools" else "chat")
+        elif btn_id == "chip-settings":
+            self.action_open_settings()
         elif btn_id == "chip-palette":
             self.action_command_palette()
         else:
@@ -947,6 +928,230 @@ class ZeroCodeApp(App[None]):
             return
         self.cycle_think_mode()
 
+    def action_open_settings(self) -> None:
+        if self._busy or isinstance(self.screen, ModalScreen):
+            return
+        self.open_settings()
+
+    def open_settings(self) -> None:
+        self.push_screen(SettingsScreen(self._settings_rows, self.toggle_setting))
+
+    def _settings_rows(self) -> list[tuple[str, str, str, str]]:
+        cfg = self.config
+        return [
+            ("mode", "Mode de travail", self.work_mode, "build / plan / full-stack"),
+            ("think", "Mode Think", self.current_think_mode(), "off / low / high / max"),
+            (
+                "task_routing",
+                "Routage par tâche",
+                "on" if getattr(cfg, "task_routing", True) else "off",
+                "Sélectionne le modèle optimal selon la tâche",
+            ),
+            ("model", "Modèle", str(cfg.model), "auto ou identifiant de modèle"),
+            (
+                "provider",
+                "Fournisseur",
+                str(cfg.provider or "auto"),
+                "auto / kilo / openrouter / nvidia / groq / zai",
+            ),
+            ("permissions", "Permissions", str(self.permissions.mode), "ask / allow / deny"),
+            (
+                "diff_view",
+                "Diff fichier VS Code",
+                "on" if getattr(cfg, "diff_view", True) else "off",
+                "Affiche le fichier et le diff numéroté après édition",
+            ),
+            (
+                "diff_context_lines",
+                "Contexte diff (lignes)",
+                str(getattr(cfg, "diff_context_lines", 3)),
+                "Nombre de lignes de contexte autour des modifications (1-15)",
+            ),
+            (
+                "free_only",
+                "Modèles gratuits seuls",
+                "on" if cfg.free_only else "off",
+                "Bloquer les modèles payants",
+            ),
+            (
+                "fallback",
+                "Fallback automatique",
+                "on" if cfg.fallback else "off",
+                "Basculer si un modèle atteint son quota",
+            ),
+            (
+                "auto_compact",
+                "Compaction auto",
+                "on" if getattr(cfg, "auto_compact", True) else "off",
+                "Compacter le contexte automatiquement",
+            ),
+            (
+                "protect_secrets",
+                "Protection secrets",
+                "on" if cfg.protect_secrets else "off",
+                "Bloquer la lecture des fichiers .env / clés privées",
+            ),
+            (
+                "allow_outside_cwd",
+                "Accès hors projet",
+                "on" if cfg.allow_outside_cwd else "off",
+                "Autoriser la lecture/écriture hors du dossier courant",
+            ),
+            ("temperature", "Température", str(cfg.temperature), "Créativité du modèle (0.0 à 2.0)"),
+            ("max_steps", "Étapes max", str(cfg.max_steps), "Nombre max d'étapes d'outils par tour"),
+            ("max_tokens", "Jetons sortie max", str(cfg.max_tokens), "Taille max d'une réponse"),
+            (
+                "command_timeout",
+                "Timeout shell (s)",
+                f"{cfg.command_timeout}s",
+                "Délai max d'une commande bash",
+            ),
+            (
+                "save",
+                "Sauvegarder config",
+                "disque",
+                f"Enregistrer dans {default_config_path()}",
+            ),
+        ]
+
+    def toggle_setting(self, key: str, explicit_value: str | None = None) -> str:
+        cfg = self.config
+        token = key.strip().lower().replace("-", "_")
+        val = explicit_value.strip() if explicit_value is not None else None
+
+        def _parse_bool(raw: str | None, current: bool) -> bool:
+            if raw is None:
+                return not current
+            return raw.lower() in {"1", "true", "on", "oui", "yes"}
+
+        if token == "mode":
+            modes = ("build", "plan", "full-stack")
+            target = val if val in modes else modes[(modes.index(self.work_mode) + 1) % len(modes)]
+            self.set_work_mode(target, quiet=True)
+            msg = f"Mode de travail : {self.work_mode}"
+        elif token in {"think", "thinking"}:
+            target = (
+                val
+                if val in THINK_MODES
+                else THINK_MODES[(THINK_MODES.index(self.current_think_mode()) + 1) % len(THINK_MODES)]
+            )
+            self.set_think_mode(target, quiet=True)
+            msg = f"Mode Think : {self.current_think_mode()}"
+        elif token in {"task_routing", "routing"}:
+            cfg.task_routing = _parse_bool(val, getattr(cfg, "task_routing", True))
+            msg = f"Routage par tâche : {'on' if cfg.task_routing else 'off'}"
+        elif token == "model":
+            choices = (
+                "auto",
+                "cohere/north-mini-code:free",
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+                "nvidia/nemotron-3.5-lightning:free",
+                "nvidia/nemotron-3.5-super-vl:free",
+                "reflection/beam-free",
+                "stealth/crouton-alpha",
+                "poolside/laguna-s-2.1:free",
+                "glm-5.3-flash",
+            )
+            if val:
+                target = val
+            else:
+                idx = choices.index(cfg.model) if cfg.model in choices else -1
+                target = choices[(idx + 1) % len(choices)]
+            self.agent.set_model(target)
+            msg = f"Modèle : {cfg.model}"
+        elif token == "provider":
+            providers = (None, "kilo", "openrouter", "nvidia", "groq", "gemini", "zai")
+            if val is not None:
+                target_prov = None if val.lower() in {"auto", "none", "null"} else val.lower()
+            else:
+                idx = providers.index(cfg.provider) if cfg.provider in providers else 0
+                target_prov = providers[(idx + 1) % len(providers)]
+            self.agent.set_provider(target_prov)
+            msg = f"Fournisseur : {cfg.provider or 'auto'}"
+        elif token == "permissions":
+            perms = ("ask", "allow", "deny")
+            target = (
+                val
+                if val in perms
+                else perms[(perms.index(self.permissions.mode) + 1) % len(perms)]
+            )
+            self.permissions.mode = target
+            cfg.permissions = target
+            msg = f"Permissions : {target}"
+        elif token in {"diff_view", "diff"}:
+            cfg.diff_view = _parse_bool(val, getattr(cfg, "diff_view", True))
+            self.context.diff_view = cfg.diff_view
+            msg = f"Diff fichier VS Code : {'on' if cfg.diff_view else 'off'}"
+        elif token in {"diff_context_lines", "diff_context"}:
+            steps = (1, 3, 5, 8, 12)
+            cur = int(getattr(cfg, "diff_context_lines", 3))
+            if val is not None:
+                cur = max(1, min(15, int(val)))
+            else:
+                idx = steps.index(cur) if cur in steps else 1
+                cur = steps[(idx + 1) % len(steps)]
+            cfg.diff_context_lines = cur
+            self.context.diff_context_lines = cur
+            msg = f"Contexte diff : {cur} lignes"
+        elif token == "free_only":
+            cfg.free_only = _parse_bool(val, cfg.free_only)
+            msg = f"Modèles gratuits seuls : {'on' if cfg.free_only else 'off'}"
+        elif token == "fallback":
+            cfg.fallback = _parse_bool(val, cfg.fallback)
+            msg = f"Fallback automatique : {'on' if cfg.fallback else 'off'}"
+        elif token == "auto_compact":
+            cfg.auto_compact = _parse_bool(val, getattr(cfg, "auto_compact", True))
+            msg = f"Compaction auto : {'on' if cfg.auto_compact else 'off'}"
+        elif token == "protect_secrets":
+            cfg.protect_secrets = _parse_bool(val, cfg.protect_secrets)
+            self.context.protect_secrets = cfg.protect_secrets
+            msg = f"Protection secrets : {'on' if cfg.protect_secrets else 'off'}"
+        elif token == "allow_outside_cwd":
+            cfg.allow_outside_cwd = _parse_bool(val, cfg.allow_outside_cwd)
+            self.context.allow_outside = cfg.allow_outside_cwd
+            msg = f"Accès hors projet : {'on' if cfg.allow_outside_cwd else 'off'}"
+        elif token in {"temperature", "temp"}:
+            temps = (0.0, 0.2, 0.4, 0.7, 1.0)
+            if val is not None:
+                cfg.temperature = max(0.0, min(2.0, float(val)))
+            else:
+                idx = temps.index(cfg.temperature) if cfg.temperature in temps else 1
+                cfg.temperature = temps[(idx + 1) % len(temps)]
+            msg = f"Température : {cfg.temperature}"
+        elif token == "max_steps":
+            limits = (20, 40, 100, 250, 500)
+            if val is not None:
+                cfg.max_steps = max(1, min(500, int(val)))
+            else:
+                idx = limits.index(cfg.max_steps) if cfg.max_steps in limits else 1
+                cfg.max_steps = limits[(idx + 1) % len(limits)]
+            msg = f"Étapes max : {cfg.max_steps}"
+        elif token == "max_tokens":
+            tokens = (4096, 8192, 16384, 32768, 65536, 128000)
+            if val is not None:
+                cfg.max_tokens = max(256, min(128000, int(val)))
+            else:
+                idx = tokens.index(cfg.max_tokens) if cfg.max_tokens in tokens else 1
+                cfg.max_tokens = tokens[(idx + 1) % len(tokens)]
+            msg = f"Jetons sortie max : {cfg.max_tokens}"
+        elif token in {"command_timeout", "timeout"}:
+            timeouts = (60, 120, 300, 900, 3600)
+            if val is not None:
+                cfg.command_timeout = max(1, min(3600, int(val)))
+            else:
+                idx = timeouts.index(cfg.command_timeout) if cfg.command_timeout in timeouts else 1
+                cfg.command_timeout = timeouts[(idx + 1) % len(timeouts)]
+            self.context.command_timeout = cfg.command_timeout
+            msg = f"Timeout shell : {cfg.command_timeout}s"
+        elif token == "save":
+            target_path = save_config(cfg)
+            msg = f"Configuration sauvegardée dans {target_path}"
+        else:
+            return f"Paramètre inconnu : {key}"
+
+        self.refresh_after_command()
+        return msg
+
     def refresh_think_chip(self) -> None:
         try:
             button = self.query_one("#chip-think", Button)
@@ -1082,6 +1287,7 @@ class ZeroCodeApp(App[None]):
             ("↑ ↓", "historique des demandes"),
             ("F2", "replier / ouvrir le dernier outil"),
             ("F3", "mode think : off / low / high / max"),
+            ("F4 / Ctrl+P", "paramètres complets de ZeroCode"),
             ("F6", "focus prompt → fichiers → sessions → chat"),
             ("Échap", "interrompre le tour en cours"),
             ("Ctrl+B", "afficher ou masquer la sidebar"),
@@ -1412,6 +1618,15 @@ class ZeroCodeApp(App[None]):
             text.append(
                 route[0] if route else "aucune route", style="#8e8e8e"
             )
+        last_task = getattr(self.router, "last_task", "auto")
+        if (
+            width >= 92
+            and self.config.model == "auto"
+            and getattr(self.config, "task_routing", True)
+            and last_task in TASK_LABELS
+        ):
+            text.append("  ·  ", style="#383838")
+            text.append(f"tâche:{last_task}", style="#7dd3fc")
         if width >= 64:
             text.append("  ·  ", style="#383838")
             text.append(f"{self.permissions.mode}", style="#8e8e8e")

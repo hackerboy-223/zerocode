@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from rich.text import Text
@@ -306,3 +306,94 @@ class HelpScreen(ModalScreen[None]):
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+
+class SettingsScreen(ModalScreen[None]):
+    """Panneau interactif de paramétrage complet de ZeroCode."""
+
+    BINDINGS = [Binding("escape", "close", "Fermer")]
+
+    def __init__(
+        self,
+        get_rows: Callable[[], list[tuple[str, str, str, str]]],
+        on_toggle: Callable[[str], str | None],
+    ) -> None:
+        super().__init__()
+        self._get_rows = get_rows
+        self._on_toggle = on_toggle
+        self._filtered: list[tuple[str, str, str, str]] = []
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="palette-dialog"):
+            yield Label("Paramètres ZeroCode", classes="palette-title")
+            yield Input(placeholder="Filtrer un paramètre…", id="command-filter")
+            yield OptionList(id="command-options")
+            yield Static(
+                "Entrée basculer/modifier · Échap fermer",
+                id="command-hint",
+                classes="palette-hint",
+            )
+
+    def on_mount(self) -> None:
+        self._refresh("")
+        self.query_one("#command-filter", Input).focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "command-filter":
+            self._refresh(event.value)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "command-filter" and self._filtered:
+            self._activate(self._filtered[0][0])
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option.id:
+            self._activate(event.option.id)
+
+    def _activate(self, key: str) -> None:
+        status = self._on_toggle(key)
+        query = self.query_one("#command-filter", Input).value
+        self._refresh(query, status=status)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    def _refresh(self, query: str, *, status: str | None = None) -> None:
+        needle = query.lower().strip()
+        rows = self._get_rows()
+        matches = [
+            row
+            for row in rows
+            if not needle
+            or needle in row[0].lower()
+            or needle in row[1].lower()
+            or needle in row[2].lower()
+            or needle in row[3].lower()
+        ]
+        self._filtered = matches
+        option_list = self.query_one("#command-options", OptionList)
+        highlighted = option_list.highlighted or 0
+        if matches:
+            opts: list[Option] = []
+            for key, label, value, desc in matches:
+                val_style = (
+                    "bold #34d399"
+                    if value in {"on", "allow", "full-stack", "max", "high"}
+                    else "bold #7dd3fc"
+                    if value not in {"off", "deny"}
+                    else "#8e8e8e"
+                )
+                line = Text.assemble(
+                    (f"{label:<26}", "bold #ececec"),
+                    (f" [{value:<18}] ", val_style),
+                    (desc, "#7d8998"),
+                )
+                opts.append(Option(line, id=key))
+            option_list.set_options(opts)
+            option_list.highlighted = min(highlighted, len(opts) - 1)
+        else:
+            option_list.set_options(
+                [Option(Text("Aucun paramètre", style="dim"), disabled=True)]
+            )
+        hint = status or f"{len(matches)} paramètres · Entrée basculer · Échap fermer"
+        self.query_one("#command-hint", Static).update(hint)

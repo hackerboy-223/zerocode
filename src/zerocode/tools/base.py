@@ -55,6 +55,8 @@ class ToolContext:
     max_output_chars: int = 30_000
     protect_secrets: bool = True
     allow_secrets: bool = False
+    diff_view: bool = True
+    diff_context_lines: int = 3
     todos: list[dict[str, Any]] = field(default_factory=list)
     request_sudo_password: Callable[[str], str | None] | None = None
     show_diff: Callable[[str, str], None] | None = None

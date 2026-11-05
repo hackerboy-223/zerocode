@@ -188,6 +188,18 @@ def _run_parser() -> argparse.ArgumentParser:
         metavar="NOM",
         help="Activer un ou plusieurs skills (ultra-dev, cyber-sec, sys-tech, review, perf, sec-hardening, all).",
     )
+    parser.add_argument(
+        "--task-routing",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Choisir automatiquement le modele optimal selon la tache (defaut: oui).",
+    )
+    parser.add_argument(
+        "--diff-view",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Afficher le fichier et le diff numerote style VS Code lors des modifications (defaut: oui).",
+    )
     parser.add_argument("--show-thinking", action="store_true", help="Afficher le raisonnement.")
     parser.add_argument("-q", "--quiet", action="store_true", help="Reduire la sortie des outils.")
     parser.add_argument(
@@ -234,6 +246,8 @@ def run_agent(
         "protect_secrets": args.protect_secrets,
         "allow_secrets": args.allow_secrets,
         "show_reasoning": True if args.show_thinking else None,
+        "task_routing": args.task_routing,
+        "diff_view": args.diff_view,
     }
     if args.yolo:
         overrides["permissions"] = "allow"
@@ -287,6 +301,8 @@ def run_agent(
         command_timeout=config.command_timeout,
         protect_secrets=config.protect_secrets,
         allow_secrets=config.allow_secrets,
+        diff_view=config.diff_view,
+        diff_context_lines=config.diff_context_lines,
         todos=[todo for todo in session.todos if isinstance(todo, dict)],
         request_sudo_password=ui.request_sudo_password,
     )
@@ -758,6 +774,20 @@ def _slash_command(
             ui.success(message)
         else:
             ui.warn(message)
+        return False
+    if command in {"settings", "params", "config"}:
+        for k, v in config.public_dict().items():
+            if k in {"providers", "mcp_servers"}:
+                continue
+            ui.info(f"{k:<20} = {v}")
+        return False
+    if command in {"route", "routing"}:
+        from .router import TASK_LABELS, TASK_MODEL_PRIORITIES
+
+        ui.info(f"task_routing: {'on' if config.task_routing else 'off'} (derniere tache: {router.last_task})")
+        for task_key, label in TASK_LABELS.items():
+            top = ", ".join(TASK_MODEL_PRIORITIES.get(task_key, ())[:3])
+            ui.info(f"  {task_key:<13} ({label}) -> {top}")
         return False
     if command == "setup":
         ui.info("Quitte et lance `zerocode setup`.")
