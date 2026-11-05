@@ -117,9 +117,9 @@ class ZeroCodeApp(App[None]):
     }
 
     #brandbar {
-        height: 2;
+        height: 1;
         padding: 0 2;
-        background: #0b0f14;
+        background: #0d1117;
         color: #7d8998;
         border-bottom: solid #151d27;
     }
@@ -181,6 +181,30 @@ class ZeroCodeApp(App[None]):
     .web-chip.accent-chip:hover {
         background: #171326;
         color: #c4b5fd;
+    }
+
+    .web-chip.chip-active-build {
+        background: #0f2920;
+        color: #34d399;
+        text-style: bold;
+    }
+
+    .web-chip.chip-active-plan {
+        background: #2b2110;
+        color: #fbbf24;
+        text-style: bold;
+    }
+
+    .web-chip.chip-active-fs {
+        background: #221738;
+        color: #c4b5fd;
+        text-style: bold;
+    }
+
+    .web-chip.chip-active-panel {
+        background: #122436;
+        color: #7dd3fc;
+        text-style: bold;
     }
 
     .think-chip {
@@ -281,9 +305,9 @@ class ZeroCodeApp(App[None]):
     }
 
     #status {
-        height: 2;
+        height: 1;
         padding: 0 2;
-        background: #0b0f14;
+        background: #0d1117;
         color: #6f7c8e;
         border-top: solid #151d27;
     }
@@ -1086,19 +1110,24 @@ class ZeroCodeApp(App[None]):
         mode_row.append(f"  ·  permissions {self.permissions.mode}", style="#7d8998")
         grid.add_row("Mode", mode_row)
 
+        security_row = Text("DLP secrets · Pare-feu shell · Anti-SSRF", style="#34d399")
+        if os.environ.get("ZEROCODE_SANDBOX") == "1":
+            security_row.append(" · Sandbox bwrap", style="bold #7dd3fc")
+        grid.add_row("Sécurité", security_row)
+
         workspace = Text(str(self.context.cwd), style="bold #e6edf3")
         if self._branch:
             workspace.append(f"  ⎇ {self._branch}", style="#7dd3fc")
         grid.add_row("Workspace", workspace)
 
         header = Text()
-        header.append("zerocode", style="bold #e6edf3")
-        header.append(f"  v{__version__}\n", style="#6f7c8e")
+        header.append(" ZEROCODE ", style="bold #071016 on #7dd3fc")
+        header.append(f"  v{__version__}\n", style="bold #e6edf3")
         header.append("Agent de codage autonome dans le terminal", style="#7d8998")
 
         footer = Text()
         footer.append(
-            "\nEntrée envoyer  ·  @ joindre un fichier  ·  Ctrl+K commandes  ·  F1 aide\n",
+            "\nEntrée envoyer  ·  @ fichier  ·  Ctrl+K commandes  ·  Ctrl+Y copier  ·  F1 aide\n",
             style="#6f7c8e",
         )
         footer.append("Créé par ", style="#6f7c8e")
@@ -1223,7 +1252,7 @@ class ZeroCodeApp(App[None]):
         if images:
             label += f"\n[{len(images)} image(s) jointe(s)]"
         body = Text.assemble(
-            ("Vous", "bold #7dd3fc"),
+            (" VOUS ", "bold #071016 on #7dd3fc"),
             (f"  {stamp}\n", "#6f7c8e"),
             (label, "#e6edf3"),
         )
@@ -1232,8 +1261,10 @@ class ZeroCodeApp(App[None]):
     def _mount_agent_header(self) -> None:
         stamp = datetime.now().strftime("%H:%M")
         hdr = Text.assemble(
-            ("Zerocode", "bold #34d399"),
-            (f"  {self.config.model}  ·  {stamp}", "#6f7c8e"),
+            ("● ", "bold #34d399"),
+            ("zerocode", "bold #e6edf3"),
+            (f"  {self.config.model}", "#7dd3fc"),
+            (f"  ·  {stamp}", "#6f7c8e"),
         )
         self._mount(Static(hdr, classes="agent-header"))
 
@@ -1444,6 +1475,15 @@ class ZeroCodeApp(App[None]):
             text.append(
                 f"{usage.total_tokens:,} jetons".replace(",", " "), style="#6f7c8e"
             )
+        if self.context.todos and width >= 84:
+            done_todos = sum(
+                1 for t in self.context.todos if str(t.get("status")) == "completed"
+            )
+            text.append("  ·  ", style="#263244")
+            text.append(
+                f"tâches {done_todos}/{len(self.context.todos)}",
+                style="#34d399" if done_todos == len(self.context.todos) else "#7dd3fc",
+            )
         if self._busy:
             if self._interrupt_requested:
                 text.append("  ·  interruption…", style="bold #f87171")
@@ -1458,13 +1498,13 @@ class ZeroCodeApp(App[None]):
         except Exception:  # noqa: BLE001 - montage initial
             return
         text = Text()
-        text.append("zerocode", style="bold #e6edf3")
-        text.append(f"  {__version__}", style="#6f7c8e")
+        text.append(" ZEROCODE ", style="bold #071016 on #7dd3fc")
+        text.append(f"  v{__version__}", style="bold #e6edf3")
         text.append(f"   /{self.context.cwd.name}", style="bold #c9d1d9")
         if self._branch:
             text.append(f"   ⎇ {self._branch}", style="#7dd3fc")
         text.append("   ·   ", style="#263244")
-        text.append(__author__, style="#7d8998")
+        text.append(__author__, style="bold #c9d1d9")
         text.append("   ", style="#6f7c8e")
         text.append(__github__, style=f"#7dd3fc underline link {__github__}")
         if self.size.width >= 110:
@@ -1522,6 +1562,23 @@ class ZeroCodeApp(App[None]):
         if self.size.width >= 116:
             text.append("  Shift+Tab mode  ·  Tab panneaux", style="#4d5867")
         bar.update(text)
+        self._refresh_toolbar_chips()
+
+    def _refresh_toolbar_chips(self) -> None:
+        with contextlib.suppress(Exception):
+            self.query_one("#chip-build", Button).set_class(
+                self.work_mode == "build", "chip-active-build"
+            )
+            self.query_one("#chip-plan", Button).set_class(
+                self.work_mode == "plan", "chip-active-plan"
+            )
+            self.query_one("#chip-fullstack", Button).set_class(
+                self.work_mode == "full-stack", "chip-active-fs"
+            )
+            btn_todos = self.query_one("#chip-todos", Button)
+            count = len(self.context.todos)
+            btn_todos.label = f"Tâches ({count})" if count else "Tâches"
+            btn_todos.set_class(self._mode == "todos", "chip-active-panel")
 
     def _refresh_prompt_placeholder(self) -> None:
         try:

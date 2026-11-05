@@ -138,6 +138,7 @@ class ToolCard(Collapsible):
         self.tool_name = name
         self.preview = " ".join(_safe(preview).split())
         self.done = False
+        self._started = time.monotonic()
         self.diff_path = ""
         self.diff = ""
         self.diff_added = 0
@@ -177,9 +178,11 @@ class ToolCard(Collapsible):
         is_error = _is_tool_error(result)
         self.remove_class("running")
         self.add_class("error" if is_error else "success")
+        elapsed = max(0.0, time.monotonic() - self._started)
         suffix = f"{len(lines)} ligne{'s' if len(lines) > 1 else ''}"
         if self.diff:
             suffix += f" · +{self.diff_added} −{self.diff_removed}"
+        suffix += f" · {elapsed:.2f}s" if elapsed < 10 else f" · {elapsed:.1f}s"
         badge = "erreur" if is_error else "ok"
         self.title = self._header(
             "✕" if is_error else "✓",
@@ -192,6 +195,8 @@ class ToolCard(Collapsible):
         for index, line in enumerate(rendered):
             if is_error and index == 0:
                 style = "bold #f87171"
+            elif line.startswith("DIAGNOSTIC "):
+                style = "bold #fbbf24"
             elif line.startswith("+") and not line.startswith("+++"):
                 style = "#34d399"
             elif line.startswith("-") and not line.startswith("---"):

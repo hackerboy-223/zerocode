@@ -4,6 +4,7 @@ import getpass
 import json
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -164,6 +165,7 @@ class ConsoleUI:
         self.interactive = sys.stdin.isatty() if interactive is None else interactive
         self._in_text = False
         self._in_reasoning = False
+        self._tool_started = 0.0
         self._prompt_session: Any = None
         self._history_path = data_dir() / "history"
 
@@ -202,6 +204,7 @@ class ConsoleUI:
 
     def tool_start(self, name: str, args: dict[str, Any]) -> None:
         self.end_assistant()
+        self._tool_started = time.monotonic()
         line = Text("→ ", style="cyan")
         line.append(name, style="bold cyan")
         if not self.quiet:
@@ -211,6 +214,11 @@ class ConsoleUI:
         self.console.print(line)
 
     def tool_result(self, name: str, result: str) -> None:
+        elapsed = (
+            max(0.0, time.monotonic() - self._tool_started)
+            if self._tool_started
+            else 0.0
+        )
         safety_text = " ".join(result.split())
         is_error = safety_text.startswith(("ERREUR", "Action refusee", "TIMEOUT"))
         if "exit_code:" in safety_text and "exit_code: 0" not in safety_text:
@@ -218,15 +226,22 @@ class ConsoleUI:
         if self.quiet and not is_error:
             return
         first = " ".join(result.strip().splitlines()[:1])
+        badge = "✕ " if is_error else "✓ "
         style = "red" if is_error else "dim"
-        self.console.print(Text("  " + truncate_text(first, 260), style=style))
+        line = Text("  " + badge + truncate_text(first, 250), style=style)
+        if elapsed > 0:
+            line.append(f"  ({elapsed:.2f}s)", style="dim")
+        self.console.print(line)
         if not self.quiet and "\n" in result.strip():
             lines = result.strip().splitlines()[1:6]
-            for line in lines:
-                self.console.print(Text("  " + line[:220], style="dim"))
+            for extra in lines:
+                extra_style = (
+                    "bold yellow" if extra.startswith("DIAGNOSTIC ") else "dim"
+                )
+                self.console.print(Text("    " + extra[:220], style=extra_style))
             total = len(result.strip().splitlines())
             if total > 6:
-                self.console.print(Text(f"  ... ({total} lignes)", style="dim"))
+                self.console.print(Text(f"    ... ({total} lignes)", style="dim"))
 
     def stream_tool_output(self, name: str, chunk: str) -> None:
         if self.quiet or not chunk:
@@ -398,15 +413,26 @@ class ConsoleUI:
         if not todos:
             self.info("Aucune tache planifiee.")
             return
+        done_count = sum(1 for t in todos if str(t.get("status")) == "completed")
+        total = len(todos)
+        pct = int((done_count / total) * 100) if total else 0
+        bar_width = 16
+        filled = int((done_count / total) * bar_width) if total else 0
+        bar = "━" * filled + "─" * (bar_width - filled)
+        self.console.print(
+            Text(f"  Progression  {bar}  {pct}% ({done_count}/{total})", style="bold cyan")
+        )
         markers = {
-            "pending": "[ ]",
-            "in_progress": "[~]",
-            "completed": "[x]",
-            "cancelled": "[-]",
+            "pending": ("○", "dim"),
+            "in_progress": ("⟳", "bold yellow"),
+            "completed": ("✓", "bold green"),
+            "cancelled": ("✕", "red"),
         }
         for todo in todos:
-            marker = markers.get(str(todo.get("status")), "[ ]")
-            self.console.print(f"{marker} {todo.get('content', '')}")
+            icon, style = markers.get(str(todo.get("status")), ("○", "dim"))
+            line = Text(f"  {icon} ", style=style)
+            line.append(str(todo.get("content", "")))
+            self.console.print(line)
 
 
 def _format_tool_args(
