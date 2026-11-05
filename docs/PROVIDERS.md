@@ -1,6 +1,6 @@
 # Fournisseurs et modèles
 
-État vérifié le **2 novembre 2026**. Les offres gratuites, quotas et identifiants changent souvent : utilisez `zerocode doctor --live` et `zerocode models --live` avant de vous appuyer sur une offre.
+État vérifié le **5 novembre 2026**. Les offres gratuites, quotas et identifiants changent souvent : utilisez `zerocode doctor --live` et `zerocode models --live` avant de vous appuyer sur une offre.
 
 ## Principe
 

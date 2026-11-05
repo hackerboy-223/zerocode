@@ -10,14 +10,15 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
-- Outils intégrés : lecture, écriture, édition, liste, recherche regex, shell et plan de tâches.
-- Sessions reprenables, compaction du contexte et estimation des jetons.
-- Interface TUI Textual : sidebar projet/sessions, chat Markdown, streaming et approbations.
+- Outils intégrés : lecture (`read`), écriture (`write`), édition (`edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), shell (`bash`), web (`fetch`, `web_search`), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
+- Diagnostics syntaxiques instantanés (AST Python et JSON) après chaque écriture ou édition pour auto-correction immédiate.
+- Sessions reprenables, compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
+- Interface TUI Textual sobre et moderne : sidebar projet/sessions, chat Markdown, streaming temps réel, diffs intégrés et approbations.
 - Mascotte animée **LUPUS**, un loup veilleur qui rappelle d'observer avant d'agir.
 - Routage adaptatif : modèle spécialisé pour le code, raisonnement renforcé pour les audits et modèle rapide pour les demandes simples.
-- Mode `/full-stack` : projet complet autonome avec raisonnement, contexte, étapes et timeouts maximaux.
-- Palette de commandes, recherche de fichiers `@` et panneaux de tâches/outils.
-- Aucun secret affiché ; clés stockées avec des permissions restrictives.
+- Mode `/full-stack` autonome : projet complet avec auto-continuation tant qu'il reste des tâches dans le plan (`todos`), raisonnement, contexte, étapes et timeouts maximaux.
+- Palette de commandes, recherche de fichiers `@`, boutons d'action rapides et panneaux de tâches/outils.
+- Cybersécurité Zero-Trust : masquage DLP automatique des clés et jetons API (`redact_secrets`), pare-feu contre les commandes shell destructrices, isolation des variables d'environnement sensibles dans les sous-processus et protection anti-SSRF.
 
 ## Installation automatique
 
@@ -111,7 +112,9 @@ L'interface par défaut s'appuie sur [Textual](https://textual.textualize.io/). 
 | `Shift+Tab` | Basculer entre les modes build et plan |
 | `Tab` | Chat → tâches → outils |
 | `F2` | Replier ou ouvrir le dernier résultat d'outil |
+| `F3` | Basculer le mode think (`off` / `low` / `high` / `max`) |
 | `F6` | Focus prompt → fichiers → sessions → chat |
+| `Échap` | Interrompre le tour ou le processus shell en cours |
 | `Ctrl+B` | Afficher ou masquer la sidebar |
 | `F1` | Aide et commandes |
 | `Ctrl+Q` | Quitter |
@@ -214,19 +217,22 @@ Les overrides disponibles : `--model`, `--provider`, `--free-only/--no-free-only
 | `zerocode providers` | État des fournisseurs et des clés |
 | `zerocode sessions` | Lister, reprendre ou supprimer des sessions |
 | `zerocode config` | Afficher ou initialiser la configuration |
+| `zerocode completion [bash\|zsh\|fish]` | Générer le script d'autocomplétion shell |
 
-Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/clear`, `/quit`.
+Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/undo`, `/image`, `/clear`, `/quit`.
 
 ## Outils et sécurité
 
-- `read`, `list`, `grep` sont en lecture seule et automatiques.
-- En mode `ask`, la création de nouveaux fichiers, les éditions dans le projet et une liste limitée de commandes de diagnostic/tests sont automatiques.
-- Le remplacement d'un fichier existant, les commandes shell non classées comme sûres et les actions sensibles demandent confirmation.
-- Le mode `deny` bloque les outils de mutation ; `/full-stack` et `--yolo` restent des choix explicites d'autonomie étendue.
-- Les outils de fichiers refusent les chemins hors du répertoire de travail sauf avec `--allow-outside-cwd`, et bloquent les fichiers de secrets par défaut.
-- Les écritures dans `.git` et les clés privées sont bloquées par les outils de fichiers.
-- Les commandes shell s'exécutent avec les droits de votre compte : elles ne sont pas confinées au projet et peuvent lire ou modifier d'autres fichiers.
-- Les commandes ont un délai maximal ; leur sortie est limitée en mémoire et tronquée avant d'être renvoyée à l'agent.
+- `read`, `list`, `grep`, `fetch`, `web_search` et `todo_write` sont sans effet de bord sur le dépôt et automatiques.
+- En mode `ask`, la création de nouveaux fichiers, les éditions dans le projet et les commandes sûres de diagnostic/tests/lint (`pytest`, `unittest`, `ruff`, `mypy`, `flake8`, `npm test`, `cargo test`, `cargo clippy`, `go test`, `go vet`, etc.) sont automatiques.
+- Le remplacement d'un fichier existant via `write`, les commandes shell non classées comme sûres et les actions sensibles demandent confirmation.
+- Un pare-feu shell bloque systématiquement les commandes catastrophiques pour l'hôte (`rm -rf /`, `rm -rf ~`, fork bombs, `mkfs`, `dd of=/dev/*`), même en mode `allow` ou `--yolo`.
+- Toutes les sorties d'outils passent par un filtre DLP (`redact_secrets`) qui masque automatiquement les clés privées PEM, les jetons API (`sk-*`, `nvapi-*`, `ghp_*`, `AKIA*`, `AIza*`, `gsk_*`, `hf_*`, `Bearer`) et les mots de passe dans les URL de connexion.
+- Les sous-processus `bash` et les serveurs MCP s'exécutent dans un environnement expurgé des clés API des fournisseurs (`PROVIDER_KEY_ENVS`).
+- Les outils `fetch` et `web_search` bloquent les adresses IP privées, loopback, link-local, non spécifiées (`0.0.0.0`/`::`), IPv6 mappées IPv4 et les endpoints de métadonnées cloud (anti-SSRF).
+- Les outils de fichiers et de recherche refusent les chemins et liens symboliques hors du répertoire de travail sauf avec `--allow-outside-cwd`, et bloquent les fichiers de secrets par défaut.
+- Les écritures et la restauration `/undo` dans `.git` et les fichiers de secrets sont bloquées.
+- Les commandes ont un délai maximal ; leur sortie est diffusée en temps réel, limitée en mémoire et tronquée avant d'être renvoyée à l'agent.
 - zerocode ne commit, ne pousse et n'installe rien sans demande explicite.
 
 Aucun agent ne remplace une revue humaine. Vérifiez les diffs et les commandes avant de les accepter, surtout en mode `--yolo`.

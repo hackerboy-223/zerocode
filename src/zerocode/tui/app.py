@@ -43,7 +43,7 @@ from .screens import (
     HelpScreen,
     PasswordScreen,
 )
-from .widgets import PromptInput, ThinkingIndicator, ToolCard
+from .widgets import PromptInput, ThinkingIndicator, ToolCard, WolfMascot
 
 THINK_MODES = ("off", "low", "high", "max")
 
@@ -301,6 +301,17 @@ class ZeroCodeApp(App[None]):
 
     .welcome {
         margin: 1 0;
+    }
+
+    .wolf-mascot {
+        width: auto;
+        height: auto;
+        margin: 1 0 0 0;
+        padding: 1 2;
+        background: #0f1620;
+        border: round #151d27;
+        border-left: thick #7dd3fc;
+        text-align: center;
     }
 
     .user-message {
@@ -1082,6 +1093,7 @@ class ZeroCodeApp(App[None]):
             padding=(1, 2),
             expand=True,
         )
+        self._mount(WolfMascot())
         self._mount(Static(panel, classes="welcome"))
         self._scroll_chat()
 

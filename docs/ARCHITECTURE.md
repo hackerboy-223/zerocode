@@ -39,7 +39,10 @@ Le cœur de l'agent reste synchrone : une requête, un flux, un tour d'agent. Le
 | `session.py` | sérialisation des sessions et historique |
 | `tokens.py` | estimation, troncature, compaction |
 | `prompts.py` | prompt système et instructions projet |
-| `tools/` | outils et gestion des permissions |
+| `security.py` | masquage DLP des secrets (`redact_secrets`) et pare-feu contre les commandes shell destructrices (`check_dangerous_command`) |
+| `checkpoints.py` | sauvegarde atomique avant écriture/édition et restauration sécurisée (`/undo`) |
+| `mcp.py` | client JSON-RPC stdio pour serveurs Model Context Protocol avec environnement assaini |
+| `tools/` | outils (`files`, `search`, `shell`, `web`, `todo`) et gestion des permissions |
 
 ## Déroulement d'un tour
 
@@ -70,11 +73,12 @@ Les erreurs `AuthError`, `RateLimitError` et les erreurs récupérables imposent
 
 Chaque outil possède un niveau `approval` :
 
-- `never` : lecture seule, exécution directe.
+- `never` : lecture seule ou sans effet de bord sur le dépôt (`read`, `list`, `grep`, `fetch`, `web_search`, `todo_write`), exécution directe.
+- `auto` : autorisé automatiquement en mode `ask` si l'opération est sûre (création de nouveau fichier via `write`, modification d'un fichier existant non secret via `edit`, ou commande de test/lint/diagnostic reconnue par `is_safe_auto_command`).
 - `ask` : confirmation utilisateur selon le mode.
 - Le mode global vaut `ask`, `allow` ou `deny`.
 
-Les arguments sont validés par `_validate_arguments` avant l'exécution. Le contexte d'outil résout les chemins et bloque les sorties du répertoire de travail, `.git` et les clés privées. Les erreurs d'outil sont renvoyées au modèle sous forme de texte, ce qui lui permet de corriger son approche.
+Les arguments sont validés par `_validate_arguments` avant l'exécution. Les commandes `bash` passent par `check_dangerous_command` et s'exécutent dans un environnement nettoyé des clés API (`_clean_environment`). Les écritures et éditions déclenchent un checkpoint (`/undo`) ainsi qu'un diagnostic syntaxique immédiat (`_syntax_diagnostic` sur Python et JSON). Toutes les sorties d'outils sont filtrées par `redact_secrets` avant d'être renvoyées au modèle.
 
 Dans le TUI, `TuiBridge.confirm_tool` bloque uniquement le worker et affiche un `ConfirmScreen`. La décision utilisateur est renvoyée via un `threading.Event`.
 
@@ -82,7 +86,7 @@ Les modes agent sont gérés par `Agent.set_mode` :
 
 - `build` : tous les outils sont proposés au modèle.
 - `plan` : `ToolRegistry.read_only` masque les outils dont l'approbation n'est pas `never` et refuse leur exécution ; le prompt système reçoit une consigne de lecture seule.
-- `full-stack` : preset autonome (`FULL_STACK_PRESET`) avec raisonnement max, 128k jetons de sortie, 500 étapes, timeout 3600 s, compaction à 0.95, permissions `allow` et raisonnement affiché. Le prompt système impose de livrer et vérifier un projet complet. Les réglages précédents sont sauvegardés en mémoire et restaurés dès que l'on quitte le mode.
+- `full-stack` : preset autonome (`FULL_STACK_PRESET`) avec raisonnement max, 128k jetons de sortie, 500 étapes, timeout 3600 s, compaction à 0.95, permissions `allow`, raisonnement affiché et auto-continuation tant qu'il reste des tâches non terminées dans `todos`. Le prompt système impose de livrer et vérifier un projet complet. Les réglages précédents sont sauvegardés en mémoire et restaurés dès que l'on quitte le mode.
 
 ## Contexte et compaction
 
