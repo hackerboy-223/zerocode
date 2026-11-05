@@ -254,3 +254,45 @@ def test_provider_client_retries_once_on_502():
     assert completion.content == "retried-ok"
     assert attempts["count"] == 2
 
+
+def test_stream_extracts_inline_think_tags_into_reasoning():
+    provider = PROVIDERS["kilo"]
+    model = provider.model("kilo-auto/free")
+    assert model is not None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sse(
+                {"choices": [{"delta": {"content": "<thi"}}]},
+                {"choices": [{"delta": {"content": "nk>\nAnalyse "}}]},
+                {"choices": [{"delta": {"content": "approfondie</th"}}]},
+                {"choices": [{"delta": {"content": "ink>\n\nRéponse finale."}}]},
+                {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                "[DONE]",
+            ),
+        )
+
+    text_chunks: list[str] = []
+    reasoning_chunks: list[str] = []
+    client = make_client(handler)
+    try:
+        completion = client.stream(
+            provider,
+            model,
+            [{"role": "user", "content": "explique"}],
+            callbacks=StreamCallbacks(
+                on_text=text_chunks.append,
+                on_reasoning=reasoning_chunks.append,
+            ),
+        )
+    finally:
+        client.close()
+
+    assert completion.reasoning == "Analyse approfondie"
+    assert "".join(reasoning_chunks) == "Analyse approfondie"
+    assert completion.content == "Réponse finale."
+    assert "".join(text_chunks) == "Réponse finale."
+
+

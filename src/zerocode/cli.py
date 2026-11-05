@@ -525,10 +525,14 @@ def _slash_command(
         return False
     if command == "build":
         agent.set_mode("build")
+        permissions.mode = config.permissions
+        ui.show_reasoning = config.show_reasoning
         ui.success("Mode build: modifications autorisees.")
         return False
     if command == "plan":
         agent.set_mode("plan")
+        permissions.mode = config.permissions
+        ui.show_reasoning = config.show_reasoning
         ui.info("Mode plan: lecture seule. write, edit et bash sont desactives.")
         return False
     if command in {"full-stack", "fullstack"}:
@@ -599,17 +603,21 @@ def _slash_command(
         return False
     if command in {"think", "thinking"}:
         if rest in {"low", "high", "max"}:
-            config.show_reasoning = True
-            config.reasoning_effort = rest
+            agent.set_think(rest)
         elif rest in {"on", "oui", "1", "true"}:
-            config.show_reasoning = True
+            effort = config.reasoning_effort if config.reasoning_effort in {"low", "high", "max"} else "high"
+            agent.set_think(effort)
         elif rest in {"off", "non", "0", "false"}:
-            config.show_reasoning = False
+            agent.set_think("off")
         elif rest:
             ui.warn("Valeurs: off, low, high, max")
             return False
         else:
-            config.show_reasoning = not config.show_reasoning
+            if config.show_reasoning:
+                agent.set_think("off")
+            else:
+                effort = config.reasoning_effort if config.reasoning_effort in {"low", "high", "max"} else "high"
+                agent.set_think(effort)
         ui.show_reasoning = config.show_reasoning
         level = config.reasoning_effort if config.show_reasoning else "off"
         ui.info(f"mode think: {level}")
@@ -619,6 +627,7 @@ def _slash_command(
             ui.warn("Valeurs: low, high, max")
             return False
         config.reasoning_effort = rest
+        agent._refresh_system_mode()
         ui.success(f"reasoning_effort: {rest}")
         return False
     if command in {"temp", "temperature"}:

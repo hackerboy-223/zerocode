@@ -160,6 +160,8 @@ class CommandHandler:
             if completion is not None:
                 text = f"{completion.provider}/{completion.model} · " + text
             app.notice(text, "info")
+        elif command == "chat":
+            app.set_mode("chat")
         elif command == "todos":
             app.set_mode("todos")
         elif command == "build":
@@ -201,6 +203,9 @@ class CommandHandler:
                 app.notice("Valeurs : low, high, max", "warning")
             else:
                 app.config.reasoning_effort = rest
+                refresh = getattr(app.agent, "_refresh_system_mode", None)
+                if callable(refresh):
+                    refresh()
                 app.refresh_think_chip()
                 app._refresh_modebar()
                 app.notice(f"Raisonnement : {rest}", "success")

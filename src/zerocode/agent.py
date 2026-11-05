@@ -42,6 +42,24 @@ MODE FULL-STACK AUTONOME ACTIF:
 
 VALID_AGENT_MODES = {"build", "plan", "full-stack"}
 
+THINK_MODE_INSTRUCTIONS: dict[str, str] = {
+    "low": """
+MODE THINK (LOW) ACTIF:
+- Avant ta réponse finale, commence par un court bloc `<think>...</think>` (1 à 2 phrases concises) résumant l'objectif et l'action choisie.
+- Ferme obligatoirement la balise `</think>` avant d'écrire la réponse destinée à l'utilisateur.
+""".strip(),
+    "high": """
+MODE THINK (HIGH) ACTIF:
+- Avant ta réponse finale ou tes appels d'outils, commence par un bloc `<think>...</think>` structuré (3 à 6 lignes) analysant le contexte, les hypothèses, les fichiers/outils pertinents et les cas limites.
+- Ferme obligatoirement la balise `</think>` avant d'écrire la réponse finale destinée à l'utilisateur.
+""".strip(),
+    "max": """
+MODE THINK (MAX) ACTIF:
+- Avant ta réponse finale ou tes appels d'outils, commence par un bloc `<think>...</think>` approfondi et méthodique : décompose l'architecture, la sécurité (OWASP/CWE), les dépendances, les risques de régression et la stratégie de vérification étape par étape.
+- Ferme obligatoirement la balise `</think>` avant d'écrire la réponse finale destinée à l'utilisateur.
+""".strip(),
+}
+
 FULL_STACK_PRESET = {
     "reasoning_effort": "max",
     "temperature": 0.2,
@@ -369,6 +387,19 @@ class Agent:
         if hasattr(self.ui, "show_reasoning"):
             self.ui.show_reasoning = self.config.show_reasoning
 
+    def set_think(self, mode: str) -> None:
+        token = mode.strip().lower()
+        if token == "off":
+            self.config.show_reasoning = False
+        elif token in {"low", "high", "max"}:
+            self.config.show_reasoning = True
+            self.config.reasoning_effort = token
+        else:
+            raise ValueError(f"Mode think inconnu: {mode}")
+        self._sync_reasoning_visibility()
+        self._refresh_system_mode()
+        self._save_quiet()
+
     def _refresh_system_mode(self) -> None:
         if not self.messages or self.messages[0].get("role") != "system":
             return
@@ -448,6 +479,12 @@ class Agent:
             content += "\n\n" + PLAN_MODE_INSTRUCTION
         elif self.mode == "full-stack":
             content += "\n\n" + FULL_STACK_MODE_INSTRUCTION
+        if self.config.show_reasoning:
+            effort = str(getattr(self.config, "reasoning_effort", "high") or "high").lower()
+            think_instruction = THINK_MODE_INSTRUCTIONS.get(
+                effort, THINK_MODE_INSTRUCTIONS["high"]
+            )
+            content += "\n\n" + think_instruction
         return {"role": "system", "content": content}
 
     def _sync_session(self) -> None:

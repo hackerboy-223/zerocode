@@ -234,6 +234,24 @@ def test_agent_full_stack_mode_applies_and_restores_preset(tmp_path):
     assert "MODE FULL-STACK AUTONOME ACTIF" not in agent.messages[0]["content"]
 
 
+def test_agent_think_modes_update_system_prompt_and_visibility(tmp_path):
+    agent, _, _, _ = build_agent(tmp_path, [])
+    assert agent.config.show_reasoning is False
+    assert "MODE THINK" not in agent.messages[0]["content"]
+
+    for level in ("low", "high", "max"):
+        agent.set_think(level)
+        assert agent.config.show_reasoning is True
+        assert agent.config.reasoning_effort == level
+        assert f"MODE THINK ({level.upper()}) ACTIF" in agent.messages[0]["content"]
+        assert "<think>" in agent.messages[0]["content"]
+
+    agent.set_think("off")
+    assert agent.config.show_reasoning is False
+    assert "MODE THINK" not in agent.messages[0]["content"]
+
+
+
 def test_agent_compacts_long_context(tmp_path):
     completion = Completion(content="ok")
     agent, _, _, _ = build_agent(tmp_path, [completion])

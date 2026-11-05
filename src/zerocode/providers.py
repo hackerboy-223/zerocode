@@ -153,6 +153,11 @@ class OpenAICompatibleClient:
             body["thinking"] = {"type": "enabled"}
             if "glm-5" in api_id:
                 body["reasoning_effort"] = self.config.reasoning_effort
+        elif self.config.show_reasoning and model.reasoning and any(
+            marker in api_id
+            for marker in ("deepseek-r1", "qwq", "o1", "o3", "r1")
+        ):
+            body["reasoning_effort"] = self.config.reasoning_effort
         return body
 
     def _headers(self, provider: ProviderSpec) -> dict[str, str]:
@@ -322,6 +327,21 @@ class OpenAICompatibleClient:
         tool_parts: dict[int, dict[str, str]] = {}
         usage: Usage | None = None
         finish_reason = "stop"
+        think_parser = _ThinkStreamParser()
+
+        def _emit_text(chunk_text: str) -> None:
+            if not chunk_text:
+                return
+            content_parts.append(chunk_text)
+            if callbacks.on_text:
+                callbacks.on_text(chunk_text)
+
+        def _emit_reasoning(chunk_reasoning: str) -> None:
+            if not chunk_reasoning:
+                return
+            reasoning_parts.append(chunk_reasoning)
+            if callbacks.on_reasoning:
+                callbacks.on_reasoning(chunk_reasoning)
 
         for raw_line in response.iter_lines():
             line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
@@ -359,17 +379,23 @@ class OpenAICompatibleClient:
                     delta = choice.get("message") if isinstance(choice.get("message"), dict) else {}
                 text = _delta_text(delta.get("content"))
                 if text:
-                    content_parts.append(text)
-                    if callbacks.on_text:
-                        callbacks.on_text(text)
+                    for is_reasoning, piece in think_parser.feed(text):
+                        if is_reasoning:
+                            _emit_reasoning(piece)
+                        else:
+                            _emit_text(piece)
                 reasoning = _reasoning_text(delta)
                 if reasoning:
-                    reasoning_parts.append(reasoning)
-                    if callbacks.on_reasoning:
-                        callbacks.on_reasoning(reasoning)
+                    _emit_reasoning(reasoning)
                 self._collect_tool_deltas(delta, tool_parts)
                 if choice.get("finish_reason"):
                     finish_reason = str(choice["finish_reason"])
+
+        for is_reasoning, piece in think_parser.flush():
+            if is_reasoning:
+                _emit_reasoning(piece)
+            else:
+                _emit_text(piece)
 
         tool_calls: list[ToolCall] = []
         for index in sorted(tool_parts):
@@ -626,3 +652,100 @@ def _retry_after(headers: httpx.Headers) -> float | None:
         except ValueError:
             continue
     return None
+
+
+class _ThinkStreamParser:
+    """Extrait les blocs <think>...</think> et <thinking>...</thinking> dans un flux SSE."""
+
+    _OPEN_TAGS = ("<thinking>", "<think>")
+    _CLOSE_TAGS = ("</thinking>", "</think>")
+
+    def __init__(self) -> None:
+        self._in_think = False
+        self._buffer = ""
+        self._strip_leading_ws = False
+
+    def feed(self, chunk: str) -> list[tuple[bool, str]]:
+        if not chunk:
+            return []
+        self._buffer += chunk
+        output: list[tuple[bool, str]] = []
+        while self._buffer:
+            if not self._in_think:
+                idx, tag = self._find_tag(self._buffer, self._OPEN_TAGS)
+                if idx != -1:
+                    before = self._buffer[:idx]
+                    if before:
+                        output.append((False, self._clean_piece(before)))
+                    self._buffer = self._buffer[idx + len(tag) :]
+                    self._in_think = True
+                    self._strip_leading_ws = True
+                    continue
+                hold = self._partial_suffix_len(self._buffer, self._OPEN_TAGS)
+                emit = self._buffer[: len(self._buffer) - hold] if hold else self._buffer
+                self._buffer = self._buffer[len(self._buffer) - hold :] if hold else ""
+                if emit:
+                    cleaned = self._clean_piece(emit)
+                    if cleaned:
+                        output.append((False, cleaned))
+                break
+            else:
+                idx, tag = self._find_tag(self._buffer, self._CLOSE_TAGS)
+                if idx != -1:
+                    inside = self._buffer[:idx]
+                    if inside:
+                        cleaned = self._clean_piece(inside)
+                        if cleaned:
+                            output.append((True, cleaned))
+                    self._buffer = self._buffer[idx + len(tag) :]
+                    self._in_think = False
+                    self._strip_leading_ws = True
+                    continue
+                hold = self._partial_suffix_len(self._buffer, self._CLOSE_TAGS)
+                emit = self._buffer[: len(self._buffer) - hold] if hold else self._buffer
+                self._buffer = self._buffer[len(self._buffer) - hold :] if hold else ""
+                if emit:
+                    cleaned = self._clean_piece(emit)
+                    if cleaned:
+                        output.append((True, cleaned))
+                break
+        return output
+
+    def flush(self) -> list[tuple[bool, str]]:
+        if not self._buffer:
+            return []
+        remaining = self._clean_piece(self._buffer)
+        self._buffer = ""
+        if not remaining:
+            return []
+        return [(self._in_think, remaining)]
+
+    def _clean_piece(self, text: str) -> str:
+        if not self._strip_leading_ws:
+            return text
+        stripped = text.lstrip("\r\n ")
+        if stripped:
+            self._strip_leading_ws = False
+        return stripped
+
+    @staticmethod
+    def _find_tag(buffer: str, tags: tuple[str, ...]) -> tuple[int, str]:
+        lower = buffer.lower()
+        best_idx = -1
+        best_tag = ""
+        for tag in tags:
+            pos = lower.find(tag)
+            if pos != -1 and (best_idx == -1 or pos < best_idx):
+                best_idx = pos
+                best_tag = tag
+        return best_idx, best_tag
+
+    @staticmethod
+    def _partial_suffix_len(buffer: str, tags: tuple[str, ...]) -> int:
+        lower = buffer.lower()
+        max_hold = 0
+        for tag in tags:
+            for length in range(1, len(tag)):
+                if lower.endswith(tag[:length]) and length > max_hold:
+                    max_hold = length
+        return max_hold

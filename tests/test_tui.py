@@ -464,6 +464,16 @@ def test_tui_web_toolbar_chips(tmp_path):
             assert app._mode == "todos"
             assert not app.query_one("#inspector").has_class("hidden")
 
+            await pilot.click("#chip-tools")
+            await pilot.pause()
+            assert app._mode == "tools"
+            assert not app.query_one("#inspector").has_class("hidden")
+
+            await pilot.click("#chip-tools")
+            await pilot.pause()
+            assert app._mode == "chat"
+            assert app.query_one("#inspector").has_class("hidden")
+
             assert app.current_think_mode() == "off"
             await pilot.click("#chip-think")
             await pilot.pause()

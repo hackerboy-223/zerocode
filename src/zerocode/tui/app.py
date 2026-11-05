@@ -654,6 +654,12 @@ class ZeroCodeApp(App[None]):
                     btn_todos.can_focus = False
                     yield btn_todos
 
+                    btn_tools = Button(
+                        "Outils", id="chip-tools", classes="web-chip"
+                    )
+                    btn_tools.can_focus = False
+                    yield btn_tools
+
                     btn_palette = Button(
                         "Commandes",
                         id="chip-palette",
@@ -721,6 +727,8 @@ class ZeroCodeApp(App[None]):
             self._open_file_picker()
         elif btn_id == "chip-todos":
             self.set_mode("todos" if self._mode != "todos" else "chat")
+        elif btn_id == "chip-tools":
+            self.set_mode("tools" if self._mode != "tools" else "chat")
         elif btn_id == "chip-palette":
             self.action_command_palette()
         else:
@@ -912,6 +920,13 @@ class ZeroCodeApp(App[None]):
         else:
             self.config.show_reasoning = True
             self.config.reasoning_effort = mode
+        think_setter = getattr(self.agent, "set_think", None)
+        if callable(think_setter):
+            think_setter(mode)
+        else:
+            refresh = getattr(self.agent, "_refresh_system_mode", None)
+            if callable(refresh):
+                refresh()
         self.bridge.show_reasoning = self.config.show_reasoning
         self.refresh_think_chip()
         self._refresh_modebar()
@@ -950,7 +965,9 @@ class ZeroCodeApp(App[None]):
         setter = getattr(self.agent, "set_mode", None)
         if callable(setter):
             setter(mode)
+        self.permissions.mode = self.config.permissions
         self.bridge.show_reasoning = self.config.show_reasoning
+        self.refresh_think_chip()
         self._refresh_modebar()
         self._refresh_status()
         self._refresh_inspector()
@@ -1500,6 +1517,9 @@ class ZeroCodeApp(App[None]):
             count = len(self.context.todos)
             btn_todos.label = f"Tâches ({count})" if count else "Tâches"
             btn_todos.set_class(self._mode == "todos", "chip-active-panel")
+            self.query_one("#chip-tools", Button).set_class(
+                self._mode == "tools", "chip-active-panel"
+            )
 
     def _refresh_prompt_placeholder(self) -> None:
         try:

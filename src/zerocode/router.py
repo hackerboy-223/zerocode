@@ -183,7 +183,13 @@ class Router:
         )
         requested_model = (model or self.config.model).strip().lower()
         if requested_model == "auto" and not (provider or self.config.provider):
-            candidates = self._rank_auto_candidates(candidates, messages)
+            prefer_reasoning = bool(
+                self.config.show_reasoning
+                and getattr(self.config, "reasoning_effort", "high") in {"high", "max"}
+            )
+            candidates = self._rank_auto_candidates(
+                candidates, messages, prefer_reasoning=prefer_reasoning
+            )
         failures: list[tuple[str, Exception]] = []
 
         for spec, model_spec in candidates:
@@ -222,6 +228,8 @@ class Router:
     def _rank_auto_candidates(
         candidates: list[tuple[ProviderSpec, ModelSpec]],
         messages: list[dict[str, Any]],
+        *,
+        prefer_reasoning: bool = False,
     ) -> list[tuple[ProviderSpec, ModelSpec]]:
         """Prefer a model family suited to the latest request, keeping fallback order stable."""
         user_text = ""
@@ -240,7 +248,7 @@ class Router:
             break
 
         text = user_text.lower()
-        complex_task = bool(
+        complex_task = prefer_reasoning or bool(
             re.search(
                 r"\b(securit|security|audit|architecture|architect|refactor|"
                 r"raisonnement|reasoning|analyse|analyze|debug|debog|incident)\w*\b",
