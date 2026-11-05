@@ -10,6 +10,7 @@ from .errors import ConfigError, ToolError
 from .prompts import build_system_prompt
 from .security import redact_secrets
 from .session import Session, SessionStore
+from .skills import DEFAULT_ACTIVE_SKILLS, all_skills, normalize_skill_names
 from .tokens import compact_messages, estimate_messages, truncate_text
 from .tools import PermissionManager, ToolContext, build_registry
 from .tools.files import _is_binary
@@ -71,6 +72,7 @@ class Agent:
         self.store = store
         self.usage = session.usage
         self.mode = "build"
+        self.skills: list[str] = list(DEFAULT_ACTIVE_SKILLS)
         self._full_stack_backup: dict[str, Any] | None = None
         self.messages: list[dict[str, Any]] = session.messages
         self.tools.context.todos[:] = [todo for todo in session.todos if isinstance(todo, dict)]
@@ -177,7 +179,7 @@ class Agent:
                             raise KeyboardInterrupt
                         self._call_ui("tool_start", call.name, call.arguments)
                     with ThreadPoolExecutor(max_workers=min(4, len(calls))) as pool:
-                        results = list(pool.map(self.tools.execute, calls))
+                        results = list(pool.map(self._safe_execute_tool, calls))
                     for call, result in zip(calls, results, strict=False):
                         fingerprint = _tool_call_fingerprint(call)
                         if result.startswith("ERREUR:"):
@@ -394,6 +396,46 @@ class Agent:
         self.session.provider = provider
         self._save_quiet()
 
+    def set_skills(self, names: list[str] | tuple[str, ...] | None) -> list[str]:
+        self.skills = normalize_skill_names(names, self.tools.context.cwd)
+        self._refresh_system_mode()
+        self._save_quiet()
+        return list(self.skills)
+
+    def toggle_skill(self, raw_name: str) -> tuple[bool, str]:
+        token = raw_name.strip().lower()
+        cwd = self.tools.context.cwd
+        catalog = all_skills(cwd)
+        if token in {"all", "tous", "*"}:
+            self.skills = list(catalog)
+            self._refresh_system_mode()
+            self._save_quiet()
+            return True, f"Tous les skills sont actifs ({', '.join(self.skills)})."
+        if token in {"off", "none", "aucun", "0"}:
+            self.skills = []
+            self._refresh_system_mode()
+            self._save_quiet()
+            return True, "Tous les skills additionnels sont désactivés."
+        if token in {"default", "defaut", "reset"}:
+            self.skills = list(DEFAULT_ACTIVE_SKILLS)
+            self._refresh_system_mode()
+            self._save_quiet()
+            return True, f"Skills par défaut restaurés ({', '.join(self.skills)})."
+        if token not in catalog:
+            return False, (
+                f"Skill inconnu : {raw_name!r}. "
+                f"Disponibles : {', '.join(catalog)} (ou all / off / default)."
+            )
+        if token in self.skills:
+            self.skills.remove(token)
+            state = "désactivé"
+        else:
+            self.skills.append(token)
+            state = "activé"
+        self._refresh_system_mode()
+        self._save_quiet()
+        return True, f"Skill {token} {state} (actifs : {', '.join(self.skills) or 'aucun'})."
+
     def session_path(self) -> str:
         if self.store is None:
             return "(non sauvegardee)"
@@ -401,7 +443,7 @@ class Agent:
 
     def _system_message(self) -> dict[str, Any]:
         cwd = self.tools.context.cwd
-        content = build_system_prompt(cwd)
+        content = build_system_prompt(cwd, skills=self.skills)
         if self.mode == "plan":
             content += "\n\n" + PLAN_MODE_INSTRUCTION
         elif self.mode == "full-stack":
@@ -496,6 +538,14 @@ class Agent:
                 return False
         return True
 
+    def _safe_execute_tool(self, call: Any) -> str:
+        try:
+            return self.tools.execute(call)
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:  # noqa: BLE001 - isolation des threads d'outils
+            return f"ERREUR: {exc.__class__.__name__}: {exc}"
+
     def _run_subagent(self, task: str) -> str:
         sub_ctx = ToolContext(
             cwd=self.tools.context.cwd,
@@ -517,9 +567,9 @@ class Agent:
                 "role": "system",
                 "content": (
                     "Tu es un sous-agent d'exploration en lecture seule pour zerocode. "
-                    "Explore rapidement le depot avec read, list, grep, fetch ou web_search "
-                    "et renvoie une synthese concise, factuelle et directement exploitable "
-                    "avec les chemins et lignes exacts."
+                    "Explore rapidement le depot avec symbols, grep, list, read, "
+                    "security_audit, sys_diag, fetch ou web_search et renvoie une synthese "
+                    "concise, factuelle et directement exploitable avec les chemins et lignes exacts."
                 ),
             },
             {"role": "user", "content": task},

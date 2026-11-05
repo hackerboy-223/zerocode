@@ -1110,10 +1110,14 @@ class ZeroCodeApp(App[None]):
         mode_row.append(f"  ·  permissions {self.permissions.mode}", style="#7d8998")
         grid.add_row("Mode", mode_row)
 
-        security_row = Text("DLP secrets · Pare-feu shell · Anti-SSRF", style="#34d399")
+        security_row = Text("DLP secrets · Pare-feu shell · Anti-SSRF · Audit SAST", style="#34d399")
         if os.environ.get("ZEROCODE_SANDBOX") == "1":
             security_row.append(" · Sandbox bwrap", style="bold #7dd3fc")
         grid.add_row("Sécurité", security_row)
+
+        active_skills = getattr(self.agent, "skills", ("ultra-dev", "cyber-sec", "sys-tech"))
+        skills_text = " · ".join(active_skills) if active_skills else "aucun (/skill <nom>)"
+        grid.add_row("Skills", Text(skills_text, style="bold #a78bfa"))
 
         workspace = Text(str(self.context.cwd), style="bold #e6edf3")
         if self._branch:
@@ -1123,7 +1127,10 @@ class ZeroCodeApp(App[None]):
         header = Text()
         header.append(" ZEROCODE ", style="bold #071016 on #7dd3fc")
         header.append(f"  v{__version__}\n", style="bold #e6edf3")
-        header.append("Agent de codage autonome dans le terminal", style="#7d8998")
+        header.append(
+            "Agent autonome d'ingénierie logicielle, cybersécurité & système",
+            style="#7d8998",
+        )
 
         footer = Text()
         footer.append(

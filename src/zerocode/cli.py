@@ -33,7 +33,7 @@ from .config import (
     save_config,
     store_key,
 )
-from .errors import ConfigError, ZeroCodeError
+from .errors import ConfigError, ToolError, ZeroCodeError
 from .mcp import MCPManager, register_mcp_tools
 from .prompts import remember_project_instruction
 from .providers import (
@@ -46,7 +46,9 @@ from .providers import (
 )
 from .router import Router
 from .session import Session, SessionStore
+from .skills import DEFAULT_ACTIVE_SKILLS, all_skills
 from .tools import PermissionManager, ToolContext, build_registry
+from .tools.diagnostics import security_audit, sys_diag
 from .types import StreamCallbacks
 from .ui import ConsoleUI, JsonUI
 from .version import __author__, __github__, __portfolio__, __version__
@@ -54,6 +56,8 @@ from .version import __author__, __github__, __portfolio__, __version__
 COMMANDS = {
     "setup",
     "doctor",
+    "audit",
+    "skills",
     "models",
     "providers",
     "sessions",
@@ -94,6 +98,10 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return setup_command(argv[1:], console)
     if first == "doctor":
         return doctor_command(argv[1:], console)
+    if first == "audit":
+        return audit_command(argv[1:], console)
+    if first == "skills":
+        return skills_command(argv[1:], console)
     if first == "models":
         return models_command(argv[1:], console)
     if first == "providers":
@@ -173,6 +181,12 @@ def _run_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="FICHIER",
         help="Joindre une image au prompt (PNG, JPEG, WEBP ou GIF; repeter l'option).",
+    )
+    parser.add_argument(
+        "--skill",
+        action="append",
+        metavar="NOM",
+        help="Activer un ou plusieurs skills (ultra-dev, cyber-sec, sys-tech, review, perf, sec-hardening, all).",
     )
     parser.add_argument("--show-thinking", action="store_true", help="Afficher le raisonnement.")
     parser.add_argument("-q", "--quiet", action="store_true", help="Reduire la sortie des outils.")
@@ -279,6 +293,8 @@ def run_agent(
     permissions = PermissionManager(mode=config.permissions, interactive=interactive)
     registry = build_registry(context, permissions, ui)
     agent = Agent(config, router, registry, session, ui, store=store)
+    if args.skill:
+        agent.set_skills(args.skill)
     agent.checkpoints = checkpoints
     context.checkpoint = lambda path, before, tool: checkpoints.record(
         agent.session.id, path, before, tool
@@ -650,9 +666,40 @@ def _slash_command(
     if command == "tools":
         for tool in agent.tools.tools():
             ui.console.print(
-                Text(f"{tool.name:<12}", style="bold"),
+                Text(f"{tool.name:<15}", style="bold"),
                 Text(tool.description, style="dim"),
             )
+        return False
+    if command == "skills":
+        _print_skills_table(ui.console, context.cwd, getattr(agent, "skills", DEFAULT_ACTIVE_SKILLS))
+        return False
+    if command == "skill":
+        if not rest:
+            _print_skills_table(ui.console, context.cwd, getattr(agent, "skills", DEFAULT_ACTIVE_SKILLS))
+            return False
+        ok, message = agent.toggle_skill(rest)
+        if ok:
+            ui.success(message)
+        else:
+            ui.warn(message)
+        return False
+    if command == "audit":
+        target = rest or "."
+        try:
+            report = security_audit({"path": target}, context)
+        except ToolError as exc:
+            ui.warn(str(exc))
+        else:
+            ui.console.print(Panel(report, title=f"audit ({target})", border_style="cyan", box=box.ROUNDED))
+        return False
+    if command == "doctor":
+        section = rest or "all"
+        try:
+            report = sys_diag({"section": section}, context)
+        except ToolError as exc:
+            ui.warn(str(exc))
+        else:
+            ui.console.print(Panel(report, title="diagnostic systeme", border_style="cyan", box=box.ROUNDED))
         return False
     if command == "models":
         free_only = rest not in {"all", "tous"}
@@ -716,11 +763,13 @@ def print_global_help(console: Console | None = None) -> None:
     text.append("Agent de codage pour le terminal\n\n", style="dim")
     text.append("Usage\n", style="bold cyan")
     text.append("  zerocode [options] [prompt...]\n")
-    text.append("  zerocode setup | doctor | models | providers | sessions | config\n")
+    text.append("  zerocode setup | doctor | audit | skills | models | providers | sessions | config\n")
     text.append("  zerocode tui [-m modele]\n\n")
     text.append("Démarrage\n", style="bold cyan")
     text.append("  zerocode                 interface TUI interactive\n")
     text.append('  zerocode "explique la structure du projet"\n')
+    text.append("  zerocode audit           audit statique de securite (SAST, secrets, OWASP)\n")
+    text.append("  zerocode skills          profils d'expertise (ultra-dev, cyber-sec, sys-tech)\n")
     text.append("  zerocode -m auto\n")
     text.append("  zerocode -c\n")
     text.append("  zerocode --classic       ancienne interface REPL\n\n")
@@ -730,8 +779,8 @@ def print_global_help(console: Console | None = None) -> None:
     text.append("  auto           chaîne gratuite, sans clé via Kilo Gateway\n\n")
     text.append("Dans le chat\n", style="bold cyan")
     text.append(
-        "  /help  /build  /plan  /full-stack  /model  /provider  /permissions  "
-        "/compact  /cost  /quit\n"
+        "  /help  /build  /plan  /full-stack  /skills  /skill  /audit  /doctor  "
+        "/model  /provider  /permissions  /compact  /cost  /quit\n"
     )
     text.append("\nCréé par ", style="dim")
     text.append(__author__, style="bold")
@@ -776,11 +825,17 @@ def print_chat_help(console: Console) -> None:
         ("/sessions", "lister les sessions"),
         ("/todos", "afficher le plan de travail"),
         ("/tools", "lister les outils"),
+        ("/skills", "lister les profils d'expertise"),
+        ("/skill <nom|all|off>", "activer ou basculer un profil d'expertise"),
+        ("/audit [chemin]", "lancer un audit statique de securite"),
+        ("/doctor", "diagnostic systeme, reseau et Git"),
         ("/models", "catalogue des modeles"),
         ("/free", "modeles gratuits"),
         ("/providers", "etat des fournisseurs"),
         ("/cd <chemin>", "changer de repertoire"),
         ("/init", "creer ZEROCODE.md"),
+        ("/remember <regle>", "memoriser une consigne durable du projet"),
+        ("/copy", "copier la derniere reponse"),
         ("/undo", "annuler la derniere modification de fichier"),
         ("/clear", "effacer la conversation"),
         ("/quit", "quitter"),
@@ -799,6 +854,86 @@ def print_chat_help(console: Console) -> None:
             expand=False,
         )
     )
+
+
+def _print_skills_table(
+    console: Console,
+    cwd: Path,
+    active_names: list[str] | tuple[str, ...] = DEFAULT_ACTIVE_SKILLS,
+) -> None:
+    active = set(active_names)
+    table = Table(
+        title="Profils d'expertise (Skills)",
+        box=box.SIMPLE,
+        header_style="bold cyan",
+    )
+    table.add_column("Skill")
+    table.add_column("Statut")
+    table.add_column("Categorie")
+    table.add_column("Description", overflow="fold")
+    for name, spec in all_skills(cwd).items():
+        status = "[bold green]ACTIF[/bold green]" if name in active else "[dim]inactif[/dim]"
+        table.add_row(name, status, spec.category, spec.summary)
+    console.print(table)
+
+
+def skills_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode skills")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(args_list)
+    cwd = Path.cwd().resolve()
+    catalog = all_skills(cwd)
+    if args.json:
+        payload = [
+            {
+                "name": spec.name,
+                "label": spec.label,
+                "category": spec.category,
+                "summary": spec.summary,
+                "builtin": spec.builtin,
+                "default_active": spec.name in DEFAULT_ACTIVE_SKILLS,
+            }
+            for spec in catalog.values()
+        ]
+        console.print_json(json.dumps(payload, ensure_ascii=False))
+        return 0
+    _print_skills_table(console, cwd, DEFAULT_ACTIVE_SKILLS)
+    return 0
+
+
+def audit_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode audit")
+    parser.add_argument("path", nargs="?", default=".", help="Fichier ou dossier a auditer.")
+    parser.add_argument("--include-tests", action="store_true", help="Inclure les fichiers de tests.")
+    parser.add_argument("--max-findings", type=int, default=60, help="Nombre max de constats.")
+    args = parser.parse_args(args_list)
+    cwd = Path.cwd().resolve()
+    config = load_config(cwd)
+    ctx = ToolContext(
+        cwd=cwd,
+        allow_outside=True,
+        protect_secrets=config.protect_secrets,
+        allow_secrets=config.allow_secrets,
+    )
+    report = security_audit(
+        {
+            "path": args.path,
+            "include_tests": args.include_tests,
+            "max_findings": args.max_findings,
+        },
+        ctx,
+    )
+    console.print(
+        Panel(
+            report,
+            title=f"zerocode {__version__} · audit de sécurité",
+            title_align="left",
+            border_style="cyan",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        )
+    )
+    return 0
 
 
 def completion_command(args_list: list[str], console: Console) -> int:

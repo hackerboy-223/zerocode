@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..catalog import PROVIDERS, all_choices
 from ..config import mask_key
+from ..errors import ToolError
 from ..prompts import remember_project_instruction
 from ..providers import (
     applied_providers,
@@ -14,6 +15,8 @@ from ..providers import (
     provider_enabled,
     resolve_api_key,
 )
+from ..skills import DEFAULT_ACTIVE_SKILLS, all_skills
+from ..tools.diagnostics import security_audit, sys_diag
 
 if TYPE_CHECKING:
     from .app import ZeroCodeApp
@@ -40,6 +43,10 @@ COMMANDS: list[tuple[str, str]] = [
     ("/sessions", "Lister les sessions"),
     ("/todos", "Plan de travail"),
     ("/tools", "Outils disponibles"),
+    ("/skills", "Lister les profils d'expertise (Dev, Cyber-Sec, Sys-Tech)"),
+    ("/skill [nom|all|off]", "Activer ou basculer un profil d'expertise"),
+    ("/audit [chemin]", "Audit statique de sécurité (SAST, secrets, OWASP/CWE)"),
+    ("/doctor", "Diagnostic système, réseau, Git et toolchain"),
     ("/models [all]", "Catalogue des modèles"),
     ("/free", "Modèles gratuits"),
     ("/providers", "État des fournisseurs"),
@@ -64,6 +71,8 @@ ARG_COMMANDS = {
     "/cd",
     "/image",
     "/remember",
+    "/skill",
+    "/audit",
 }
 
 
@@ -221,6 +230,14 @@ class CommandHandler:
             self._cd(rest)
         elif command == "tools":
             app.set_mode("tools")
+        elif command == "skills":
+            self._skills()
+        elif command == "skill":
+            self._skill(rest)
+        elif command == "audit":
+            self._audit(rest)
+        elif command == "doctor":
+            self._doctor(rest)
         elif command == "models":
             self._models(free_only=rest not in {"all", "tous"})
         elif command == "free":
@@ -392,6 +409,48 @@ class CommandHandler:
         if callable(refresh):
             refresh()
         self.app.notice(f"Consigne mémorisée dans {target}", "success")
+
+    def _skills(self) -> None:
+        app = self.app
+        active = set(getattr(app.agent, "skills", DEFAULT_ACTIVE_SKILLS))
+        catalog = all_skills(app.context.cwd)
+        lines: list[str] = []
+        for name, spec in catalog.items():
+            badge = "ACTIF" if name in active else "inactif"
+            lines.append(f"[{badge:<7}] {name:<14} · {spec.label} — {spec.summary}")
+        self.app.show_list("Profils d'expertise (Skills)", lines)
+
+    def _skill(self, rest: str) -> None:
+        app = self.app
+        if not rest:
+            self._skills()
+            return
+        toggler = getattr(app.agent, "toggle_skill", None)
+        if not callable(toggler):
+            app.notice("Gestion des skills indisponible sur cet agent.", "warning")
+            return
+        ok, message = toggler(rest)
+        app.notice(message, "success" if ok else "warning")
+
+    def _audit(self, rest: str) -> None:
+        app = self.app
+        target = rest or "."
+        try:
+            report = security_audit({"path": target}, app.context)
+        except ToolError as exc:
+            app.notice(str(exc), "warning")
+            return
+        self.app.show_list(f"Audit de sécurité ({target})", report.splitlines())
+
+    def _doctor(self, rest: str) -> None:
+        app = self.app
+        section = rest or "all"
+        try:
+            report = sys_diag({"section": section}, app.context)
+        except ToolError as exc:
+            app.notice(str(exc), "warning")
+            return
+        self.app.show_list("Diagnostic Système & Technicien", report.splitlines())
 
 
 def usage_summary(usage: Any, completion: Any = None) -> str:

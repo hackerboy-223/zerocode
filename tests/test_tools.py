@@ -432,3 +432,89 @@ def test_dlp_secret_redaction_and_catastrophic_shell_block(tmp_path):
         blocked = call(registry, "bash", command=catastrophic)
         assert "Action refusee (securite)" in blocked
 
+
+def test_multi_edit_atomic_and_rollback_on_failure(tmp_path):
+    target = tmp_path / "service.py"
+    target.write_text("a = 1\nb = 2\nc = 3\n", encoding="utf-8")
+    registry, _ = make_registry(tmp_path)
+
+    # Atomic failure when one edit does not match
+    failed = call(
+        registry,
+        "multi_edit",
+        path="service.py",
+        edits=[
+            {"old_string": "a = 1", "new_string": "a = 10"},
+            {"old_string": "missing = 99", "new_string": "missing = 100"},
+        ],
+    )
+    assert failed.startswith("ERREUR:")
+    assert target.read_text(encoding="utf-8") == "a = 1\nb = 2\nc = 3\n"
+
+    # Successful multi-block edit
+    ok = call(
+        registry,
+        "multi_edit",
+        path="service.py",
+        edits=[
+            {"old_string": "a = 1", "new_string": "a = 10"},
+            {"old_string": "c = 3", "new_string": "c = 30"},
+        ],
+    )
+    assert "2 bloc(s), 2 remplacement(s)" in ok
+    assert target.read_text(encoding="utf-8") == "a = 10\nb = 2\nc = 30\n"
+
+
+def test_symbols_tool_extracts_python_and_generic_symbols(tmp_path):
+    (tmp_path / "engine.py").write_text(
+        "class SecurityScanner:\n"
+        "    def scan_repo(self):\n"
+        "        return True\n\n"
+        "async def run_pipeline():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "client.ts").write_text(
+        "export class ApiClient {}\nexport async function fetchUser() {}\n",
+        encoding="utf-8",
+    )
+    registry, _ = make_registry(tmp_path)
+
+    all_syms = call(registry, "symbols", path=".")
+    assert "engine.py:1: [class] SecurityScanner" in all_syms
+    assert "engine.py:2: [method] SecurityScanner.scan_repo" in all_syms
+    assert "engine.py:5: [async def] run_pipeline" in all_syms
+    assert "client.ts:1: [class] ApiClient" in all_syms
+    assert "client.ts:2: [function] fetchUser" in all_syms
+
+    filtered = call(registry, "symbols", path=".", query="scan_repo")
+    assert "SecurityScanner.scan_repo" in filtered
+    assert "ApiClient" not in filtered
+
+
+def test_security_audit_and_sys_diag_tools(tmp_path):
+    (tmp_path / "vuln_app.py").write_text(
+        "import subprocess, pickle, hashlib\n"
+        "def run_cmd(user_input):\n"
+        "    subprocess.run(user_input, shell=True)\n"
+        "    pickle.loads(b'data')\n"
+        "    h = hashlib.md5(b'pw')\n"
+        "    eval(user_input)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    registry, _ = make_registry(tmp_path)
+
+    report = call(registry, "security_audit", path=".")
+    assert "SEC-001" in report
+    assert "SEC-002" in report
+    assert "SEC-003" in report
+    assert "SEC-007" in report
+    assert "SEC-ENV" in report
+
+    diag = call(registry, "sys_diag", section="all")
+    assert "DIAGNOSTIC SYSTÈME & TECHNICIEN ZEROCODE" in diag
+    assert "[Système & Ressources]" in diag
+    assert "[Toolchain Dev, Sécurité & Système]" in diag
+
+

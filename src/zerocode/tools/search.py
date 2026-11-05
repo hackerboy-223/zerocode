@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import fnmatch
 import os
 import re
@@ -192,6 +193,108 @@ def _grep_with_python(
     return results
 
 
+_GENERIC_SYMBOL_RE = re.compile(
+    r"^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?"
+    r"(?P<kind>class|interface|type|struct|enum|function|fn|func|def)\s+"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+def _extract_python_symbols(text: str) -> list[tuple[int, str, str]]:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []
+    items: list[tuple[int, str, str]] = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            items.append((node.lineno, "class", node.name))
+            for sub in node.body:
+                if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    kind = "async method" if isinstance(sub, ast.AsyncFunctionDef) else "method"
+                    items.append((sub.lineno, kind, f"{node.name}.{sub.name}"))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            kind = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
+            items.append((node.lineno, kind, node.name))
+    return items
+
+
+def _extract_generic_symbols(text: str) -> list[tuple[int, str, str]]:
+    items: list[tuple[int, str, str]] = []
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        match = _GENERIC_SYMBOL_RE.match(line)
+        if match:
+            items.append((line_no, match.group("kind"), match.group("name")))
+    return items
+
+
+def extract_symbols(args: dict[str, Any], ctx: ToolContext) -> str:
+    root = ctx.resolve_path(str(args.get("path", ".")))
+    query = str(args.get("query", "")).strip().lower()
+    max_results = min(max(1, int(args.get("max_results", 150))), 500)
+
+    if root.is_file():
+        candidates = [root]
+    elif root.is_dir():
+        visible = _git_visible_files(root)
+        raw_candidates = sorted(visible) if visible is not None else sorted(_walk_files(root))
+        candidates = []
+        for path in raw_candidates:
+            if len(candidates) >= MAX_FILES:
+                break
+            try:
+                rel = path.relative_to(root)
+                if any(part in DEFAULT_IGNORES for part in rel.parts):
+                    continue
+                if path.is_symlink() or not path.is_file():
+                    continue
+                if ctx.protect_secrets and not ctx.allow_secrets and is_secret_path(path):
+                    continue
+                if path.stat().st_size > MAX_FILE_BYTES:
+                    continue
+            except (OSError, ValueError):
+                continue
+            candidates.append(path)
+    else:
+        raise ToolError(f"Chemin introuvable: {ctx.display_path(root)}")
+
+    results: list[str] = []
+    supported_Generic = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".c", ".cpp", ".h", ".java"}
+    for path in candidates:
+        suffix = path.suffix.lower()
+        if suffix != ".py" and suffix not in supported_Generic:
+            continue
+        try:
+            if _is_binary(path):
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except (OSError, ToolError):
+            continue
+        symbols = (
+            _extract_python_symbols(text)
+            if suffix == ".py"
+            else _extract_generic_symbols(text)
+        )
+        if not symbols:
+            continue
+        label = ctx.display_path(path)
+        for line_no, kind, name in symbols:
+            if query and query not in name.lower() and query not in label.lower():
+                continue
+            results.append(f"{label}:{line_no}: [{kind}] {name}")
+            if len(results) >= max_results:
+                break
+        if len(results) >= max_results:
+            break
+
+    if not results:
+        return "(aucun symbole trouve)"
+    output = "\n".join(results)
+    if len(results) >= max_results:
+        output += f"\n... (limite de {max_results} symboles atteinte)"
+    return truncate_text(output, ctx.max_output_chars)
+
+
 def register_search_tools(registry: ToolRegistry) -> None:
     registry.register(
         Tool(
@@ -221,6 +324,31 @@ def register_search_tools(registry: ToolRegistry) -> None:
                 "required": ["pattern"],
             },
             handler=grep_files,
+            approval="never",
+        )
+    )
+    registry.register(
+        Tool(
+            name="symbols",
+            description=(
+                "Extract code symbols (classes, methods, functions, interfaces, structs) with "
+                "line numbers from a file or directory to map the architecture quickly."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File or directory. Default '.'."},
+                    "query": {
+                        "type": "string",
+                        "description": "Optional case-insensitive filter on symbol or file name.",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum symbols returned. Default 150, max 500.",
+                    },
+                },
+            },
+            handler=extract_symbols,
             approval="never",
         )
     )

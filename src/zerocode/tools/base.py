@@ -156,7 +156,7 @@ class Tool:
 def _auto_approve(tool: Tool, args: dict[str, Any], context: ToolContext | None) -> bool:
     if context is None:
         return False
-    if tool.name in {"write", "edit"}:
+    if tool.name in {"write", "edit", "multi_edit"}:
         try:
             path = context.resolve_path(str(args.get("path", "")), for_write=True)
             context.check_secret(path)

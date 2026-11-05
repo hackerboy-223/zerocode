@@ -441,5 +441,36 @@ def test_agent_expands_at_file_mentions_and_remember_instruction(tmp_path):
     assert "Toujours utiliser pytest -q" in load_project_instructions(tmp_path)
 
 
+def test_agent_skills_builtin_and_custom_discovery(tmp_path):
+    custom_dir = tmp_path / ".zerocode" / "skills"
+    custom_dir.mkdir(parents=True)
+    (custom_dir / "reseau-pro.md").write_text(
+        "# Diagnostic BGP & VLAN\nVerifier systématiquement les tables de routage et MTU.\n",
+        encoding="utf-8",
+    )
+
+    agent, _, _, _ = build_agent(tmp_path, [])
+    # Default active skills include ultra-dev, cyber-sec, sys-tech
+    assert "COMPETENCE ULTRA-DEV" in agent.messages[0]["content"]
+    assert "COMPETENCE EXPERT CYBERSECURITE" in agent.messages[0]["content"]
+    assert "COMPETENCE TECHNICIEN SYSTEME" in agent.messages[0]["content"]
+
+    ok, msg = agent.toggle_skill("reseau-pro")
+    assert ok is True
+    assert "reseau-pro" in msg
+    assert "COMPETENCE PERSONNALISEE (reseau-pro)" in agent.messages[0]["content"]
+    assert "tables de routage et MTU" in agent.messages[0]["content"]
+
+    ok_all, _ = agent.toggle_skill("all")
+    assert ok_all is True
+    assert "COMPETENCE DURCISSEMENT & REMEDIATION SECURITE" in agent.messages[0]["content"]
+
+    ok_off, _ = agent.toggle_skill("off")
+    assert ok_off is True
+    assert agent.skills == []
+    assert "COMPETENCE ULTRA-DEV" not in agent.messages[0]["content"]
+
+
+
 
 

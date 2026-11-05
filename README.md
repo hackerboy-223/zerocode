@@ -10,7 +10,8 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
-- Outils intégrés : lecture (`read`), écriture (`write`), édition (`edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), shell (`bash`), web (`fetch`, `web_search`), sous-agent d'exploration isolé (`subagent`), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
+- Outils intégrés (14 outils) : lecture (`read`), écriture (`write`), édition (`edit`), édition multi-blocs atomique (`multi_edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), cartographie AST de symboles (`symbols`), audit statique de cybersécurité SAST (`security_audit`), diagnostic système/technicien (`sys_diag`), shell (`bash`), web (`fetch`, `web_search`), sous-agent d'exploration isolé (`subagent`), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
+- Système de **Skills d'expertise** intégrés et extensibles (`/skills`, `/skill <nom>`, `--skill`) : `ultra-dev` (Ingénierie Senior), `cyber-sec` (Expert Cybersécurité, Audit OWASP/CWE & DevSecOps), `sys-tech` (Technicien Système, Réseau & Infra), `review` (Revue de code), `perf` (Haute Performance) et `sec-hardening` (Durcissement actif), plus découverte automatique de `.zerocode/skills/*.md` et `~/.config/zerocode/skills/*.md`.
 - Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`), pré-injection directe des fichiers mentionnés avec `@chemin` (0 tour réseau) et cache TTL Git.
 - Diagnostics syntaxiques instantanés (Python AST, JSON, TOML, Shell `bash -n` et JavaScript `node --check`) après chaque écriture ou édition pour auto-correction immédiate.
 - Sessions reprenables, mémoire projet persistante (`/remember`), copie rapide (`/copy`, `Ctrl+Y`), compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
@@ -214,13 +215,15 @@ Les overrides disponibles : `--model`, `--provider`, `--free-only/--no-free-only
 | `zerocode tui` | Ouvrir explicitement l'interface TUI |
 | `zerocode --classic` | Ouvrir l'ancienne interface REPL |
 | `zerocode doctor [--live]` | Diagnostic local et test réel du routeur |
+| `zerocode audit [chemin]` | Audit statique de sécurité (SAST, secrets, OWASP/CWE, permissions) |
+| `zerocode skills [--json]` | Lister les profils d'expertise (Dev, Cyber-Sec, Sys-Tech et personnalisés) |
 | `zerocode models [--free] [--live]` | Catalogue des modèles |
 | `zerocode providers` | État des fournisseurs et des clés |
 | `zerocode sessions` | Lister, reprendre ou supprimer des sessions |
 | `zerocode config` | Afficher ou initialiser la configuration |
 | `zerocode completion [bash\|zsh\|fish]` | Générer le script d'autocomplétion shell |
 
-Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/remember`, `/copy`, `/undo`, `/image`, `/clear`, `/quit`.
+Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/skills`, `/skill`, `/audit`, `/doctor`, `/model`, `/provider`, `/permissions`, `/yolo`, `/safe`, `/reasoning`, `/think`, `/temp`, `/max-steps`, `/compact`, `/cost`, `/todos`, `/tools`, `/models`, `/free`, `/providers`, `/session`, `/new`, `/resume`, `/sessions`, `/cd`, `/init`, `/remember`, `/copy`, `/undo`, `/image`, `/clear`, `/quit`.
 
 ## Outils et sécurité
 

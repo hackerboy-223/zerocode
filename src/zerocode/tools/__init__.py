@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .base import PermissionManager, Tool, ToolContext, ToolRegistry
+from .diagnostics import register_diagnostic_tools
 from .files import register_file_tools
 from .search import register_search_tools
 from .shell import register_shell_tools
@@ -29,6 +30,7 @@ def build_registry(
     registry = ToolRegistry(context, permissions, ui)
     register_file_tools(registry)
     register_search_tools(registry)
+    register_diagnostic_tools(registry)
     register_shell_tools(registry)
     register_todo_tools(registry)
     register_web_tools(registry)

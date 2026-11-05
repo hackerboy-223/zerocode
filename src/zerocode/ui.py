@@ -445,8 +445,19 @@ def _format_tool_args(
     if not full:
         if name == "bash":
             return truncate_text("$ " + str(args.get("command", "")), 220)
-        if name in {"read", "list", "write", "edit"}:
-            return truncate_text(str(args.get("path", "")), 220)
+        if name in {"read", "list", "write", "edit", "multi_edit", "security_audit"}:
+            extra = ""
+            if name == "multi_edit":
+                edits = args.get("edits")
+                if isinstance(edits, list):
+                    extra = f" ({len(edits)} bloc(s))"
+            return truncate_text(str(args.get("path", ".")) + extra, 220)
+        if name == "symbols":
+            query = str(args.get("query", "")).strip()
+            path = str(args.get("path", "."))
+            return truncate_text(f"{query} · {path}" if query else path, 220)
+        if name == "sys_diag":
+            return truncate_text(str(args.get("section", "all")), 220)
         if name == "grep":
             return truncate_text(
                 f"{args.get('pattern', '')} · {args.get('path', '.')}",

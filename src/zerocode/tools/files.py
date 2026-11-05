@@ -313,6 +313,53 @@ def edit_file(args: dict[str, Any], ctx: ToolContext) -> str:
     return f"Modifie {ctx.display_path(path)} ({replacements} remplacement(s)){diag}"
 
 
+def multi_edit_file(args: dict[str, Any], ctx: ToolContext) -> str:
+    path = ctx.resolve_path(str(args["path"]), for_write=True)
+    ctx.check_secret(path)
+    if not path.is_file():
+        raise ToolError(f"Fichier introuvable: {ctx.display_path(path)}")
+    if path.stat().st_size > MAX_READ_BYTES:
+        raise ToolError("Fichier trop volumineux pour une edition directe (max 2 Mo).")
+    if _is_binary(path):
+        raise ToolError(f"Fichier binaire: {ctx.display_path(path)}")
+    edits = args.get("edits")
+    if not isinstance(edits, list) or not edits:
+        raise ToolError("edits doit etre une liste non vide de remplacements.")
+    if len(edits) > 50:
+        raise ToolError("Maximum 50 remplacements par appel multi_edit.")
+
+    original = path.read_text(encoding="utf-8", errors="replace")
+    updated = original
+    total_replacements = 0
+    for idx, item in enumerate(edits, start=1):
+        if not isinstance(item, dict):
+            raise ToolError(f"Edition #{idx} invalide: objet JSON attendu.")
+        old = str(item.get("old_string", ""))
+        new = str(item.get("new_string", ""))
+        replace_all = bool(item.get("replace_all", False))
+        if not old:
+            raise ToolError(f"Edition #{idx}: old_string ne peut pas etre vide.")
+        count = updated.count(old)
+        if count == 0:
+            raise ToolError(f"Edition #{idx}: old_string est introuvable dans le fichier.")
+        if count > 1 and not replace_all:
+            raise ToolError(
+                f"Edition #{idx}: old_string apparait {count} fois. "
+                "Ajoute du contexte ou utilise replace_all=true."
+            )
+        updated = updated.replace(old, new, -1 if replace_all else 1)
+        total_replacements += count if replace_all else 1
+
+    _record_checkpoint(ctx, path, original, "multi_edit")
+    _atomic_text_write(path, updated)
+    _emit_diff(ctx, path, original, updated, existed=True)
+    diag = _syntax_diagnostic(path, updated)
+    return (
+        f"Modifie {ctx.display_path(path)} "
+        f"({len(edits)} bloc(s), {total_replacements} remplacement(s)){diag}"
+    )
+
+
 def list_files(args: dict[str, Any], ctx: ToolContext) -> str:
     root = ctx.resolve_path(str(args.get("path", ".")))
     pattern = str(args.get("glob", "*")).strip() or "*"
@@ -435,6 +482,37 @@ def register_file_tools(registry: ToolRegistry) -> None:
                 "required": ["path", "old_string", "new_string"],
             },
             handler=edit_file,
+            approval="auto",
+        )
+    )
+    registry.register(
+        Tool(
+            name="multi_edit",
+            description=(
+                "Apply multiple exact string replacements atomically to a single file. "
+                "If any edit fails, the file is left untouched."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to edit."},
+                    "edits": {
+                        "type": "array",
+                        "description": "Ordered list of {old_string, new_string, replace_all?} edits.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "old_string": {"type": "string"},
+                                "new_string": {"type": "string"},
+                                "replace_all": {"type": "boolean"},
+                            },
+                            "required": ["old_string", "new_string"],
+                        },
+                    },
+                },
+                "required": ["path", "edits"],
+            },
+            handler=multi_edit_file,
             approval="auto",
         )
     )
