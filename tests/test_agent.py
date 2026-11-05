@@ -374,3 +374,49 @@ def test_full_stack_agent_auto_continues_when_todos_remain(tmp_path):
     assert router.calls == 4
 
 
+def test_agent_executes_read_only_tools_in_parallel_and_supports_subagent(tmp_path):
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("beta\n", encoding="utf-8")
+
+    first = Completion(
+        content="",
+        tool_calls=[
+            ToolCall(id="call-a", name="read", arguments={"path": "a.txt"}),
+            ToolCall(id="call-b", name="read", arguments={"path": "b.txt"}),
+        ],
+        finish_reason="tool_calls",
+    )
+    second = Completion(
+        content="",
+        tool_calls=[
+            ToolCall(
+                id="call-sub",
+                name="subagent",
+                arguments={"task": "Synthetise le contenu de a.txt et b.txt"},
+            ),
+        ],
+        finish_reason="tool_calls",
+    )
+    sub_completion = Completion(
+        content="Synthese sous-agent: alpha + beta.",
+        finish_reason="stop",
+    )
+    final = Completion(
+        content="Termine avec synthese.",
+        finish_reason="stop",
+    )
+    agent, router, _, _ = build_agent(
+        tmp_path, [first, second, sub_completion, final]
+    )
+    result = agent.run_turn("analyse a.txt et b.txt")
+    assert result == "Termine avec synthese."
+    assert router.calls == 4
+    tool_outputs = [
+        msg["content"] for msg in agent.messages if msg.get("role") == "tool"
+    ]
+    assert any("alpha" in out for out in tool_outputs)
+    assert any("beta" in out for out in tool_outputs)
+    assert any("Synthese sous-agent: alpha + beta." in out for out in tool_outputs)
+
+
+

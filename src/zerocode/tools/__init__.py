@@ -6,6 +6,7 @@ from .base import PermissionManager, Tool, ToolContext, ToolRegistry
 from .files import register_file_tools
 from .search import register_search_tools
 from .shell import register_shell_tools
+from .subagent import register_subagent_tools
 from .todo import register_todo_tools
 from .web import register_web_tools
 
@@ -22,6 +23,8 @@ def build_registry(
     context: ToolContext,
     permissions: PermissionManager,
     ui: Any | None = None,
+    *,
+    include_subagent: bool = True,
 ) -> ToolRegistry:
     registry = ToolRegistry(context, permissions, ui)
     register_file_tools(registry)
@@ -29,4 +32,6 @@ def build_registry(
     register_shell_tools(registry)
     register_todo_tools(registry)
     register_web_tools(registry)
+    if include_subagent:
+        register_subagent_tools(registry)
     return registry

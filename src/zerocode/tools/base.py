@@ -60,6 +60,7 @@ class ToolContext:
     show_diff: Callable[[str, str], None] | None = None
     checkpoint: Callable[[Path, str | None, str], None] | None = None
     stream_output: Callable[[str, str], None] | None = None
+    run_subagent: Callable[[str], str] | None = None
     _active_process: Any = field(default=None, repr=False, compare=False)
     _process_interrupted: bool = field(default=False, repr=False, compare=False)
 

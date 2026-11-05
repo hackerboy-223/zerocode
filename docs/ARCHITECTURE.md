@@ -42,7 +42,7 @@ Le cœur de l'agent reste synchrone : une requête, un flux, un tour d'agent. Le
 | `security.py` | masquage DLP des secrets (`redact_secrets`) et pare-feu contre les commandes shell destructrices (`check_dangerous_command`) |
 | `checkpoints.py` | sauvegarde atomique avant écriture/édition et restauration sécurisée (`/undo`) |
 | `mcp.py` | client JSON-RPC stdio pour serveurs Model Context Protocol avec environnement assaini |
-| `tools/` | outils (`files`, `search`, `shell`, `web`, `todo`) et gestion des permissions |
+| `tools/` | outils (`files`, `search`, `shell`, `web`, `todo`, `subagent`) et gestion des permissions |
 
 ## Déroulement d'un tour
 

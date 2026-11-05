@@ -7,8 +7,11 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
+
+import tomllib
 
 from ..errors import ToolError
 from ..tokens import truncate_text
@@ -37,11 +40,18 @@ MAX_WRITE_CHARS = 1_000_000
 MAX_DIFF_LINES = 300
 MAX_DIFF_LINE_CHARS = 500
 MAX_DIFF_CHARS = 24_000
+_GIT_VISIBLE_CACHE: dict[str, tuple[float, set[Path] | None]] = {}
+_GIT_CACHE_TTL = 2.0
 
 
 def _git_visible_files(root: Path) -> set[Path] | None:
     if not root.is_dir():
         return None
+    key = str(root.resolve())
+    now = time.monotonic()
+    cached = _GIT_VISIBLE_CACHE.get(key)
+    if cached is not None and now - cached[0] < _GIT_CACHE_TTL:
+        return cached[1]
     try:
         result = subprocess.run(
             [
@@ -59,14 +69,18 @@ def _git_visible_files(root: Path) -> set[Path] | None:
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
+        _GIT_VISIBLE_CACHE[key] = (now, None)
         return None
     if result.returncode != 0:
+        _GIT_VISIBLE_CACHE[key] = (now, None)
         return None
-    return {
+    visible = {
         (root / name).resolve()
         for name in result.stdout.decode("utf-8", errors="replace").split("\0")
         if name
     }
+    _GIT_VISIBLE_CACHE[key] = (now, visible)
+    return visible
 
 
 def _is_binary(path: Path) -> bool:
@@ -203,6 +217,11 @@ def _syntax_diagnostic(path: Path, content: str) -> str:
             json.loads(content)
         except json.JSONDecodeError as exc:
             return f"\nDIAGNOSTIC JSON (ligne {exc.lineno}): {exc.msg}"
+    elif suffix == ".toml":
+        try:
+            tomllib.loads(content)
+        except tomllib.TOMLDecodeError as exc:
+            return f"\nDIAGNOSTIC TOML: {exc}"
     return ""
 
 
@@ -226,6 +245,8 @@ def write_file(args: dict[str, Any], ctx: ToolContext) -> str:
     if can_diff:
         _record_checkpoint(ctx, path, before if existed else None, "write")
     _atomic_text_write(path, content)
+    if not existed:
+        _GIT_VISIBLE_CACHE.clear()
     if can_diff:
         _emit_diff(ctx, path, before, content, existed=existed)
     diag = _syntax_diagnostic(path, content)

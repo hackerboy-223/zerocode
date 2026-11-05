@@ -430,6 +430,8 @@ def _format_tool_args(
             return truncate_text(str(args.get("url", "")), 220)
         if name == "web_search":
             return truncate_text(str(args.get("query", "")), 220)
+        if name == "subagent":
+            return truncate_text(str(args.get("task", "")), 220)
         if name == "todo_write":
             todos = args.get("todos")
             count = len(todos) if isinstance(todos, list) else 0

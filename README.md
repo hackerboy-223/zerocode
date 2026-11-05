@@ -10,8 +10,9 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
-- Outils intégrés : lecture (`read`), écriture (`write`), édition (`edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), shell (`bash`), web (`fetch`, `web_search`), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
-- Diagnostics syntaxiques instantanés (AST Python et JSON) après chaque écriture ou édition pour auto-correction immédiate.
+- Outils intégrés : lecture (`read`), écriture (`write`), édition (`edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), shell (`bash`), web (`fetch`, `web_search`), sous-agent d'exploration isolé (`subagent`), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
+- Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`) et cache TTL Git pour accélérer l'exploration multi-fichiers.
+- Diagnostics syntaxiques instantanés (AST Python, JSON et TOML) après chaque écriture ou édition pour auto-correction immédiate.
 - Sessions reprenables, compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
 - Interface TUI Textual sobre et moderne : sidebar projet/sessions, chat Markdown, streaming temps réel, diffs intégrés et approbations.
 - Mascotte animée **LUPUS**, un loup veilleur qui rappelle d'observer avant d'agir.

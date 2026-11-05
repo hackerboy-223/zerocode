@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +8,8 @@ from .config import Config
 from .errors import ConfigError
 from .prompts import build_system_prompt
 from .session import Session, SessionStore
-from .tokens import compact_messages, estimate_messages
+from .tokens import compact_messages, estimate_messages, truncate_text
+from .tools import PermissionManager, ToolContext, build_registry
 from .types import StreamCallbacks, Usage
 
 PLAN_MODE_INSTRUCTION = """
@@ -67,6 +69,7 @@ class Agent:
         self._full_stack_backup: dict[str, Any] | None = None
         self.messages: list[dict[str, Any]] = session.messages
         self.tools.context.todos[:] = [todo for todo in session.todos if isinstance(todo, dict)]
+        self.tools.context.run_subagent = self._run_subagent
         self.tools.read_only = self.mode == "plan"
         if not self.messages:
             self.messages = [self._system_message()]
@@ -161,26 +164,53 @@ class Agent:
                     self._repair_pending_tool_calls()
                     break
                 stop_after_repeated_failure = False
-                for call in completion.tool_calls:
-                    if self._interrupted():
-                        raise KeyboardInterrupt
-                    self._call_ui("tool_start", call.name, call.arguments)
-                    fingerprint = _tool_call_fingerprint(call)
-                    result = self.tools.execute(call)
-                    if result.startswith("ERREUR:"):
-                        repeated_failures[fingerprint] = repeated_failures.get(fingerprint, 0) + 1
-                        if repeated_failures[fingerprint] >= 2:
-                            stop_after_repeated_failure = True
-                    self._call_ui("tool_result", call.name, result)
-                    self.messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call.id,
-                            "content": result,
-                        }
-                    )
-                    if self._interrupted():
-                        raise KeyboardInterrupt
+                calls = completion.tool_calls
+                if self._can_parallelize_calls(calls):
+                    for call in calls:
+                        if self._interrupted():
+                            raise KeyboardInterrupt
+                        self._call_ui("tool_start", call.name, call.arguments)
+                    with ThreadPoolExecutor(max_workers=min(4, len(calls))) as pool:
+                        results = list(pool.map(self.tools.execute, calls))
+                    for call, result in zip(calls, results, strict=False):
+                        fingerprint = _tool_call_fingerprint(call)
+                        if result.startswith("ERREUR:"):
+                            repeated_failures[fingerprint] = (
+                                repeated_failures.get(fingerprint, 0) + 1
+                            )
+                            if repeated_failures[fingerprint] >= 2:
+                                stop_after_repeated_failure = True
+                        self._call_ui("tool_result", call.name, result)
+                        self.messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": call.id,
+                                "content": result,
+                            }
+                        )
+                else:
+                    for call in calls:
+                        if self._interrupted():
+                            raise KeyboardInterrupt
+                        self._call_ui("tool_start", call.name, call.arguments)
+                        fingerprint = _tool_call_fingerprint(call)
+                        result = self.tools.execute(call)
+                        if result.startswith("ERREUR:"):
+                            repeated_failures[fingerprint] = (
+                                repeated_failures.get(fingerprint, 0) + 1
+                            )
+                            if repeated_failures[fingerprint] >= 2:
+                                stop_after_repeated_failure = True
+                        self._call_ui("tool_result", call.name, result)
+                        self.messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": call.id,
+                                "content": result,
+                            }
+                        )
+                        if self._interrupted():
+                            raise KeyboardInterrupt
                 self._sync_session()
                 self._save_quiet()
                 if stop_after_repeated_failure:
@@ -270,6 +300,7 @@ class Agent:
         self.config.provider = session.provider
         self.tools.context.cwd = Path(session.cwd).expanduser().resolve()
         self.tools.context.todos[:] = [todo for todo in session.todos if isinstance(todo, dict)]
+        self.tools.context.run_subagent = self._run_subagent
         self.tools.read_only = self.mode == "plan"
         if not self.messages:
             self.messages = [self._system_message()]
@@ -402,6 +433,92 @@ class Agent:
             isinstance(todo, dict) and todo.get("status") in {"pending", "in_progress"}
             for todo in self.tools.context.todos
         )
+
+    def _can_parallelize_calls(self, calls: list[Any]) -> bool:
+        if len(calls) < 2:
+            return False
+        tool_map = {tool.name: tool for tool in self.tools.tools()}
+        for call in calls:
+            if call.name in {"todo_write", "subagent"}:
+                return False
+            spec = tool_map.get(call.name)
+            if spec is None or spec.approval != "never":
+                return False
+        return True
+
+    def _run_subagent(self, task: str) -> str:
+        sub_ctx = ToolContext(
+            cwd=self.tools.context.cwd,
+            allow_outside=self.tools.context.allow_outside,
+            command_timeout=self.tools.context.command_timeout,
+            protect_secrets=self.tools.context.protect_secrets,
+            allow_secrets=self.tools.context.allow_secrets,
+        )
+        sub_perms = PermissionManager(mode="deny", interactive=False)
+        sub_registry = build_registry(
+            sub_ctx,
+            sub_perms,
+            ui=None,
+            include_subagent=False,
+        )
+        sub_registry.read_only = True
+        sub_messages: list[dict[str, Any]] = [
+            {
+                "role": "system",
+                "content": (
+                    "Tu es un sous-agent d'exploration en lecture seule pour zerocode. "
+                    "Explore rapidement le depot avec read, list, grep, fetch ou web_search "
+                    "et renvoie une synthese concise, factuelle et directement exploitable "
+                    "avec les chemins et lignes exacts."
+                ),
+            },
+            {"role": "user", "content": task},
+        ]
+        max_sub_steps = min(8, max(2, self.config.max_steps))
+        last_text = ""
+        for _ in range(max_sub_steps):
+            if self._interrupted():
+                raise KeyboardInterrupt
+            completion = self.router.complete(
+                sub_messages,
+                sub_registry.schemas(),
+                model=self.config.model,
+                provider=self.config.provider,
+            )
+            self.usage.add(completion.usage)
+            if completion.content:
+                last_text = completion.content
+            if not completion.tool_calls:
+                break
+            sub_messages.append(
+                {
+                    "role": "assistant",
+                    "content": completion.content or "",
+                    "tool_calls": [
+                        {
+                            "id": call.id,
+                            "type": "function",
+                            "function": {
+                                "name": call.name,
+                                "arguments": _json_arguments(call.arguments),
+                            },
+                        }
+                        for call in completion.tool_calls
+                    ],
+                }
+            )
+            for call in completion.tool_calls:
+                if self._interrupted():
+                    raise KeyboardInterrupt
+                result = sub_registry.execute(call)
+                sub_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": truncate_text(result, 8_000),
+                    }
+                )
+        return last_text.strip() or "(aucune synthese produite par le sous-agent)"
 
     def _callable(self, name: str) -> Any:
         method = getattr(self.ui, name, None)

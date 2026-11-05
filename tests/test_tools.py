@@ -405,6 +405,9 @@ def test_syntax_diagnostics_on_write_and_edit(tmp_path):
     broken_json = call(registry, "write", path="broken.json", content="{bad: 1}\n")
     assert "DIAGNOSTIC JSON" in broken_json
 
+    broken_toml = call(registry, "write", path="broken.toml", content="[section\nx = 1\n")
+    assert "DIAGNOSTIC TOML" in broken_toml
+
 
 def test_dlp_secret_redaction_and_catastrophic_shell_block(tmp_path):
     (tmp_path / "notes.txt").write_text(

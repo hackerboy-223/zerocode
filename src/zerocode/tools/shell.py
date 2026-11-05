@@ -159,9 +159,44 @@ def _clean_environment() -> dict[str, str]:
     env.setdefault("PAGER", "cat")
     env.setdefault("GIT_PAGER", "cat")
     env.setdefault("GIT_TERMINAL_PROMPT", "0")
+    env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
     env.setdefault("NO_COLOR", "1")
     env.setdefault("TERM", "dumb")
     return env
+
+
+def _build_bwrap_args(command: str, cwd: Path) -> list[str] | None:
+    if os.environ.get("ZEROCODE_SANDBOX") != "1" or os.name != "posix":
+        return None
+    if SUDO_COMMAND_RE.search(command):
+        return None
+    bwrap = shutil.which("bwrap")
+    if not bwrap:
+        return None
+    resolved_cwd = str(cwd.resolve())
+    return [
+        bwrap,
+        "--ro-bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
+        "--tmpfs",
+        "/tmp",
+        "--bind",
+        resolved_cwd,
+        resolved_cwd,
+        "--chdir",
+        resolved_cwd,
+        "--unshare-pid",
+        "--die-with-parent",
+        "sh",
+        "-c",
+        command,
+    ]
 
 
 def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
@@ -186,10 +221,11 @@ def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
         if not _prime_sudo(sudo_binary, password, env, ctx.cwd):
             return "Action refusee: mot de passe sudo refuse."
 
+    bwrap_args = _build_bwrap_args(command, ctx.cwd)
     try:
         process = subprocess.Popen(
-            command,
-            shell=True,
+            bwrap_args if bwrap_args is not None else command,
+            shell=bwrap_args is None,
             cwd=ctx.cwd,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
