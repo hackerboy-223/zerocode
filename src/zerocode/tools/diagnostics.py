@@ -162,7 +162,7 @@ def _is_test_or_scanner_file(rel_label: str) -> bool:
     parts = Path(rel_label).parts
     if any(p in {"tests", "test", "__tests__", "fixtures"} for p in parts):
         return True
-    return rel_label.endswith(("tools/diagnostics.py", "security.py"))
+    return rel_label.endswith(("tools/diagnostics.py", "security.py", "skills.py"))
 
 
 def security_audit(args: dict[str, Any], ctx: ToolContext) -> str:
