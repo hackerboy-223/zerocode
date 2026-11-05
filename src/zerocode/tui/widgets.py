@@ -43,9 +43,9 @@ class WolfMascot(Static):
         frame = self.FRAMES[self._index % len(self.FRAMES)]
         wisdom = self.WISDOM[self._index % len(self.WISDOM)]
         text = Text()
-        text.append(frame + "\n", style="bold #7dd3fc")
-        text.append("LUPUS  ·  LE VEILLEUR\n", style="bold #c4b5fd")
-        text.append(f"« {wisdom} »", style="#7d8998 italic")
+        text.append(frame + "\n", style="bold #10a37f")
+        text.append("LUPUS  ·  ZEROCODE\n", style="bold #ececec")
+        text.append(f"« {wisdom} »", style="#8e8e8e italic")
         self.update(text)
         self._index += 1
 
@@ -226,20 +226,13 @@ class ToolCard(Collapsible):
     ) -> Text:
         title = Text()
         title.append(f"{icon} ", style=icon_style)
-        title.append(self.tool_name, style="bold #e6edf3")
-        if badge:
-            badge_style = (
-                "bold #071016 on #34d399"
-                if badge == "ok"
-                else "bold #071016 on #f87171"
-                if badge == "erreur"
-                else "bold #071016 on #fbbf24"
-            )
-            title.append(f"  {badge} ", style=badge_style)
+        title.append(self.tool_name, style="bold #ececec")
         if self.preview:
-            title.append("  " + truncate_text(self.preview, 92), style="#7d8998")
+            title.append("  " + truncate_text(self.preview, 88), style="#9b9b9b")
         if suffix:
-            title.append("  ·  " + suffix, style="#6f7c8e")
+            title.append("  ·  " + suffix, style="#676767")
+        elif badge == "en cours":
+            title.append("  ·  en cours…", style="#fbbf24")
         return title
 
 

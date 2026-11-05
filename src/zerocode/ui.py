@@ -361,40 +361,26 @@ class ConsoleUI:
         session_id: str,
         cwd: Path,
     ) -> None:
-        body = Text()
-        body.append("Agent de codage pour le terminal\n\n", style="dim")
-        body.append("modèle       ", style="dim")
-        body.append(model)
-        body.append("\n")
-        body.append("fournisseur  ", style="dim")
-        body.append(provider or "automatique")
-        body.append("\n")
-        if chain:
-            body.append("route        ", style="dim")
-            body.append(" · ".join(chain[:3]) + "\n")
-        body.append("permissions  ", style="dim")
-        body.append(permissions + "\n")
-        body.append("session      ", style="dim")
-        body.append(session_id + "\n")
-        body.append("dossier      ", style="dim")
-        body.append(str(cwd) + "\n")
-        body.append("\nCréé par ", style="dim")
-        body.append(__author__, style="bold")
-        body.append("\nGitHub       ", style="dim")
-        body.append(__github__, style=f"cyan underline link {__github__}")
-        body.append("\nPortfolio    ", style="dim")
-        body.append(__portfolio__, style=f"cyan underline link {__portfolio__}")
-        body.append("\n\n")
-        body.append("/help commandes · /quit quitter", style="dim")
+        self.console.print()
+        header = Text()
+        header.append("● ", style="bold green")
+        header.append(f"zerocode {__version__}", style="bold")
+        header.append("  ·  Agent de codage pour le terminal", style="dim")
+        header.append(f"  ·  {model}  ·  {cwd.name}", style="dim")
+        self.console.print(header)
         self.console.print(
-            Panel(
-                body,
-                title=f"zerocode {__version__}",
-                title_align="left",
-                border_style="cyan",
-                box=box.ROUNDED,
-                padding=(0, 1),
-                expand=False,
+            Text("Comment puis-je t'aider aujourd'hui ?", style="bold")
+        )
+        meta = Text()
+        meta.append(f"{__author__}  ·  ", style="dim")
+        meta.append(__github__, style=f"dim underline link {__github__}")
+        meta.append("  ·  ", style="dim")
+        meta.append(__portfolio__, style=f"dim underline link {__portfolio__}")
+        self.console.print(meta)
+        self.console.print(
+            Text(
+                "@ fichier  ·  /skills  ·  /audit  ·  /help commandes  ·  /quit quitter\n",
+                style="dim",
             )
         )
 
