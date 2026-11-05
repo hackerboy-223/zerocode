@@ -60,6 +60,9 @@ class TuiBridge:
     def todos(self, todos: list[dict[str, Any]]) -> None:
         self._dispatch("show_todos", todos)
 
+    def usage(self, usage: Any, completion: Any = None) -> None:
+        self._dispatch("_refresh_status")
+
     def confirm_tool(self, name: str, args: dict[str, Any]) -> bool:
         done = threading.Event()
         result = {"allowed": False}
@@ -68,7 +71,8 @@ class TuiBridge:
             result["allowed"] = bool(allowed)
             done.set()
 
-        self._dispatch("ask_tool_permission", name, args, receive)
+        if not self._dispatch("ask_tool_permission", name, args, receive):
+            return False
         if not done.wait(timeout=900):
             return False
         return result["allowed"]
@@ -83,13 +87,22 @@ class TuiBridge:
             result["password"] = password or None
             done.set()
 
-        self._dispatch("ask_sudo_password", command, receive)
+        if not self._dispatch("ask_sudo_password", command, receive):
+            return None
         if not done.wait(timeout=900):
             return None
         return result["password"]
 
-    def _dispatch(self, method: str, *args: Any) -> Any:
-        callback = getattr(self.app, method)
-        if threading.get_ident() == self.thread_id:
-            return callback(*args)
-        return self.app.call_from_thread(callback, *args)
+    def _dispatch(self, method: str, *args: Any) -> bool:
+        callback = getattr(self.app, method, None)
+        if not callable(callback):
+            return False
+        main_thread = getattr(self.app, "_thread_id", self.thread_id)
+        if threading.get_ident() == main_thread:
+            callback(*args)
+            return True
+        try:
+            self.app.call_from_thread(callback, *args)
+        except RuntimeError:
+            return False
+        return True

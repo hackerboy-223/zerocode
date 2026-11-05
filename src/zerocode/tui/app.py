@@ -570,6 +570,7 @@ class ZeroCodeApp(App[None]):
         self._route_stamp = time.monotonic()
         self._files: list[str] = []
         self._tool_cards: list[ToolCard] = []
+        self._pending_notices: list[tuple[str, str]] = []
         self._thinking: ThinkingIndicator | None = None
         self._mode = "chat"
         self.work_mode = getattr(agent, "mode", "build")
@@ -662,6 +663,11 @@ class ZeroCodeApp(App[None]):
             self.render_session(self.agent.session)
         else:
             self.show_welcome()
+        if self._pending_notices:
+            pending = list(self._pending_notices)
+            self._pending_notices.clear()
+            for message, kind in pending:
+                self.notice(message, kind)
         self.query_one("#prompt", Input).focus()
 
     def on_unmount(self) -> None:
@@ -1120,7 +1126,23 @@ class ZeroCodeApp(App[None]):
         self._reasoning_buffer = ""
         self._tool_cards = []
 
+    def _notice(self, message: str, kind: str = "info") -> None:
+        self.notice(message, kind)
+
     def notice(self, message: str, kind: str = "info") -> None:
+        if threading.get_ident() != self._thread_id:
+            self._call_main("_notice", message, kind)
+            return
+        try:
+            chat = self.query_one("#chat", VerticalScroll)
+        except Exception:  # noqa: BLE001 - avant montage du DOM
+            self._pending_notices.append((message, kind))
+            return
+        if self._assistant is not None or self._reasoning is not None:
+            self._end_assistant()
+        if kind == "error":
+            self._stop_thinking()
+        follow = self._is_following()
         style = {
             "warning": "#fbbf24",
             "error": "bold #f87171",
@@ -1133,10 +1155,11 @@ class ZeroCodeApp(App[None]):
             "success": "✓ ",
             "info": "· ",
         }.get(kind, "")
-        self._mount(
+        chat.mount(
             Static(Text(badge + _safe(message), style=style), classes=f"notice {kind}")
         )
-        self._scroll_chat()
+        if follow:
+            self._scroll_chat()
 
     def show_list(self, title: str, lines: list[str]) -> None:
         body = Text()

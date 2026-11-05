@@ -506,3 +506,51 @@ def test_tui_tool_card_shows_diff(tmp_path):
 
     asyncio.run(scenario())
 
+
+def test_tui_bridge_notifications_main_thread_worker_and_premount(tmp_path):
+    async def scenario() -> None:
+        app, _ = _make_app(tmp_path)
+        # Notification avant montage du DOM : mise en file d'attente sans crash
+        app.bridge.warn("Alerte pre-mount")
+        assert ("Alerte pre-mount", "warning") in app._pending_notices
+
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            assert app._pending_notices == []
+
+            # Notifications directes sur le thread principal
+            app.bridge.info("Information système")
+            app.bridge.warn("Bascule vers le fournisseur suivant")
+            app.bridge.success("Opération réussie")
+            app.bridge.error("Échec réseau")
+            await pilot.pause()
+
+            # Notifications depuis un thread worker pendant un flux actif
+            app.bridge.stream_text("Début de réponse")
+
+            def worker() -> None:
+                app.bridge.warn("Avertissement depuis worker")
+                app.bridge.info("Info depuis worker")
+                app.bridge.usage(Usage(total_tokens=42, requests=1))
+
+            thread = threading.Thread(target=worker)
+            thread.start()
+            thread.join(timeout=5)
+            await pilot.pause()
+
+            notices = [
+                getattr(widget.content, "plain", str(widget.content))
+                for widget in app.query(".notice")
+            ]
+            combined = "\n".join(notices)
+            assert "Alerte pre-mount" in combined
+            assert "Information système" in combined
+            assert "Bascule vers le fournisseur suivant" in combined
+            assert "Opération réussie" in combined
+            assert "Échec réseau" in combined
+            assert "Avertissement depuis worker" in combined
+            assert "Info depuis worker" in combined
+
+    asyncio.run(scenario())
+
+

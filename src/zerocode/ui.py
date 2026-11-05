@@ -64,6 +64,15 @@ class NullUI:
     def success(self, message: str) -> None:
         return None
 
+    def interrupted(self) -> bool:
+        return False
+
+    def todos(self, todos: list[dict[str, Any]]) -> None:
+        return None
+
+    def usage(self, usage: Usage, completion: Completion | None = None) -> None:
+        return None
+
     def confirm_tool(self, name: str, args: dict[str, Any]) -> bool:
         return False
 
