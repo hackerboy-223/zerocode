@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from zerocode.mcp import register_mcp_tools
+from zerocode.mcp import MCPClient, register_mcp_tools
 from zerocode.tools import PermissionManager, ToolContext, build_registry
 from zerocode.types import ToolCall
 
@@ -97,3 +97,19 @@ def test_mcp_stdio_tool_roundtrip(tmp_path):
         assert result == "bonjour"
     finally:
         manager.close()
+
+
+def test_mcp_client_scrubs_provider_api_keys_unless_explicit(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-secret")
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-secret")
+    client = MCPClient("demo", sys.executable, cwd=tmp_path)
+    assert "OPENROUTER_API_KEY" not in client._env
+    assert "NVIDIA_API_KEY" not in client._env
+
+    explicit = MCPClient(
+        "demo",
+        sys.executable,
+        env={"OPENROUTER_API_KEY": "explicit-key"},
+        cwd=tmp_path,
+    )
+    assert explicit._env.get("OPENROUTER_API_KEY") == "explicit-key"

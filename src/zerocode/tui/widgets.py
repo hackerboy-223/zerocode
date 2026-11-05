@@ -11,45 +11,6 @@ from ..tokens import truncate_text
 from ..ui import _safe
 
 
-class WolfMascot(Static):
-    """Mascotte loup animee: un rappel calme d'observer avant d'agir."""
-
-    FRAMES = (
-        "    ╱╲      ╱╲\n   ╱  ╲____╱  ╲\n  │   ◉    ◉   │\n  │     ᴥ      │\n   ╲  ╲____╱  ╱\n    ╲________╱",
-        "    ╱╲      ╱╲\n   ╱  ╲____╱  ╲\n  │   —    —   │\n  │     ᴥ      │\n   ╲  ╲____╱  ╱\n    ╲________╱",
-        "    ╱╲      ╱╲\n   ╱  ╲____╱  ╲\n  │   ◉    ◉   │\n  │    ╲ᴥ╱     │\n   ╲  ╲____╱  ╱\n    ╲________╱",
-    )
-    WISDOM = (
-        "Observer avant d'agir.",
-        "La precision vaut mieux que la precipitation.",
-        "Chaque erreur revele une piste.",
-    )
-
-    def __init__(self) -> None:
-        super().__init__("", classes="wolf-mascot")
-        self._index = 0
-        self._timer: Timer | None = None
-
-    def on_mount(self) -> None:
-        self._timer = self.set_interval(0.55, self._tick)
-        self._tick()
-
-    def on_unmount(self) -> None:
-        if self._timer is not None:
-            self._timer.stop()
-            self._timer = None
-
-    def _tick(self) -> None:
-        frame = self.FRAMES[self._index % len(self.FRAMES)]
-        wisdom = self.WISDOM[self._index % len(self.WISDOM)]
-        text = Text()
-        text.append(frame + "\n", style="bold #7dd3fc")
-        text.append("LUPUS  ·  LE VEILLEUR\n", style="bold #c4b5fd")
-        text.append(f"« {wisdom} »", style="#7d8998 italic")
-        self.update(text)
-        self._index += 1
-
-
 class PromptInput(Input):
     """Champ de saisie style Web Composer avec historique navigable aux flèches."""
 

@@ -261,19 +261,25 @@ class Router:
                 "nvidia/nemotron-3-ultra-550b-a55b:free",
                 "xingchen-agi/xing4.0-29b-a4b:free",
                 "cohere/north-mini-code:free",
+                "poolside/laguna-s-2.1:free",
+                "kilo-auto/free",
                 "nvidia/nemotron-3.5-lightning:free",
             )
         elif coding_task:
             preferred = (
                 "cohere/north-mini-code:free",
+                "poolside/laguna-s-2.1:free",
                 "xingchen-agi/xing4.0-29b-a4b:free",
+                "kilo-auto/free",
                 "nvidia/nemotron-3.5-lightning:free",
                 "nvidia/nemotron-3-ultra-550b-a55b:free",
             )
         else:
             preferred = (
                 "nvidia/nemotron-3.5-lightning:free",
+                "kilo-auto/free",
                 "cohere/north-mini-code:free",
+                "poolside/laguna-s-2.1:free",
                 "xingchen-agi/xing4.0-29b-a4b:free",
                 "nvidia/nemotron-3-ultra-550b-a55b:free",
             )

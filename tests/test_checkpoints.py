@@ -53,3 +53,15 @@ def test_checkpoint_file_is_private(tmp_path):
             check=True,
         ).stdout.lower()
         assert (os.environ.get("USERNAME") or "").lower() in acl
+
+
+def test_checkpoint_undo_refuses_secret_or_git_paths(tmp_path):
+    store = CheckpointStore(tmp_path / "checkpoints")
+    env_file = tmp_path / ".env"
+    env_file.write_text("SECRET=keep\n", encoding="utf-8")
+    assert store.record("s1", env_file, "SECRET=overwritten\n", "edit")
+    ok, message = store.undo("s1")
+    assert not ok
+    assert "sensible" in message
+    assert env_file.read_text(encoding="utf-8") == "SECRET=keep\n"
+

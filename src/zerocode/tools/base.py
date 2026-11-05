@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import PermissionDenied, ToolError
+from ..security import check_dangerous_command, redact_secrets
 from ..types import ToolCall
 
 Handler = Callable[[dict[str, Any], "ToolContext"], str]
@@ -245,6 +246,10 @@ class ToolRegistry:
             _validate_arguments(tool.parameters, call.arguments)
         except ToolError as exc:
             return f"ERREUR: {exc}"
+        if tool.name == "bash":
+            blocked_reason = check_dangerous_command(str(call.arguments.get("command", "")))
+            if blocked_reason is not None:
+                return f"Action refusee (securite): {blocked_reason}"
         if not self.permissions.allow(tool, call.arguments, self.ui, self.context):
             return "Action refusee par l'utilisateur."
         try:
@@ -259,6 +264,8 @@ class ToolRegistry:
             return f"ERREUR: {exc.__class__.__name__}: {exc}"
         if not isinstance(result, str):
             return f"ERREUR: l'outil {tool.name} a renvoye un type invalide."
+        if self.context.protect_secrets and not self.context.allow_secrets:
+            result = redact_secrets(result)
         return result
 
 

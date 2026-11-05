@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import _set_private_permissions, data_dir
+from .tools.base import is_secret_path
 
 MAX_CHECKPOINT_CHARS = 1_000_000
 MAX_ENTRIES = 50
@@ -79,6 +80,8 @@ class CheckpointStore:
             return False, "Aucune modification a annuler."
         checkpoint = entries.pop()
         path = Path(checkpoint.path)
+        if ".git" in path.parts or is_secret_path(path):
+            return False, f"Restauration refusee pour le chemin sensible: {path}"
         try:
             if checkpoint.existed:
                 _atomic_text_write(path, checkpoint.content)

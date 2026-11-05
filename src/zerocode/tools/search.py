@@ -66,6 +66,8 @@ def _grep_with_ripgrep(
         "--max-count",
         str(max_results),
     ]
+    if not ctx.allow_outside:
+        command.append("--no-follow")
     if ignore_case:
         command.append("-i")
     if include:
@@ -89,7 +91,15 @@ def _grep_with_ripgrep(
     for line in process.stdout.splitlines():
         if not line.strip():
             continue
-        if protect and is_secret_path(Path(_ripgrep_line_path(line))):
+        raw_path = Path(_ripgrep_line_path(line))
+        candidate = raw_path if raw_path.is_absolute() else (ctx.cwd / raw_path)
+        if not ctx.allow_outside:
+            try:
+                if not candidate.resolve().is_relative_to(ctx.cwd):
+                    continue
+            except OSError:
+                continue
+        if protect and (is_secret_path(raw_path) or is_secret_path(candidate)):
             continue
         result.append(line)
         if len(result) >= max_results:

@@ -12,6 +12,7 @@ from typing import Any
 
 from .config import _set_private_permissions, data_dir
 from .errors import ConfigError
+from .tools.base import is_secret_path
 from .types import Usage
 
 
@@ -218,6 +219,8 @@ class SessionStore:
         return removed
 
     def _load_file(self, path: Path) -> Session:
+        if is_secret_path(path):
+            raise ConfigError(f"Lecture de session refusee sur un chemin sensible: {path}")
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except OSError as exc:

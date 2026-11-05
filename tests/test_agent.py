@@ -327,3 +327,50 @@ def test_agent_stops_after_repeated_identical_tool_failure(tmp_path):
     assert len(tool_results) == 2
     assert all(message["content"].startswith("ERREUR:") for message in tool_results)
 
+
+def test_full_stack_agent_auto_continues_when_todos_remain(tmp_path):
+    first = Completion(
+        content="Plan cree.",
+        tool_calls=[
+            ToolCall(
+                id="call-todo-1",
+                name="todo_write",
+                arguments={
+                    "todos": [
+                        {"content": "Creer module", "status": "in_progress"},
+                    ]
+                },
+            )
+        ],
+        finish_reason="tool_calls",
+    )
+    second = Completion(
+        content="Module en cours...",
+        finish_reason="stop",
+    )
+    third = Completion(
+        content="",
+        tool_calls=[
+            ToolCall(
+                id="call-todo-2",
+                name="todo_write",
+                arguments={
+                    "todos": [
+                        {"content": "Creer module", "status": "completed"},
+                    ]
+                },
+            )
+        ],
+        finish_reason="tool_calls",
+    )
+    fourth = Completion(
+        content="Tout est termine et verifie.",
+        finish_reason="stop",
+    )
+    agent, router, _, _ = build_agent(tmp_path, [first, second, third, fourth])
+    agent.set_mode("full-stack")
+    result = agent.run_turn("construis le module")
+    assert result == "Tout est termine et verifie."
+    assert router.calls == 4
+
+

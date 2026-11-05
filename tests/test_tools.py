@@ -350,3 +350,79 @@ def test_auto_shell_allows_safe_commands_and_blocks_arbitrary_commands(tmp_path)
     outside = call(registry, "bash", command="ls ../")
     assert "Action refusee" in outside
 
+
+def test_web_ssrf_blocks_unspecified_and_ipv4_mapped_ipv6(tmp_path):
+    registry, _ = make_registry(tmp_path)
+    for blocked_url in (
+        "http://0.0.0.0:8000",
+        "http://[::ffff:127.0.0.1]:8000",
+        "http://[::ffff:169.254.169.254]/latest/meta-data/",
+        "http://metadata.google.internal/computeMetadata/v1/",
+    ):
+        result = call(registry, "fetch", url=blocked_url)
+        assert result.startswith("ERREUR:")
+        assert "locales et privees" in result
+
+
+def test_list_files_hides_secrets_and_outside_symlinks(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+    (workspace / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    (workspace / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    (workspace / "id_rsa.pem").write_text("PRIVATE\n", encoding="utf-8")
+    (workspace / "escape.txt").symlink_to(outside)
+
+    registry, _ = make_registry(workspace)
+    listed = call(registry, "list", glob="*")
+    assert "ok.py" in listed
+    assert ".env" not in listed
+    assert "id_rsa.pem" not in listed
+    assert "escape.txt" not in listed
+
+
+def test_bash_scrubs_provider_api_keys_from_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-super-secret")
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-super-secret")
+    registry, _ = make_registry(tmp_path)
+    result = call(
+        registry,
+        "bash",
+        command=python_command(
+            "import os; print(os.environ.get('OPENROUTER_API_KEY', 'ABSENT'), os.environ.get('NVIDIA_API_KEY', 'ABSENT'))"
+        ),
+    )
+    assert "ABSENT ABSENT" in result
+    assert "super-secret" not in result
+
+
+def test_syntax_diagnostics_on_write_and_edit(tmp_path):
+    registry, _ = make_registry(tmp_path)
+    broken = call(registry, "write", path="broken.py", content="def oops(:\n    pass\n")
+    assert "DIAGNOSTIC SYNTAXE PYTHON" in broken
+
+    broken_json = call(registry, "write", path="broken.json", content="{bad: 1}\n")
+    assert "DIAGNOSTIC JSON" in broken_json
+
+
+def test_dlp_secret_redaction_and_catastrophic_shell_block(tmp_path):
+    (tmp_path / "notes.txt").write_text(
+        "Cle leak: sk-or-v1-1234567890abcdef1234567890abcdef et AKIA1234567890ABCDEF\n",
+        encoding="utf-8",
+    )
+    registry, _ = make_registry(tmp_path, mode="allow")
+    read_out = call(registry, "read", path="notes.txt")
+    assert "[SECRET MASQUE: JETON API]" in read_out
+    assert "1234567890abcdef1234567890abcdef" not in read_out
+    assert "AKIA1234567890ABCDEF" not in read_out
+
+    for catastrophic in (
+        "rm -rf /",
+        "sudo rm -rf /*",
+        ":(){ :|:& };:",
+        "dd if=/dev/zero of=/dev/sda bs=1M",
+    ):
+        blocked = call(registry, "bash", command=catastrophic)
+        assert "Action refusee (securite)" in blocked
+

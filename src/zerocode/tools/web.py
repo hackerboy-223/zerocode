@@ -141,26 +141,54 @@ def _clean_ddg_url(href: str) -> str:
     return href
 
 
+FORBIDDEN_HOSTS = {
+    "localhost",
+    "localhost.localdomain",
+    "metadata",
+    "metadata.google.internal",
+    "instance-data",
+}
+
+
+def _is_forbidden_ip(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    mapped = getattr(address, "ipv4_mapped", None)
+    if mapped is not None:
+        return _is_forbidden_ip(mapped)
+    return bool(
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_multicast
+        or address.is_reserved
+        or address.is_unspecified
+    )
+
+
 def _validate_url(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise ToolError("Seules les URL HTTP(S) sont autorisees.")
-    if not parsed.hostname:
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
         raise ToolError("URL invalide: hote manquant.")
+    if host in FORBIDDEN_HOSTS or host.endswith(".localhost") or host.endswith(".internal"):
+        raise ToolError("Les adresses locales et privees sont refusees.")
+    try:
+        literal_ip = ipaddress.ip_address(host)
+    except ValueError:
+        literal_ip = None
+    if literal_ip is not None:
+        if _is_forbidden_ip(literal_ip):
+            raise ToolError("Les adresses locales et privees sont refusees.")
+        return url
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     try:
-        addresses = socket.getaddrinfo(parsed.hostname, port)
+        addresses = socket.getaddrinfo(host, port)
     except OSError as exc:
-        raise ToolError(f"Impossible de resoudre {parsed.hostname}: {exc}") from exc
+        raise ToolError(f"Impossible de resoudre {host}: {exc}") from exc
     for item in addresses:
         address = ipaddress.ip_address(item[4][0])
-        if (
-            address.is_private
-            or address.is_loopback
-            or address.is_link_local
-            or address.is_multicast
-            or address.is_reserved
-        ):
+        if _is_forbidden_ip(address):
             raise ToolError("Les adresses locales et privees sont refusees.")
     return url
 

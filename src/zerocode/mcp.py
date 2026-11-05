@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from .catalog import PROVIDERS
 from .errors import ToolError
 from .tokens import truncate_text
 from .tools.base import Tool, ToolRegistry
@@ -17,6 +18,17 @@ from .version import __version__
 
 PROTOCOL_VERSION = "2024-11-05"
 DEFAULT_TIMEOUT = 30.0
+PROVIDER_KEY_ENVS = frozenset(
+    env_name for spec in PROVIDERS.values() for env_name in spec.api_key_envs
+)
+
+
+def _sanitized_base_env() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key not in PROVIDER_KEY_ENVS
+    }
 
 
 class MCPError(RuntimeError):
@@ -39,7 +51,7 @@ class MCPClient:
         self.args = args or []
         self.cwd = cwd
         self.timeout = timeout
-        self._env = {**os.environ, **(env or {})}
+        self._env = {**_sanitized_base_env(), **(env or {})}
         self._process: subprocess.Popen[str] | None = None
         self._next_id = 1
         self._responses: dict[int, dict[str, Any]] = {}

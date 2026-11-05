@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import contextlib
 import difflib
+import json
 import os
 import subprocess
 import tempfile
@@ -10,7 +12,7 @@ from typing import Any
 
 from ..errors import ToolError
 from ..tokens import truncate_text
-from .base import Tool, ToolContext, ToolRegistry
+from .base import Tool, ToolContext, ToolRegistry, is_secret_path
 
 DEFAULT_IGNORES = {
     ".git",
@@ -188,6 +190,22 @@ def read_file(args: dict[str, Any], ctx: ToolContext) -> str:
     return truncate_text(numbered, ctx.max_output_chars)
 
 
+def _syntax_diagnostic(path: Path, content: str) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".py":
+        try:
+            ast.parse(content, filename=str(path))
+        except SyntaxError as exc:
+            line = exc.lineno or "?"
+            return f"\nDIAGNOSTIC SYNTAXE PYTHON (ligne {line}): {exc.msg}"
+    elif suffix == ".json":
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as exc:
+            return f"\nDIAGNOSTIC JSON (ligne {exc.lineno}): {exc.msg}"
+    return ""
+
+
 def write_file(args: dict[str, Any], ctx: ToolContext) -> str:
     path = ctx.resolve_path(str(args["path"]), for_write=True)
     ctx.check_secret(path)
@@ -210,7 +228,8 @@ def write_file(args: dict[str, Any], ctx: ToolContext) -> str:
     _atomic_text_write(path, content)
     if can_diff:
         _emit_diff(ctx, path, before, content, existed=existed)
-    return f"Ecrit {len(content)} caracteres dans {ctx.display_path(path)}"
+    diag = _syntax_diagnostic(path, content)
+    return f"Ecrit {len(content)} caracteres dans {ctx.display_path(path)}{diag}"
 
 
 def edit_file(args: dict[str, Any], ctx: ToolContext) -> str:
@@ -240,7 +259,8 @@ def edit_file(args: dict[str, Any], ctx: ToolContext) -> str:
     _atomic_text_write(path, updated)
     _emit_diff(ctx, path, text, updated, existed=True)
     replacements = count if replace_all else 1
-    return f"Modifie {ctx.display_path(path)} ({replacements} remplacement(s))"
+    diag = _syntax_diagnostic(path, updated)
+    return f"Modifie {ctx.display_path(path)} ({replacements} remplacement(s)){diag}"
 
 
 def list_files(args: dict[str, Any], ctx: ToolContext) -> str:
@@ -256,6 +276,7 @@ def list_files(args: dict[str, Any], ctx: ToolContext) -> str:
 
     visible = _git_visible_files(root)
     entries: list[str] = []
+    protect = ctx.protect_secrets and not ctx.allow_secrets
     for path in sorted(root.glob(pattern), key=lambda item: str(item).lower()):
         try:
             relative = path.relative_to(root)
@@ -263,8 +284,16 @@ def list_files(args: dict[str, Any], ctx: ToolContext) -> str:
             continue
         if any(part in DEFAULT_IGNORES for part in relative.parts):
             continue
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if not ctx.allow_outside and not resolved.is_relative_to(ctx.cwd):
+            continue
+        if protect and (is_secret_path(path) or is_secret_path(resolved)):
+            continue
         if visible is not None:
-            if path.is_file() and path.resolve() not in visible:
+            if path.is_file() and resolved not in visible:
                 continue
             if path.is_dir() and not any(
                 item.is_relative_to(path) for item in visible

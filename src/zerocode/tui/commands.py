@@ -63,11 +63,13 @@ ARG_COMMANDS = {
 }
 
 
-def _load_image(raw_path: str, cwd: Path) -> str:
+def _load_image(raw_path: str, cwd: Path, *, allow_outside: bool = False) -> str:
     path = Path(raw_path).expanduser()
     if not path.is_absolute():
         path = cwd / path
     path = path.resolve()
+    if not allow_outside and not path.is_relative_to(cwd.resolve()):
+        raise ValueError(f"Accès refusé hors du dossier de travail : {path}")
     if not path.is_file():
         raise ValueError(f"Image introuvable : {path}")
     data = path.read_bytes()
@@ -251,7 +253,11 @@ class CommandHandler:
             app.notice("Images joignables effacées.", "success")
             return
         try:
-            data_url = _load_image(rest, app.context.cwd)
+            data_url = _load_image(
+                rest,
+                app.context.cwd,
+                allow_outside=bool(getattr(app.context, "allow_outside", False)),
+            )
         except (OSError, ValueError) as exc:
             app.notice(str(exc), "warning")
             return

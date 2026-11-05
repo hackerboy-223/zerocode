@@ -91,6 +91,7 @@ class Agent:
         final_text = ""
         try:
             repeated_failures: dict[str, int] = {}
+            auto_continues = 0
             for _ in range(self.config.max_steps):
                 if self._interrupted():
                     raise KeyboardInterrupt
@@ -135,6 +136,22 @@ class Agent:
                 if not completion.tool_calls:
                     if completion.finish_reason == "length" and not completion.content:
                         self._call_ui("warn", "Reponse vide ou tronquee: augmente max_tokens.")
+                    elif (
+                        self.mode == "full-stack"
+                        and auto_continues < 2
+                        and self._has_incomplete_todos()
+                    ):
+                        auto_continues += 1
+                        self.messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Continue l'execution autonome des taches restantes "
+                                    "du plan jusqu'a completion et verification."
+                                ),
+                            }
+                        )
+                        continue
                     break
                 if completion.finish_reason == "length":
                     self._call_ui(
@@ -379,6 +396,12 @@ class Agent:
     def _interrupted(self) -> bool:
         checker = getattr(self.ui, "interrupted", None)
         return bool(checker()) if callable(checker) else False
+
+    def _has_incomplete_todos(self) -> bool:
+        return any(
+            isinstance(todo, dict) and todo.get("status") in {"pending", "in_progress"}
+            for todo in self.tools.context.todos
+        )
 
     def _callable(self, name: str) -> Any:
         method = getattr(self.ui, name, None)

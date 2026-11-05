@@ -316,7 +316,10 @@ def run_agent(
                 ui.error("--image necessite un prompt.")
                 return 1
             try:
-                images = [_load_image(path, cwd) for path in args.image]
+                images = [
+                    _load_image(path, cwd, allow_outside=config.allow_outside_cwd)
+                    for path in args.image
+                ]
             except ConfigError as exc:
                 ui.error(str(exc))
                 return 1
@@ -386,11 +389,13 @@ def run_agent(
         router.close()
 
 
-def _load_image(raw_path: str, cwd: Path) -> str:
+def _load_image(raw_path: str, cwd: Path, *, allow_outside: bool = False) -> str:
     path = Path(raw_path).expanduser()
     if not path.is_absolute():
         path = cwd / path
     path = path.resolve()
+    if not allow_outside and not path.is_relative_to(cwd.resolve()):
+        raise ConfigError(f"Acces refuse hors du dossier de travail: {path}")
     if not path.is_file():
         raise ConfigError(f"Image introuvable: {path}")
     data = path.read_bytes()

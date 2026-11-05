@@ -31,6 +31,7 @@ from textual.widgets import (
 
 from ..checkpoints import CheckpointStore
 from ..errors import ZeroCodeError
+from ..tools.base import is_secret_path
 from ..ui import _format_tool_args, _safe
 from ..version import __author__, __github__, __portfolio__, __version__
 from .bridge import TuiBridge
@@ -42,7 +43,7 @@ from .screens import (
     HelpScreen,
     PasswordScreen,
 )
-from .widgets import PromptInput, ThinkingIndicator, ToolCard, WolfMascot
+from .widgets import PromptInput, ThinkingIndicator, ToolCard
 
 THINK_MODES = ("off", "low", "high", "max")
 
@@ -106,432 +107,6 @@ class ZeroCodeApp(App[None]):
     ]
 
     CSS = """
-    Screen {
-        background: #0d1117;
-        color: #e6edf3;
-    }
-
-    /* Barre supérieure style navigateur / Web App */
-    #brandbar {
-        height: 1;
-        padding: 0 1;
-        background: #161b22;
-        color: #8b949e;
-        border-bottom: none;
-    }
-
-    #body {
-        height: 1fr;
-    }
-
-    /* Barre d'onglets et de modes style Web Studio */
-    #modebar-row {
-        height: 1;
-        background: #161b22;
-    }
-
-    #modebar {
-        width: 1fr;
-        height: 1;
-        padding: 0 1;
-        background: #161b22;
-    }
-
-    .think-chip {
-        min-width: 0;
-        height: 1;
-    }
-
-    .think-chip.thinking-on {
-        background: #8957e5;
-        color: #ffffff;
-        text-style: bold;
-    }
-
-    /* Barre d'actions rapides cliquables (Web Toolbar) */
-    #web-toolbar {
-        height: auto;
-        padding: 0 1;
-        background: #0d1117;
-        border-bottom: solid #21262d;
-    }
-
-    .web-chip {
-        min-width: 10;
-        height: 1;
-        margin: 0 1 0 0;
-        padding: 0 1;
-        border: none;
-        background: #21262d;
-        color: #c9d1d9;
-    }
-
-    .web-chip:hover {
-        background: #30363d;
-        color: #58a6ff;
-    }
-
-    .web-chip.primary-chip {
-        background: #1f6feb;
-        color: #ffffff;
-        text-style: bold;
-    }
-
-    .web-chip.primary-chip:hover {
-        background: #388bfd;
-    }
-
-    .web-chip.accent-chip {
-        background: #8957e5;
-        color: #ffffff;
-        text-style: bold;
-    }
-
-    /* Sidebar style IDE Web (Cursor / Devin / Bolt) */
-    #sidebar {
-        width: 34;
-        min-width: 24;
-        padding: 0 1;
-        border-right: solid #30363d;
-        background: #161b22;
-    }
-
-    #sidebar.hidden {
-        display: none;
-    }
-
-    .section {
-        margin-top: 1;
-        color: #58a6ff;
-        text-style: bold;
-    }
-
-    #files {
-        height: 1fr;
-        min-height: 8;
-        background: transparent;
-        scrollbar-size-vertical: 1;
-    }
-
-    #sessions {
-        height: 10;
-        background: transparent;
-        scrollbar-size-vertical: 1;
-    }
-
-    SessionItem.current {
-        background: #1f2937;
-        border-left: thick #58a6ff;
-    }
-
-    .session-label {
-        width: 100%;
-        height: auto;
-    }
-
-    SessionItem.current .session-label {
-        color: #58a6ff;
-    }
-
-    #main {
-        width: 1fr;
-        background: #0d1117;
-    }
-
-    #chat {
-        height: 1fr;
-        padding: 0 2;
-        scrollbar-size-vertical: 1;
-    }
-
-    /* Tiroir Inspecteur Web (Tâches / Outils) */
-    #inspector {
-        height: 13;
-        border-top: heavy #30363d;
-        padding: 0 2;
-        background: #161b22;
-    }
-
-    #inspector.hidden {
-        display: none;
-    }
-
-    #inspector-title {
-        color: #58a6ff;
-        text-style: bold;
-        margin-top: 0;
-    }
-
-    #inspector-content {
-        height: 1fr;
-        overflow-y: auto;
-        scrollbar-size-vertical: 1;
-    }
-
-    /* Barre d'état inférieure style Web App */
-    #status {
-        height: 1;
-        padding: 0 2;
-        background: #161b22;
-        color: #8b949e;
-    }
-
-    /* Zone Composer style ChatGPT / Claude / v0 */
-    #prompt {
-        margin: 0 2 1 2;
-        border: round #388bfd;
-        background: #161b22;
-        color: #f0f6fc;
-    }
-
-    #prompt:focus {
-        border: round #58a6ff;
-        background: #1c2128;
-    }
-
-    .welcome {
-        margin: 1 0;
-    }
-
-    /* Bulle / Carte message utilisateur style Web Chat */
-    .user-message {
-        margin: 1 0 1 0;
-        padding: 0 2;
-        background: #161b22;
-        border-left: heavy #58a6ff;
-    }
-
-    /* En-tête et corps de réponse Agent Web */
-    .agent-header {
-        margin: 1 0 0 0;
-        color: #58a6ff;
-    }
-
-    .assistant {
-        margin: 0 0 1 0;
-        padding: 0 2;
-        border-left: thick #238636;
-        background: #11161d;
-    }
-
-    .reasoning {
-        color: #8b949e;
-        text-style: italic;
-        margin: 0 0 1 0;
-        padding: 0 2;
-        border-left: thick #8957e5;
-        background: #13111c;
-    }
-
-    .thinking {
-        color: #c9d1d9;
-        margin: 0 0 1 0;
-        padding: 0 1;
-        background: #161b22;
-        border-left: heavy #d29922;
-    }
-
-    .tool-line {
-        color: #8b949e;
-        margin: 0;
-    }
-
-    /* Cartes d'exécution d'outils style Web Agent */
-    ToolCard {
-        height: auto;
-        margin: 0 0 1 0;
-        padding: 0;
-        border: none;
-        border-left: heavy #388bfd;
-        background: #161b22;
-    }
-
-    ToolCard.running {
-        border-left: heavy #d29922;
-        background: #1c1912;
-    }
-
-    ToolCard.success {
-        border-left: heavy #2ea043;
-        background: #121a16;
-    }
-
-    ToolCard.error {
-        border-left: heavy #f85149;
-        background: #1f1315;
-    }
-
-    ToolCard CollapsibleTitle {
-        height: auto;
-        padding: 0 1;
-        background: transparent;
-    }
-
-    ToolCard > Contents {
-        padding: 0 1 0 3;
-    }
-
-    .tool-output {
-        color: #8b949e;
-        height: auto;
-    }
-
-    .notice {
-        margin: 0 0 1 0;
-        padding: 0 1;
-        background: #161b22;
-        border-left: thick #30363d;
-    }
-
-    .notice.warning {
-        color: #d29922;
-        border-left: thick #d29922;
-    }
-
-    .notice.error {
-        color: #f85149;
-        text-style: bold;
-        border-left: thick #f85149;
-    }
-
-    .notice.success {
-        color: #3fb950;
-        border-left: thick #2ea043;
-    }
-
-    .notice.info {
-        color: #8b949e;
-        border-left: thick #58a6ff;
-    }
-
-    ConfirmScreen, PasswordScreen, FilePickerScreen, CommandPaletteScreen, HelpScreen {
-        align: center middle;
-        background: #010409 75%;
-    }
-
-    #confirm-dialog {
-        width: 74;
-        max-width: 92%;
-        height: auto;
-        padding: 1 2;
-        border: round #d29922;
-        background: #161b22;
-    }
-
-    #confirm-title, .palette-title {
-        color: #58a6ff;
-        text-style: bold;
-        height: 1;
-    }
-
-    #confirm-scroll {
-        height: auto;
-        max-height: 16;
-        margin: 1 0;
-        scrollbar-size-vertical: 1;
-    }
-
-    #confirm-body {
-        height: auto;
-    }
-
-    #confirm-hint {
-        height: 1;
-        color: #8b949e;
-    }
-
-    #confirm-actions {
-        height: auto;
-        align-horizontal: right;
-        margin-top: 1;
-    }
-
-    #confirm-actions Button {
-        margin-left: 1;
-    }
-
-    #password-dialog {
-        width: 74;
-        max-width: 92%;
-        height: auto;
-        padding: 1 2;
-        border: round #8957e5;
-        background: #161b22;
-    }
-
-    #password-title {
-        color: #c9a4ff;
-        text-style: bold;
-        height: 1;
-    }
-
-    #password-scroll {
-        height: auto;
-        max-height: 12;
-        margin: 1 0;
-        scrollbar-size-vertical: 1;
-    }
-
-    #password-body {
-        height: auto;
-    }
-
-    #password-input {
-        margin-bottom: 1;
-    }
-
-    #password-hint {
-        height: 1;
-        color: #8b949e;
-    }
-
-    #password-actions {
-        height: auto;
-        align-horizontal: right;
-        margin-top: 1;
-    }
-
-    #password-actions Button {
-        margin-left: 1;
-    }
-
-    #palette-dialog {
-        width: 74;
-        max-width: 92%;
-        height: 72%;
-        padding: 1 2;
-        border: round #388bfd;
-        background: #161b22;
-    }
-
-    #file-filter, #command-filter {
-        margin-bottom: 1;
-    }
-
-    #file-options, #command-options {
-        height: 1fr;
-        scrollbar-size-vertical: 1;
-    }
-
-    #help-dialog {
-        width: 84;
-        max-width: 94%;
-        height: 82%;
-        padding: 1 2;
-        border: round #388bfd;
-        background: #161b22;
-    }
-
-    #help-scroll {
-        height: 1fr;
-        scrollbar-size-vertical: 1;
-    }
-
-    .palette-hint {
-        height: 1;
-        color: #8b949e;
-    }
-
     /* ------------------------------------------------------------------
        Refonte moderne et sobre
        ------------------------------------------------------------------ */
@@ -559,6 +134,7 @@ class ZeroCodeApp(App[None]):
     }
 
     #modebar {
+        width: 1fr;
         height: 1;
         padding: 0 2;
         background: #0b0f14;
@@ -626,6 +202,10 @@ class ZeroCodeApp(App[None]):
         background: #0d1117;
     }
 
+    #sidebar.hidden {
+        display: none;
+    }
+
     .section {
         margin-top: 1;
         margin-bottom: 0;
@@ -681,6 +261,10 @@ class ZeroCodeApp(App[None]):
         border-top: solid #151d27;
         padding: 1 3;
         background: #0d1117;
+    }
+
+    #inspector.hidden {
+        display: none;
     }
 
     #inspector-title {
@@ -1498,7 +1082,6 @@ class ZeroCodeApp(App[None]):
             padding=(1, 2),
             expand=True,
         )
-        self._mount(WolfMascot())
         self._mount(Static(panel, classes="welcome"))
         self._scroll_chat()
 
@@ -2033,7 +1616,9 @@ def _list_project_files(root: Path, limit: int = 5_000) -> list[str]:
         )
         if result.returncode == 0:
             files = [
-                line.strip() for line in result.stdout.splitlines() if line.strip()
+                line.strip()
+                for line in result.stdout.splitlines()
+                if line.strip() and not is_secret_path(Path(line.strip()))
             ]
             return sorted(files)[:limit]
     except (OSError, subprocess.SubprocessError):
@@ -2046,6 +1631,8 @@ def _list_project_files(root: Path, limit: int = 5_000) -> list[str]:
         ]
         for name in names:
             path = Path(current) / name
+            if is_secret_path(path):
+                continue
             try:
                 relative = path.relative_to(root).as_posix()
             except ValueError:

@@ -159,3 +159,12 @@ def test_session_id_cannot_escape_session_store(tmp_path):
         store.delete("evil")
 
     assert victim.read_text(encoding="utf-8") == "keep"
+
+
+def test_session_refuses_secret_file_path(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    secret = tmp_path / ".env"
+    secret.write_text('{"id": "x", "cwd": "/tmp", "model": "auto"}', encoding="utf-8")
+    with pytest.raises(ConfigError, match="chemin sensible"):
+        store.load(str(secret))
+

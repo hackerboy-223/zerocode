@@ -231,7 +231,7 @@ class ConsoleUI:
         if self.quiet:
             return
         self.end_assistant()
-        self.console.print(Text("  📄 " + _safe(path), style="bold cyan"))
+        self.console.print(Text("  " + _safe(path), style="bold cyan"))
         for line in _safe(diff).splitlines():
             if line.startswith(("+++", "---")):
                 style = "bold"

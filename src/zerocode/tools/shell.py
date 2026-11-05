@@ -6,10 +6,17 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import threading
+from pathlib import Path
 from typing import Any
 
+from ..catalog import PROVIDERS
 from .base import Tool, ToolContext, ToolRegistry
+
+PROVIDER_KEY_ENVS = frozenset(
+    env_name for spec in PROVIDERS.values() for env_name in spec.api_key_envs
+)
 
 MAX_COMMAND_TIMEOUT = 3_600
 TERMINATE_GRACE = 2.0
@@ -94,10 +101,19 @@ def is_safe_auto_command(command: str, ctx: ToolContext) -> bool:
     test_commands = {
         ("pytest",),
         ("ruff", "check"),
+        ("ruff", "format", "--check"),
+        ("mypy",),
+        ("flake8",),
         ("python", "-m", "pytest"),
         ("python3", "-m", "pytest"),
+        ("python", "-m", "unittest"),
+        ("python3", "-m", "unittest"),
+        ("python", "-m", "py_compile"),
+        ("python3", "-m", "py_compile"),
         ("python", "-m", "ruff", "check"),
         ("python3", "-m", "ruff", "check"),
+        ("python", "-m", "mypy"),
+        ("python3", "-m", "mypy"),
         ("uv", "run", "pytest"),
         ("uv", "run", "ruff", "check"),
         ("npm", "test"),
@@ -106,9 +122,13 @@ def is_safe_auto_command(command: str, ctx: ToolContext) -> bool:
         ("bun", "test"),
         ("cargo", "test"),
         ("cargo", "check"),
+        ("cargo", "clippy"),
         ("go", "test"),
+        ("go", "vet"),
         ("composer", "test"),
+        ("composer", "validate"),
         ("php", "artisan", "test"),
+        ("php", "-l"),
     }
     if any(tuple(parts[: len(prefix)]) == prefix for prefix in test_commands):
         return _safe_workspace_arguments(arguments, ctx, check_bare_paths=True)
@@ -123,16 +143,33 @@ def is_safe_auto_command(command: str, ctx: ToolContext) -> bool:
     return False
 
 
+def _clean_environment() -> dict[str, str]:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in PROVIDER_KEY_ENVS
+    }
+    python_bin = str(Path(sys.executable).absolute().parent)
+    current_path = env.get("PATH", "")
+    path_parts = [part for part in current_path.split(os.pathsep) if part]
+    if python_bin and python_bin not in path_parts:
+        env["PATH"] = (
+            os.pathsep.join([python_bin, *path_parts]) if path_parts else python_bin
+        )
+    env.setdefault("PAGER", "cat")
+    env.setdefault("GIT_PAGER", "cat")
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
+    env.setdefault("NO_COLOR", "1")
+    env.setdefault("TERM", "dumb")
+    return env
+
+
 def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
     command = str(args["command"]).strip()
     if not command:
         return "ERREUR: commande vide."
     timeout = min(max(1, int(args.get("timeout", ctx.command_timeout))), MAX_COMMAND_TIMEOUT)
-    env = os.environ.copy()
-    env.setdefault("PAGER", "cat")
-    env.setdefault("GIT_PAGER", "cat")
-    env.setdefault("NO_COLOR", "1")
-    env.setdefault("TERM", "dumb")
+    env = _clean_environment()
 
     sudo_binary = shutil.which("sudo")
     if (
