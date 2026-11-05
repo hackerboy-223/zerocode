@@ -12,18 +12,17 @@ from ..ui import _safe
 
 
 class WolfMascot(Static):
-    """Mascotte loup animee: un rappel calme d'observer avant d'agir."""
+    """Mascotte loup cybernétique animée (LUPUS) avec coloration multi-tons."""
 
-    FRAMES = (
-        "    ╱╲      ╱╲\n   ╱  ╲____╱  ╲\n  │   ◉    ◉   │\n  │     ᴥ      │\n   ╲  ╲____╱  ╱\n    ╲________╱",
-        "    ╱╲      ╱╲\n   ╱  ╲____╱  ╲\n  │   —    —   │\n  │     ᴥ      │\n   ╲  ╲____╱  ╱\n    ╲________╱",
-        "    ╱╲      ╱╲\n   ╱  ╲____╱  ╲\n  │   ◉    ◉   │\n  │    ╲ᴥ╱     │\n   ╲  ╲____╱  ╱\n    ╲________╱",
+    STATES: tuple[tuple[str, str, str, str], ...] = (
+        # (ear_glyph, eye_glyph, mouth_glyph [6 cols], wisdom)
+        ("◤", "◉", "╲_ᴥᴥ_╱", "Observer avant d'agir."),
+        ("▲", "◈", "╲_══_╱", "La précision vaut mieux que la précipitation."),
+        ("◤", "─", "╲_──_╱", "Chaque erreur révèle une piste."),
+        ("◤", "●", "╲_▾▾_╱", "Vérifier les faits, protéger le système."),
     )
-    WISDOM = (
-        "Observer avant d'agir.",
-        "La precision vaut mieux que la precipitation.",
-        "Chaque erreur revele une piste.",
-    )
+    FRAMES = tuple(state[1] for state in STATES)
+    WISDOM = tuple(state[3] for state in STATES)
 
     def __init__(self) -> None:
         super().__init__("", classes="wolf-mascot")
@@ -31,7 +30,7 @@ class WolfMascot(Static):
         self._timer: Timer | None = None
 
     def on_mount(self) -> None:
-        self._timer = self.set_interval(0.55, self._tick)
+        self._timer = self.set_interval(0.75, self._tick)
         self._tick()
 
     def on_unmount(self) -> None:
@@ -40,11 +39,47 @@ class WolfMascot(Static):
             self._timer = None
 
     def _tick(self) -> None:
-        frame = self.FRAMES[self._index % len(self.FRAMES)]
-        wisdom = self.WISDOM[self._index % len(self.WISDOM)]
-        text = Text()
-        text.append(frame + "\n", style="bold #10a37f")
-        text.append("LUPUS  ·  ZEROCODE\n", style="bold #ececec")
+        ear, eye, mouth, wisdom = self.STATES[self._index % len(self.STATES)]
+        right_ear = "◥" if ear == "◤" else "▲"
+        eye_style = "bold #38bdf8" if eye == "◈" else "bold #10a37f" if eye == "─" else "bold #34d399"
+        fur = "bold #e4e4e7"
+        shadow = "#71717a"
+        accent = "bold #10a37f"
+
+        text = Text(justify="center")
+        # Ligne 1 : pointes des oreilles
+        text.append("     ◢", style=fur)
+        text.append(ear, style=accent)
+        text.append("╲      ╱", style=fur)
+        text.append(right_ear, style=accent)
+        text.append("◣     \n", style=fur)
+        # Ligne 2 : base des oreilles et front
+        text.append("    ◢◤  ", style=fur)
+        text.append("╲____╱", style=shadow)
+        text.append("  ◥◣    \n", style=fur)
+        # Ligne 3 : arcade sourcilière et regard lumineux
+        text.append("   ◢◤ ", style=fur)
+        text.append("╲  ", style=shadow)
+        text.append(f"{eye}  {eye}", style=eye_style)
+        text.append("  ╱", style=shadow)
+        text.append(" ◥◣   \n", style=fur)
+        # Ligne 4 : joues et chanfrein
+        text.append("  ▐▌   ", style=shadow)
+        text.append("╲  ", style=fur)
+        text.append("▾▾", style=accent)
+        text.append("  ╱", style=fur)
+        text.append("   ▐▌  \n", style=shadow)
+        # Ligne 5 : museau (symétrie exacte 22 colonnes : 8 + 6 + 8)
+        text.append("   ◥◣   ", style=fur)
+        text.append(mouth, style="bold #ececec")
+        text.append("   ◢◤   \n", style=fur)
+        # Ligne 6 : menton / collerette
+        text.append("     ◥◣________◢◤     \n\n", style=shadow)
+
+        # Titre & devise
+        text.append("LUPUS", style="bold #ececec")
+        text.append("  ·  ", style="#52525b")
+        text.append("LE VEILLEUR\n", style="bold #10a37f")
         text.append(f"« {wisdom} »", style="#8e8e8e italic")
         self.update(text)
         self._index += 1
