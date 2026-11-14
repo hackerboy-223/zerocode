@@ -976,3 +976,25 @@ h4.markdown-heading, h5.markdown-heading, h6.markdown-heading { font-size: 1em; 
   .code-block pre { font-size: 11.5px; }
   .appearance-option { flex: 1; }
 }
+
+
+.settings-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 4px 0 0;
+  padding: 10px 11px;
+  border: 1px solid #ead8b5;
+  border-radius: 9px;
+  background: #fffaf0;
+  color: #765c2f;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.settings-warning svg { flex: 0 0 auto; margin-top: 1px; }
+.settings-warning strong { font-weight: 750; }
+.theme-dark .settings-warning {
+  border-color: #59472c;
+  background: #2b2419;
+  color: #d8bd8e;
+}
