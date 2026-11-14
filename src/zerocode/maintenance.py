@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 import shutil
@@ -88,7 +89,7 @@ def _release_asset_checksum(
     if expected is None:
         raise RuntimeError(f"Aucune empreinte SHA-256 publiée pour {filename}.")
     actual = hashlib.sha256(file_response.content).hexdigest()
-    if not hashlib.compare_digest(actual, expected):
+    if not hmac.compare_digest(actual, expected):
         raise RuntimeError(f"L'empreinte SHA-256 de {filename} ne correspond pas à la release.")
     return True
 
