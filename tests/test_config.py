@@ -144,6 +144,47 @@ def test_project_config_cannot_start_mcp_servers(tmp_path, monkeypatch):
     config = load_config(tmp_path)
 
     assert config.mcp_servers == {}
+    assert config.hooks == {}
+
+
+def test_global_hooks_are_loaded(tmp_path, monkeypatch):
+    global_config = tmp_path / "global.json"
+    monkeypatch.setenv("ZEROCODE_CONFIG", str(global_config))
+    global_config.write_text(
+        json.dumps({
+            "hooks": {
+                "PreToolUse": [
+                    {"command": "python3", "args": ["-c", "print('ok')"], "timeout": 5}
+                ]
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.hooks["PreToolUse"][0]["timeout"] == 5
+
+
+def test_hook_config_rejects_unknown_event(tmp_path, monkeypatch):
+    global_config = tmp_path / "global.json"
+    monkeypatch.setenv("ZEROCODE_CONFIG", str(global_config))
+    global_config.write_text(json.dumps({"hooks": {"BeforeRun": []}}), encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="evenements inconnus"):
+        load_config(tmp_path)
+
+
+def test_hook_config_rejects_shell_string_instead_of_argv(tmp_path, monkeypatch):
+    global_config = tmp_path / "global.json"
+    monkeypatch.setenv("ZEROCODE_CONFIG", str(global_config))
+    global_config.write_text(
+        json.dumps({"hooks": {"PreToolUse": [{"command": "echo ok", "args": []}]}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="command"):
+        load_config(tmp_path)
 
 
 @pytest.mark.parametrize(
