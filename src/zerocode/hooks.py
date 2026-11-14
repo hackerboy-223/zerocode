@@ -68,7 +68,7 @@ class HookManager:
             try:
                 process = subprocess.run(
                     [command, *[str(arg) for arg in raw_args]],
-                    cwd=self.cwd,
+                    cwd=Path.home(),
                     env=env,
                     input=payload,
                     capture_output=True,
