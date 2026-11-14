@@ -83,7 +83,11 @@ def test_mcp_stdio_tool_roundtrip(tmp_path):
     server.write_text(SERVER, encoding="utf-8")
     context = ToolContext(cwd=tmp_path)
     permissions = PermissionManager(mode="allow", interactive=False)
-    registry = build_registry(context, permissions)
+    class ApprovingUI:
+        def confirm_tool(self, name, args):
+            return True
+
+    registry = build_registry(context, permissions, ui=ApprovingUI())
     manager = register_mcp_tools(
         registry,
         {"demo": {"command": sys.executable, "args": [str(server)]}},
