@@ -1,11 +1,11 @@
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize, PtySystem};
-use std::{env, io::{Read, Write}, path::PathBuf, process::{Child, ChildStdin, Command, Stdio}, sync::{Arc, Mutex}, thread, time::Duration};
+use std::{env, io::{Read, Write}, path::PathBuf, process::{Child as ProcessChild, ChildStdin, Command, Stdio}, sync::{Arc, Mutex}, thread, time::Duration};
 use tauri::{AppHandle, Emitter, State};
 
 struct TerminalSession { writer: Box<dyn Write + Send>, master: Box<dyn MasterPty + Send>, child: Box<dyn Child + Send + Sync> }
 impl Drop for TerminalSession { fn drop(&mut self) { let _ = self.child.kill(); } }
 #[derive(Default)]
-struct AppState { terminal: Mutex<Option<TerminalSession>>, agent_stdin: Arc<Mutex<Option<ChildStdin>>>, agent_child: Arc<Mutex<Option<Child>>> }
+struct AppState { terminal: Mutex<Option<TerminalSession>>, agent_stdin: Arc<Mutex<Option<ChildStdin>>>, agent_child: Arc<Mutex<Option<ProcessChild>>> }
 
 fn shell() -> String {
     if cfg!(target_os = "windows") { env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".into()) }
