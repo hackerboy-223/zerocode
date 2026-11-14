@@ -7,7 +7,7 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child as ProcessChild, ChildStdin, Command as ProcessCommand, Stdio},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     thread,
 };
 
@@ -46,8 +46,8 @@ impl Drop for AgentProcess {
 
 #[derive(Default)]
 struct DesktopState {
-    terminals: Mutex<HashMap<String, TerminalSession>>,
-    agents: Mutex<HashMap<String, AgentProcess>>,
+    terminals: Arc<Mutex<HashMap<String, TerminalSession>>>,
+    agents: Arc<Mutex<HashMap<String, AgentProcess>>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -141,6 +141,7 @@ fn start_terminal(
         );
 
     let app_for_reader = app.clone();
+    let terminals_for_reader = Arc::clone(&state.terminals);
     let reader_id = terminal_id.clone();
     thread::spawn(move || {
         let mut buffer = [0_u8; 8192];
@@ -157,10 +158,14 @@ fn start_terminal(
                 Err(_) => break,
             }
         }
+        let closed_id = reader_id.clone();
         let _ = app_for_reader.emit(
             "terminal-closed",
             json!({ "id": reader_id }),
         );
+        if let Ok(mut terminals) = terminals_for_reader.lock() {
+            terminals.remove(&closed_id);
+        }
     });
 
     Ok(terminal_id)
@@ -418,6 +423,7 @@ fn start_agent(
         );
 
     let app_for_output = app.clone();
+    let agents_for_output = Arc::clone(&state.agents);
     let output_id = agent_id.clone();
     thread::spawn(move || {
         for line in BufReader::new(output).lines() {
@@ -435,10 +441,14 @@ fn start_agent(
                 },
             );
         }
+        let finished_id = output_id.clone();
         let _ = app_for_output.emit(
             "agent-status",
             json!({ "agent_id": output_id, "status": "stopped" }),
         );
+        if let Ok(mut agents) = agents_for_output.lock() {
+            agents.remove(&finished_id);
+        }
     });
 
     if let Some(stderr) = errors {
