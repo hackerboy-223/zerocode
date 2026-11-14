@@ -532,3 +532,24 @@ def test_sudo_requires_separate_confirmation_even_when_permissions_allow(tmp_pat
     result = shell.run_bash({"command": "sudo true"}, context)
 
     assert "confirmation explicite requise" in result
+
+def test_confirm_approval_cannot_be_bypassed_by_allow_or_yolo(tmp_path):
+    from zerocode.tools.base import Tool
+
+    action = Tool(
+        name="external_action",
+        description="Changes an external resource.",
+        parameters={"type": "object", "properties": {}},
+        handler=lambda args, ctx: "changed",
+        approval="confirm",
+    )
+
+    class RejectingUI:
+        def confirm_tool(self, name, args):
+            return False
+
+    manager = PermissionManager(mode="allow", interactive=True)
+    assert not manager.allow(action, {}, ui=RejectingUI(), context=ToolContext(cwd=tmp_path))
+    assert not PermissionManager(mode="deny", interactive=True).allow(
+        action, {}, ui=RejectingUI(), context=ToolContext(cwd=tmp_path)
+    )
