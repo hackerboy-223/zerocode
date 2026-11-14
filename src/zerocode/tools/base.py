@@ -214,6 +214,8 @@ class ToolRegistry:
         self.ui = ui
         if ui is not None and hasattr(ui, "request_sudo_password"):
             context.request_sudo_password = ui.request_sudo_password
+        if ui is not None and hasattr(ui, "confirm_sudo_command"):
+            context.confirm_sudo_command = ui.confirm_sudo_command
         if ui is not None and hasattr(ui, "show_diff"):
             context.show_diff = ui.show_diff
         if ui is not None and hasattr(ui, "stream_tool_output"):
