@@ -128,6 +128,7 @@ fn agent_run(app: AppHandle, cwd: String, prompt: String, allow_changes: bool) -
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![default_workspace, terminal_start, terminal_write, terminal_resize, terminal_stop, agent_run])
         .run(tauri::generate_context!())
