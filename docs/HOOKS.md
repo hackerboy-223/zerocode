@@ -27,7 +27,7 @@ Ajoute les hooks dans `~/.config/zerocode/config.json` (ou sous le répertoire d
 }
 ```
 
-Les commandes sont lancées sous forme de tableau d'arguments, sans shell. Le programme reçoit un objet JSON sur stdin :
+Les commandes sont lancées sous forme de tableau d'arguments, sans shell. Les scripts démarrent depuis le répertoire personnel de l'utilisateur, pas depuis le dépôt actif ; le chemin du projet est fourni dans le champ `cwd` du JSON. Le programme reçoit cet objet sur stdin :
 
 ```json
 {
