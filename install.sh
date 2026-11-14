@@ -215,9 +215,7 @@ else:
     tokens = ()
 
 if tokens:
-    ranked = [item for item in matches if any(token in item["name"].lower() for token in tokens)]
-    if ranked:
-        matches = ranked
+    matches = [item for item in matches if any(token in item["name"].lower() for token in tokens)]
 
 if len(matches) != 1:
     raise SystemExit(2)
