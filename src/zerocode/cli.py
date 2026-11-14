@@ -35,6 +35,7 @@ from .config import (
     store_key,
 )
 from .errors import ConfigError, ToolError, ZeroCodeError
+from .hooks import HookManager
 from .mcp import MCPManager, register_mcp_tools
 from .prompts import remember_project_instruction
 from .providers import (
@@ -299,8 +300,10 @@ def run_agent(
         )
     )
     router = Router(config, ui=ui)
+    hook_manager = HookManager(config.hooks, cwd)
     context = ToolContext(
         cwd=cwd,
+        run_hook=hook_manager.run,
         allow_outside=config.allow_outside_cwd,
         command_timeout=config.command_timeout,
         protect_secrets=config.protect_secrets,
