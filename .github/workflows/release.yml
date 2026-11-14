@@ -47,9 +47,47 @@ jobs:
           print(f"All package versions match {expected}.")
           PY
 
+  prepare-release:
+    name: Prepare draft release
+    needs: verify-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.prepare.outputs.release_id }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Create or reuse a draft release
+        id: prepare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          PRERELEASE: ${{ contains(github.ref_name, '-') }}
+        run: |
+          if release_json="$(gh release view "$TAG_NAME" --json databaseId,isDraft 2>/dev/null)"; then
+            is_draft="$(printf '%s' "$release_json" | jq -r '.isDraft')"
+            if [[ "$is_draft" != "true" ]]; then
+              echo "Release $TAG_NAME is already public. Publish a new version tag instead of overwriting it." >&2
+              exit 1
+            fi
+            release_id="$(printf '%s' "$release_json" | jq -r '.databaseId')"
+          else
+            notes_file="$(mktemp)"
+            printf '%s\n\n%s\n' "ZeroCode $TAG_NAME" "Paquets natifs et moteur Python. Les empreintes SHA-256 seront ajoutées avant publication." > "$notes_file"
+            release_args=(gh release create "$TAG_NAME" --draft --verify-tag --title "ZeroCode $TAG_NAME" --notes-file "$notes_file")
+            if [[ "$PRERELEASE" == "true" ]]; then release_args+=(--prerelease); fi
+            "${release_args[@]}"
+            rm -f "$notes_file"
+            release_id="$(gh release view "$TAG_NAME" --json databaseId --jq .databaseId)"
+          fi
+          [[ "$release_id" =~ ^[0-9]+$ ]] || { echo "Invalid GitHub release ID." >&2; exit 1; }
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
   desktop:
     name: Desktop · ${{ matrix.label }}
-    needs: verify-version
+    needs: [verify-version, prepare-release]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -121,6 +159,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: ./desktop
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
           tagName: ${{ github.ref_name }}
           releaseName: "ZeroCode ${{ github.ref_name }}"
           releaseBody: |
@@ -132,6 +171,7 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.target-args }} --bundles ${{ matrix.bundles }}
           releaseAssetNamePattern: "[mainBinaryName]-[version]-[platform]-[arch][setup][ext]"
+          retryAttempts: 3
 
   python:
     name: Python package and checksums
