@@ -37,7 +37,13 @@ from .config import (
 )
 from .errors import ConfigError, ToolError, ZeroCodeError
 from .hooks import HookManager
-from .maintenance import latest_release_tag, uninstall_from_pipx, update_from_release
+from .maintenance import (
+    latest_release_tag,
+    repair_from_release,
+    rollback_to_release,
+    uninstall_from_pipx,
+    update_from_release,
+)
 from .mcp import MCPManager, register_mcp_tools
 from .prompts import remember_project_instruction
 from .providers import (
@@ -75,6 +81,8 @@ COMMANDS = {
     "desktop-bridge",
     "completion",
     "update",
+    "repair",
+    "rollback",
     "uninstall",
 }
 
@@ -124,6 +132,10 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return completion_command(argv[1:], console)
     if first == "update":
         return update_command(argv[1:], console)
+    if first == "repair":
+        return repair_command(argv[1:], console)
+    if first == "rollback":
+        return rollback_command(argv[1:], console)
     if first == "uninstall":
         return uninstall_command(argv[1:], console)
     if first == "tui":
@@ -833,7 +845,7 @@ def print_global_help(console: Console | None = None) -> None:
     text.append("Usage\n", style="bold cyan")
     text.append("  zerocode [options] [prompt...]\n")
     text.append("  zerocode setup | doctor | audit | skills | strategies | models | providers | sessions | config\n")
-    text.append("  zerocode update [--check] | uninstall [--remove-data]\n")
+    text.append("  zerocode update [--check] | repair | rollback VERSION | uninstall [--remove-data]\n")
     text.append("  zerocode tui [-m modele]\n\n")
     text.append("Démarrage\n", style="bold cyan")
     text.append("  zerocode                 interface TUI interactive\n")
@@ -1095,6 +1107,38 @@ def update_command(args_list: list[str], console: Console) -> int:
 
     console.print(Text("Recherche de la dernière version stable…", style="cyan"))
     ok, message = update_from_release()
+    console.print(Text(message, style="green" if ok else "red"))
+    return 0 if ok else 1
+
+
+def repair_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode repair")
+    parser.add_argument("--yes", action="store_true", help="Ne pas demander de confirmation.")
+    args = parser.parse_args(args_list)
+
+    console.print(Text("Réinstaller la dernière release stable sans toucher aux données utilisateur.", style="bold"))
+    if not args.yes and not Confirm.ask("Continuer ?", default=False, console=console):
+        console.print(Text("Réparation annulée.", style="yellow"))
+        return 0
+
+    ok, message = repair_from_release()
+    console.print(Text(message, style="green" if ok else "red"))
+    return 0 if ok else 1
+
+
+def rollback_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode rollback")
+    parser.add_argument("version", help="Tag stable à réinstaller, par exemple v1.0.0.")
+    parser.add_argument("--yes", action="store_true", help="Ne pas demander de confirmation.")
+    args = parser.parse_args(args_list)
+
+    console.print(Text(f"Revenir à ZeroCode {args.version}.", style="bold yellow"))
+    console.print(Text("Cette opération remplace le moteur, mais conserve les sessions et la configuration.", style="dim"))
+    if not args.yes and not Confirm.ask("Continuer ?", default=False, console=console):
+        console.print(Text("Retour arrière annulé.", style="yellow"))
+        return 0
+
+    ok, message = rollback_to_release(args.version)
     console.print(Text(message, style="green" if ok else "red"))
     return 0 if ok else 1
 
