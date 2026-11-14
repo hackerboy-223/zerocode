@@ -62,6 +62,7 @@ class ToolContext:
     confirm_sudo_command: Callable[[str], bool] | None = None
     show_diff: Callable[[str, str], None] | None = None
     checkpoint: Callable[[Path, str | None, str], None] | None = None
+    checkpoint_applied: Callable[[Path], None] | None = None
     stream_output: Callable[[str, str], None] | None = None
     run_subagent: Callable[[str, str], str] | None = None
     run_hook: Callable[[str, str, dict[str, Any], str | None], str | None] | None = None
