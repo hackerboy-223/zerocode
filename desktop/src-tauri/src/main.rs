@@ -282,8 +282,26 @@ fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
         }
     }
 
-    if let Some(home) = env::var_os("HOME").map(std::path::PathBuf::from) {
+    if let Some(home) = env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+    {
+        #[cfg(target_os = "windows")]
+        let pipx_entry = home.join(".local").join("bin").join("zerocode.exe");
+        #[cfg(not(target_os = "windows"))]
         let pipx_entry = home.join(".local").join("bin").join("zerocode");
+
+        #[cfg(target_os = "windows")]
+        let pipx_venv = env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join("AppData").join("Local"))
+            .join("pipx")
+            .join("pipx")
+            .join("venvs")
+            .join("zerocode")
+            .join("Scripts")
+            .join("zerocode.exe");
+        #[cfg(not(target_os = "windows"))]
         let pipx_venv = home
             .join(".local")
             .join("share")
@@ -292,6 +310,7 @@ fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
             .join("zerocode")
             .join("bin")
             .join("zerocode");
+
         if pipx_entry.is_file() {
             attempts.push((
                 pipx_entry.to_string_lossy().into_owned(),
