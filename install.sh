@@ -208,7 +208,7 @@ install_engine() {
   install_git
   setup_pipx
   info "Installation du moteur et de ses dépendances dans un environnement isolé…"
-  pipx_run install --force "git+$REPO_URL@$INSTALL_REF"
+  pipx_run install --force --python "$PYTHON_BIN" "git+$REPO_URL@$INSTALL_REF"
   export PATH="$HOME/.local/bin:$PATH"
   command -v zerocode >/dev/null 2>&1 || die "ZeroCode a été installé, mais sa commande n'est pas dans PATH. Ajoute ~/.local/bin à PATH puis relance."
   zerocode --version
