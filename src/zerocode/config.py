@@ -53,6 +53,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "auto_compact": True,
     "providers": {},
     "mcp_servers": {},
+    "hooks": {},
 }
 
 
@@ -211,6 +212,7 @@ class Config:
     auto_compact: bool = True
     providers: dict[str, dict[str, Any]] = field(default_factory=dict)
     mcp_servers: dict[str, dict[str, Any]] = field(default_factory=dict)
+    hooks: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     base_dir: Path = field(default_factory=Path.cwd)
     sources: list[str] = field(default_factory=list)
 
@@ -303,6 +305,39 @@ def validate_config(config: Config) -> None:
         if "enabled" in override and not isinstance(override["enabled"], bool):
             raise ConfigError(f"providers.{name}.enabled doit etre un booleen.")
 
+    if not isinstance(config.hooks, dict):
+        raise ConfigError("hooks doit etre un objet JSON.")
+    unknown_events = set(config.hooks) - {"PreToolUse", "PostToolUse"}
+    if unknown_events:
+        raise ConfigError(
+            "hooks: evenements inconnus " + ", ".join(sorted(unknown_events))
+            + " (evenements acceptes: PreToolUse, PostToolUse)."
+        )
+    for event, hooks in config.hooks.items():
+        if not isinstance(hooks, list) or len(hooks) > 8:
+            raise ConfigError(f"hooks.{event} doit etre une liste de 8 hooks maximum.")
+        for index, hook in enumerate(hooks):
+            if not isinstance(hook, dict):
+                raise ConfigError(f"hooks.{event}[{index}] doit etre un objet JSON.")
+            unknown = set(hook) - {"command", "args", "timeout"}
+            if unknown:
+                raise ConfigError(
+                    f"hooks.{event}[{index}]: cles inconnues {', '.join(sorted(unknown))}."
+                )
+            command = hook.get("command")
+            if not isinstance(command, str) or not command.strip():
+                raise ConfigError(f"hooks.{event}[{index}].command doit etre une chaine non vide.")
+            args = hook.get("args", [])
+            if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+                raise ConfigError(f"hooks.{event}[{index}].args doit etre une liste de chaines.")
+            timeout = hook.get("timeout", 10)
+            if (
+                isinstance(timeout, bool)
+                or not isinstance(timeout, int)
+                or not 1 <= timeout <= 30
+            ):
+                raise ConfigError(f"hooks.{event}[{index}].timeout doit etre compris entre 1 et 30.")
+
     if not isinstance(config.mcp_servers, dict):
         raise ConfigError("mcp_servers doit etre un objet JSON.")
     for name, server in config.mcp_servers.items():
@@ -366,6 +401,8 @@ def load_config(
         # A repository must never start arbitrary MCP executables just by being opened.
         # MCP servers are executable integrations and must be configured by the user globally.
         project_data.pop("mcp_servers", None)
+        # Project files are untrusted and must not execute arbitrary local hooks either.
+        project_data.pop("hooks", None)
         _deep_merge(merged, project_data)
         sources.append(str(project_path))
 
