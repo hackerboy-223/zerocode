@@ -711,6 +711,13 @@ def _slash_command(
         else:
             ui.warn(message)
         return False
+    if command == "strategy":
+        ok, message = agent.set_strategy(rest)
+        if ok:
+            ui.success(message)
+        else:
+            ui.warn(message)
+        return False
     if command == "audit":
         target = rest or "."
         try:
