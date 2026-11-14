@@ -582,6 +582,9 @@ export default function App() {
 
   const changeMode = useCallback(async (next: string) => {
     if (!agentId || !agentReady || busy) return;
+    if (next === "full-stack" && !window.confirm(
+      "Full-stack autorise ZeroCode à modifier le projet et à lancer des commandes avec les droits de votre compte. Les actions sudo et les intégrations externes restent soumises à confirmation. Continuer ?"
+    )) return;
     setMode(next);
     await desktopInvoke("send_agent_message", { agentId, message: { type: "set_mode", mode: next } }).catch((error) => setNotice(String(error)));
   }, [agentId, agentReady, busy]);
@@ -597,6 +600,9 @@ export default function App() {
 
   const changePermissions = useCallback(async (nextPerm: string) => {
     if (!agentId || !agentReady || busy) return;
+    if (nextPerm === "allow" && !window.confirm(
+      "Le mode autonome autorise les modifications et les commandes ordinaires sans confirmation. Il utilise les droits de votre compte système. Continuer ?"
+    )) return;
     setPermissionsMode(nextPerm);
     await desktopInvoke("send_agent_message", {
       agentId,
