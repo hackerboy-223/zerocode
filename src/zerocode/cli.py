@@ -287,7 +287,7 @@ def run_agent(
     session.model = config.model
     session.provider = config.provider
 
-    interactive = sys.stdin.isatty()
+    interactive = sys.stdin.isatty() or args.desktop_protocol
     ui = (
         JsonUI()
         if args.json
