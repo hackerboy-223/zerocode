@@ -9,6 +9,7 @@ import { Activity, ArrowDown, ArrowUp, Bot, ChevronDown, Command, FileCode2, Fol
 
 type EventPayload = { type?: string; delta?: string; name?: string; message?: string };
 type Message = { role: "assistant" | "user"; text: string };
+type ProjectEntry = { path: string; is_dir: boolean };
 
 function Lupus({ small = false }: { small?: boolean }) {
   return <motion.div className={small ? "lupus small" : "lupus"} animate={{ y: [0, -4, 0], rotate: [0, 1.5, 0, -1.5, 0] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}>
@@ -42,7 +43,7 @@ export default function App() {
   const [cwd, setCwd] = useState(""); const [path, setPath] = useState("");
   const [terminalOpen, setTerminalOpen] = useState(true); const [auto, setAuto] = useState(false);
   const [busy, setBusy] = useState(false); const [prompt, setPrompt] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]); const [tab, setTab] = useState<"files" | "changes">("files");
+  const [messages, setMessages] = useState<Message[]>([]); const [tab, setTab] = useState<"files" | "changes">("files"); const [files, setFiles] = useState<ProjectEntry[]>([]);
   const [status, setStatus] = useState("Prêt à travailler"); const [modal, setModal] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const onTerminalReady = useCallback(() => setStatus("Terminal local prêt"), []);
@@ -60,6 +61,7 @@ export default function App() {
     return () => stop?.();
   }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { if (!cwd) return; void invoke<ProjectEntry[]>("list_project_files", { cwd }).then(setFiles).catch(() => setFiles([])); }, [cwd]);
 
   async function browseProject() { const selected = await open({ directory: true, multiple: false, defaultPath: cwd || undefined }); if (typeof selected === "string") setPath(selected); }
   async function openProject() {
@@ -103,7 +105,7 @@ export default function App() {
           </motion.div> : <div className="messages">{messages.map((message, index) => <motion.div key={index} className={"message " + message.role} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>{message.role === "assistant" && <div className="bot-avatar"><Bot size={15}/></div>}<div><small>{message.role === "assistant" ? "ZeroCode" : "Vous"}</small><p>{message.text || (busy ? <span className="typing">•••</span> : "")}</p></div></motion.div>)}<div ref={bottom}/></div>}</div>
           <div className="composer-wrap"><div className="composer"><textarea value={prompt} onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder="Décris ce que tu veux construire…" rows={2}/><div className="composer-bottom"><span className="scope"><Folder size={12}/>{cwd.split("/").filter(Boolean).at(-1) || "Aucun projet"}</span><label className={"toggle " + (auto ? "enabled" : "")}><input type="checkbox" checked={auto} onChange={event => setAuto(event.target.checked)}/><ShieldCheck size={13}/>{auto ? "Autonome activé" : "Mode prudent"}</label><button className="send" disabled={!prompt.trim() || busy || !cwd} onClick={() => void send()}><Send size={15}/></button></div></div><div className="hint">{auto ? "Mode autonome : modifications et commandes autorisées." : "Mode prudent : les actions nécessitant une autorisation sont bloquées."}</div></div>
         </section>
-        <aside className="inspector"><div className="tabs"><button className={tab === "files" ? "selected" : ""} onClick={() => setTab("files")}>Fichiers</button><button className={tab === "changes" ? "selected" : ""} onClick={() => setTab("changes")}>Modifications</button></div><div className="empty"><FolderOpen size={21}/><b>{tab === "files" ? "Espace de travail" : "Aucune modification"}</b><small>{tab === "files" ? "Les fichiers du projet apparaîtront ici." : "Le suivi Git sera connecté au moteur."}</small><button onClick={() => setModal(true)}>Choisir un dossier</button></div><div className="inspector-foot"><label>ACTIVITÉ</label><div className="activity"><i/>{status}</div><div className="lupus-card"><Lupus small/><div><b>LUPUS veille.</b><small>Observer avant d'agir.</small></div></div></div></aside>
+        <aside className="inspector"><div className="tabs"><button className={tab === "files" ? "selected" : ""} onClick={() => setTab("files")}>Fichiers</button><button className={tab === "changes" ? "selected" : ""} onClick={() => setTab("changes")}>Modifications</button></div><div className="file-tree">{tab === "files" && files.length ? files.map(entry => <div className={"file-row " + (entry.is_dir ? "directory" : "")} key={entry.path} style={{ paddingLeft: 8 + (entry.path.split("/").length - 1) * 12 }}>{entry.is_dir ? <Folder size={13}/> : <FileCode2 size={13}/>}<span>{entry.path.split("/").at(-1)}</span></div>) : <div className="empty"><FolderOpen size={21}/><b>{tab === "files" ? "Espace de travail" : "Aucune modification"}</b><small>{tab === "files" ? "Choisis un projet pour explorer ses fichiers." : "Le suivi Git arrive dans la prochaine étape."}</small><button onClick={() => setModal(true)}>Choisir un dossier</button></div>}</div><div className="inspector-foot"><label>ACTIVITÉ</label><div className="activity"><i/>{status}</div><div className="lupus-card"><Lupus small/><div><b>LUPUS veille.</b><small>Observer avant d'agir.</small></div></div></div></aside>
       </div>
       <section className={"terminal " + (!terminalOpen ? "closed" : "")}><div className="terminal-head"><div><SquareTerminal size={14}/><b>Terminal</b><span className="local-tag"><i/> LOCAL</span></div><div className="terminal-controls"><span>{cwd}</span><button onClick={() => setTerminalOpen(false)} title="Réduire"><ArrowDown size={14}/></button><button onClick={() => setTerminalOpen(false)} title="Fermer"><X size={14}/></button></div></div>{cwd && <LocalTerminal cwd={cwd} onReady={onTerminalReady}/>}</section>
     </main>
