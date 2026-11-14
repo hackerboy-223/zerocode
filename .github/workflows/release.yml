@@ -30,7 +30,7 @@ jobs:
           from pathlib import Path
 
           tag = os.environ["TAG_NAME"]
-          if not re.fullmatch(r"v?\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?", tag):
+          if not re.fullmatch(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", tag):
               raise SystemExit(f"Invalid release tag: {tag}")
           expected = tag.removeprefix("v")
           pyproject = tomllib.loads(Path("pyproject.toml").read_text())
@@ -39,7 +39,7 @@ jobs:
               "Python package": pyproject["project"]["version"],
               "Tauri config": json.loads(Path("desktop/src-tauri/tauri.conf.json").read_text())["version"],
               "npm package": json.loads(Path("desktop/package.json").read_text())["version"],
-              "Cargo package": re.search(r'(?m)^version\\s*=\\s*"([^"]+)"', cargo).group(1),
+              "Cargo package": re.search(r'(?m)^version\s*=\s*"([^"]+)"', cargo).group(1),
           }
           mismatches = {name: version for name, version in versions.items() if version != expected}
           if mismatches:
@@ -162,5 +162,5 @@ jobs:
           gh release download "$TAG_NAME" --dir release-assets
           cp dist/* release-assets/
           cd release-assets
-          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
           gh release upload "$TAG_NAME" * --clobber
