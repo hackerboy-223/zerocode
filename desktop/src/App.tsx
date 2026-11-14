@@ -312,14 +312,10 @@ export default function App() {
 
   const resumeSession = useCallback(async (id: string) => {
     if (!agentId || busy) return;
-    setBusy(true);
     await desktopInvoke("send_agent_message", {
       agentId,
       message: { type: "resume_session", session_id: id }
-    }).catch((error) => {
-      setBusy(false);
-      setNotice(String(error));
-    });
+    }).catch((error) => setNotice(String(error)));
   }, [agentId, busy]);
 
   const filteredRecents = useMemo(

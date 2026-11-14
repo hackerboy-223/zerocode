@@ -28,7 +28,7 @@ Installe les dépendances système Tauri/WebKit :
 
 ```bash
 sudo apt update
-sudo apt install -y   build-essential curl wget file   libssl-dev libgtk-3-dev   libwebkit2gtk-4.1-dev   libayatana-appindicator3-dev librsvg2-dev   libxdo-dev patchelf
+sudo apt install -y build-essential curl wget file libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
 ```
 
 Installe Rust si nécessaire :

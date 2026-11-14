@@ -175,7 +175,7 @@ def _visible_history(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
     visible: list[dict[str, str]] = []
     for message in messages:
         role = message.get("role")
-        if role not in {"user", "assistant"}:
+        if role != "user" and role != "assistant":
             continue
         content = message.get("content")
         if isinstance(content, list):
