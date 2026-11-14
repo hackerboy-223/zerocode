@@ -213,7 +213,8 @@ def _run_parser() -> argparse.ArgumentParser:
         help="Mode headless: evenements et resultat en JSON Lines sur stdout.",
     )
 
-    parser.add_argument("--desktop-protocol", action="store_true", help=argparse.SUPPRESS)    parser.add_argument(
+    parser.add_argument("--desktop-protocol", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
         "--classic",
         action="store_true",
         help="Utiliser l'ancienne interface REPL au lieu du TUI.",
