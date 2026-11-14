@@ -7,6 +7,14 @@ INSTALL_MODE="${ZEROCODE_INSTALL_MODE:-}"
 AUTO_YES="${ZEROCODE_INSTALL_YES:-0}"
 BUILD_DIR=""
 NODE_BIN=""
+INPUT_FD=""
+
+if [[ -r /dev/tty ]]; then
+  exec 3</dev/tty
+  INPUT_FD="3"
+elif [[ -t 0 ]]; then
+  INPUT_FD="0"
+fi
 
 info()    { printf '\n\033[1;36m[ZeroCode]\033[0m %s\n' "$*"; }
 success() { printf '\033[1;32m[OK]\033[0m %s\n' "$*"; }
@@ -46,8 +54,8 @@ HELP
 confirm() {
   question="$1"
   if [[ "$AUTO_YES" == "1" ]]; then return 0; fi
-  [[ -t 0 ]] || die "Confirmation impossible sans terminal. Relance avec --yes si tu acceptes les changements annoncés."
-  read -r -p "$question [O/n] " answer
+  [[ -n "$INPUT_FD" ]] || die "Confirmation impossible sans terminal. Relance avec --yes si tu acceptes les changements annoncés."
+  read -r -u "$INPUT_FD" -p "$question [O/n] " answer
   [[ -z "$answer" || "$answer" =~ ^[OoYy]$ ]]
 }
 
@@ -71,7 +79,7 @@ detect_platform() {
 
 select_mode() {
   [[ -n "$INSTALL_MODE" ]] && return
-  [[ -t 0 ]] || die "Mode requis en non-interactif : --mode tui, --mode desktop ou --mode both."
+  [[ -n "$INPUT_FD" ]] || die "Mode requis en non-interactif : --mode tui, --mode desktop ou --mode both."
   printf '\n'
   printf '  ┌──────────────────────────────────────────┐\n'
   printf '  │             ZEROCODE INSTALLER            │\n'
@@ -80,7 +88,7 @@ select_mode() {
   printf '  │  2. Desktop  Application graphique       │\n'
   printf '  │  3. Les deux Installer TUI + Desktop     │\n'
   printf '  └──────────────────────────────────────────┘\n\n'
-  read -r -p "Choisis une installation [1-3] : " choice
+  read -r -u "$INPUT_FD" -p "Choisis une installation [1-3] : " choice
   case "$choice" in
     1) INSTALL_MODE="tui" ;;
     2) INSTALL_MODE="desktop" ;;
