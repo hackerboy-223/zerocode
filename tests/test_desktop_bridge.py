@@ -143,3 +143,26 @@ def test_think_value_normalizes_reasoning_config() -> None:
     assert _think_value(cfg) == "high"
     cfg.reasoning_effort = "unknown"
     assert _think_value(cfg) == "low"
+
+
+def test_desktop_bridge_redacts_secrets_from_nested_events() -> None:
+    stream = io.StringIO()
+    ui = DesktopBridgeUI(stream=stream)
+    token = "sk-proj-123456789012345678901234567890"
+
+    ui.tool_start("bash", {"command": f"echo {token}", "metadata": {"note": token}})
+
+    event = json.loads(stream.getvalue().strip())
+    assert event["arguments"]["command"] == "echo [SECRET MASQUE: JETON API]"
+    assert event["arguments"]["metadata"]["note"] == "[SECRET MASQUE: JETON API]"
+    assert token not in stream.getvalue()
+
+
+def test_visible_history_redacts_secrets_before_desktop_display() -> None:
+    token = "ghp_123456789012345678901234567890123456"
+    messages = [{"role": "assistant", "content": f"Voici le jeton : {token}"}]
+
+    visible = _visible_history(messages)
+
+    assert token not in visible[0]["content"]
+    assert "[SECRET MASQUE: JETON API]" in visible[0]["content"]
