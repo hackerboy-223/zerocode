@@ -139,6 +139,83 @@ def test_update_reinstalls_verified_release_wheel(monkeypatch):
     assert Path(calls[0][3]).parent.name.startswith("zerocode-update-")
 
 
+def test_repair_reinstalls_the_current_release(monkeypatch, tmp_path):
+    calls: list[list[str]] = []
+    wheel_name = "zerocode-1.0.0-py3-none-any.whl"
+    assets = {
+        wheel_name: f"https://github.com/hackerboy-223/zerocode/releases/download/v1.0.0/{wheel_name}",
+        "SHA256SUMS": "https://github.com/hackerboy-223/zerocode/releases/download/v1.0.0/SHA256SUMS",
+    }
+    monkeypatch.setattr(maintenance, "latest_release_details", lambda tag=None: ("v1.0.0", assets))
+    monkeypatch.setattr(
+        maintenance,
+        "_release_asset_checksum",
+        lambda **kwargs: kwargs["destination"].write_bytes(b"verified repair wheel"),
+    )
+    monkeypatch.setattr(maintenance, "pipx_command", lambda: ["pipx"])
+    monkeypatch.setattr(maintenance, "pipx_manages_zerocode", lambda command: True)
+    monkeypatch.setattr(
+        maintenance.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append(command) or SimpleNamespace(returncode=0),
+    )
+
+    ok, message = maintenance.repair_from_release()
+
+    assert ok
+    assert "réparation terminée" in message
+    assert len(calls) == 1
+    assert calls[0][:3] == ["pipx", "install", "--force"]
+    assert calls[0][3].endswith(wheel_name)
+
+
+def test_rollback_uses_the_requested_validated_tag(monkeypatch):
+    calls: list[list[str]] = []
+    wheel_name = "zerocode-0.9.0-py3-none-any.whl"
+    assets = {
+        wheel_name: f"https://github.com/hackerboy-223/zerocode/releases/download/v0.9.0/{wheel_name}",
+        "SHA256SUMS": "https://github.com/hackerboy-223/zerocode/releases/download/v0.9.0/SHA256SUMS",
+    }
+    requested: list[str | None] = []
+
+    def release_details(tag=None):
+        requested.append(tag)
+        return "v0.9.0", assets
+
+    monkeypatch.setattr(maintenance, "latest_release_details", release_details)
+    monkeypatch.setattr(
+        maintenance,
+        "_release_asset_checksum",
+        lambda **kwargs: kwargs["destination"].write_bytes(b"verified rollback wheel"),
+    )
+    monkeypatch.setattr(maintenance, "pipx_command", lambda: ["pipx"])
+    monkeypatch.setattr(maintenance, "pipx_manages_zerocode", lambda command: True)
+    monkeypatch.setattr(
+        maintenance.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append(command) or SimpleNamespace(returncode=0),
+    )
+
+    ok, message = maintenance.rollback_to_release("v0.9.0")
+
+    assert ok
+    assert "retour à la version v0.9.0 terminé" in message
+    assert requested == ["v0.9.0"]
+    assert len(calls) == 1
+    assert calls[0][3].endswith(wheel_name)
+
+
+def test_rollback_rejects_an_untrusted_tag(monkeypatch):
+    monkeypatch.setattr(
+        maintenance,
+        "latest_release_details",
+        lambda tag=None: (_ for _ in ()).throw(RuntimeError("Le tag de version demandé est invalide.")),
+    )
+    ok, message = maintenance.rollback_to_release("../../unsafe")
+    assert not ok
+    assert "tag de version demandé est invalide" in message
+
+
 def test_uninstall_keeps_user_data_by_default(tmp_path, monkeypatch):
     config = tmp_path / "config" / "zerocode"
     data = tmp_path / "data" / "zerocode"
