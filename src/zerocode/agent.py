@@ -10,7 +10,7 @@ from .errors import ConfigError, ToolError
 from .prompts import build_system_prompt
 from .security import redact_secrets
 from .session import Session, SessionStore
-from .skills import DEFAULT_ACTIVE_SKILLS, all_skills, list_fabric_strategies, normalize_skill_names
+from .skills import DEFAULT_ACTIVE_SKILLS, all_skills, list_fabric_strategies, normalize_skill_names, select_full_stack_skills
 from .tokens import compact_messages, estimate_messages, truncate_text
 from .tools import PermissionManager, ToolContext, build_registry
 from .tools.files import _is_binary
@@ -31,6 +31,7 @@ MODE FULL-STACK AUTONOME ACTIF:
 - Mission: construire ou terminer un projet complet de bout en bout, pas seulement proposer un plan.
 - L'utilisateur a explicitement active ce mode: cette autorisation remplace la regle generale et t'autorise a installer les dependances locales et a lancer les commandes de build, de test et de lint sans demander confirmation.
 - Inspecte le depot, puis cree un plan avec todo_write et maintiens-le a jour jusqu'a la livraison.
+- Active automatiquement les skills Full-Stack pertinents selon la demande, les fichiers de configuration et la stack détectée. Réévalue cette sélection à chaque nouvelle demande. Ne charge jamais tous les Patterns Fabric en bloc : garde uniquement les compétences utiles au contexte.
 - Si le projet existe deja, respecte sa stack et ses conventions. S'il est vide, choisis une stack moderne et coherente, puis cree la structure complete.
 - Implemente les couches necessaires: interface, backend/API, donnees, validation, authentification si utile, tests, scripts et documentation.
 - Prends des decisions raisonnables sans multiplier les questions. Ne t'arrete que si une information critique ou un secret manque.
@@ -109,6 +110,9 @@ class Agent:
         if not text:
             return ""
         expanded_text = self._expand_file_mentions(text)
+        if self.mode == "full-stack":
+            self.skills = select_full_stack_skills(self.tools.context.cwd, expanded_text)
+            self._refresh_system_mode()
         content: str | list[dict[str, Any]] = expanded_text
         if images:
             content = [{"type": "text", "text": expanded_text}]
@@ -368,6 +372,7 @@ class Agent:
         self.tools.context.command_timeout = self.config.command_timeout
         self.tools.read_only = False
         self.mode = "full-stack"
+        self.skills = select_full_stack_skills(self.tools.context.cwd)
         self._sync_reasoning_visibility()
         self._refresh_system_mode()
         self._save_quiet()
