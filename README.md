@@ -114,6 +114,8 @@ Pour revenir à une version stable connue :
 zerocode rollback v1.0.0
 ```
 
+Sous Windows, les commandes de maintenance du moteur évitent de remplacer les fichiers Python d'un processus encore actif. Ferme ZeroCode puis relance l'installateur PowerShell pour mettre à jour, réparer ou revenir à une version précise ; configure `$env:ZEROCODE_INSTALL_REF = "v1.0.0"` avant de lancer l'installateur pour un rollback.
+
 Pour mettre à jour Desktop, relance l'installateur officiel. Il récupère la dernière release et installe le paquet natif adapté au système.
 
 Désinstaller le moteur tout en conservant la configuration, les clés API et les sessions :
@@ -122,7 +124,9 @@ Désinstaller le moteur tout en conservant la configuration, les clés API et le
 zerocode uninstall
 ```
 
-Supprimer aussi ces données utilisateur (opération irréversible) :
+Sous Windows, ferme toutes les fenêtres ZeroCode puis désinstalle le moteur depuis une nouvelle fenêtre PowerShell avec `pipx uninstall zerocode`. Les données utilisateur ne sont pas supprimées par cette commande.
+
+Supprimer aussi ces données utilisateur (opération irréversible, commande prise en charge sur Linux et macOS) :
 
 ```bash
 zerocode uninstall --remove-data
