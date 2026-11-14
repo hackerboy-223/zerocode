@@ -617,7 +617,7 @@ class Agent:
         except Exception as exc:  # noqa: BLE001 - isolation des threads d'outils
             return f"ERREUR: {exc.__class__.__name__}: {exc}"
 
-    def _run_subagent(self, task: str) -> str:
+    def _run_subagent(self, task: str, role: str = "explorer") -> str:
         sub_ctx = ToolContext(
             cwd=self.tools.context.cwd,
             allow_outside=self.tools.context.allow_outside,
