@@ -101,8 +101,14 @@ install_git() {
   info "Git est nécessaire pour récupérer le code ZeroCode."
   case "$PLATFORM" in
     macos)
-      command -v brew >/dev/null 2>&1 || die "Installe Git ou Homebrew (https://brew.sh), puis relance."
-      brew install git
+      if command -v brew >/dev/null 2>&1; then
+        brew install git
+      elif xcode-select -p >/dev/null 2>&1; then
+        die "Git n'est pas disponible. Installe Git ou Homebrew (https://brew.sh), puis relance."
+      else
+        xcode-select --install || true
+        die "Installe Xcode Command Line Tools, qui fournissent Git, puis relance l'installateur."
+      fi
       ;;
     linux)
       if command -v apt-get >/dev/null 2>&1; then
@@ -129,7 +135,15 @@ setup_pipx() {
     info "Préparation d'un environnement isolé pour pipx…"
     BOOTSTRAP="$HOME/.local/share/zerocode/bootstrap/pipx"
     mkdir -p "$(dirname "$BOOTSTRAP")"
-    python3 -m venv "$BOOTSTRAP" || die "Impossible de créer un environnement Python. Sur Debian/Ubuntu, installe python3-venv puis relance."
+    if ! python3 -m venv "$BOOTSTRAP" 2>/dev/null; then
+      if command -v apt-get >/dev/null 2>&1; then
+        as_root apt-get update
+        as_root apt-get install -y python3-venv
+        python3 -m venv "$BOOTSTRAP"
+      else
+        die "Le module venv de Python est absent. Installe le paquet venv de ta distribution puis relance."
+      fi
+    fi
     "$BOOTSTRAP/bin/python" -m pip install --upgrade pip pipx
     PIPX_KIND="binary"
     PIPX_BIN="$BOOTSTRAP/bin/pipx"
@@ -165,9 +179,9 @@ install_linux_build_dependencies() {
     as_root apt-get update
     as_root apt-get install -y build-essential curl wget file libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
   elif command -v dnf >/dev/null 2>&1; then
-    as_root dnf install -y gcc gcc-c++ make curl wget file openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3 librsvg2-devel libxdo-devel patchelf
+    as_root dnf install -y gcc gcc-c++ make curl wget file openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel patchelf
   elif command -v pacman >/dev/null 2>&1; then
-    as_root pacman -Sy --needed --noconfirm base-devel curl wget file openssl gtk3 webkit2gtk-4.1 libayatana-appindicator librsvg xdotool patchelf
+    as_root pacman -Sy --needed --noconfirm base-devel curl wget file openssl appmenu-gtk-module webkit2gtk-4.1 libappindicator-gtk3 librsvg xdotool patchelf
   else
     die "Distribution Linux non reconnue. Installe les dépendances Tauri indiquées dans docs/DESKTOP.md, puis relance."
   fi
