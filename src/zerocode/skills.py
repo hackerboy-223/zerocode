@@ -213,6 +213,75 @@ def format_skills_prompt(
     return "\n\n".join(sections)
 
 
+FULL_STACK_BASE_SKILLS: tuple[str, ...] = (
+    "ultra-dev", "cyber-sec", "sys-tech", "review", "perf", "sec-hardening",
+)
+
+_FULL_STACK_CONTEXT_FILES = (
+    "package.json", "composer.json", "pyproject.toml", "requirements.txt",
+    "Pipfile", "go.mod", "Cargo.toml", "Gemfile", "pom.xml", "build.gradle",
+    "artisan", "next.config.js", "next.config.ts", "vite.config.ts",
+)
+
+
+def select_full_stack_skills(cwd: Path, task: str = "", limit: int = 8) -> list[str]:
+    """Sélectionne les compétences utiles au projet sans charger tout le catalogue."""
+    catalog = all_skills(cwd)
+    selected = [name for name in FULL_STACK_BASE_SKILLS if name in catalog]
+    context_parts = [task.lower()]
+    for filename in _FULL_STACK_CONTEXT_FILES:
+        path = cwd / filename
+        if not path.is_file():
+            continue
+        context_parts.append(filename.lower())
+        try:
+            if path.stat().st_size <= 40_000:
+                context_parts.append(path.read_text(encoding="utf-8", errors="replace").lower())
+        except OSError:
+            continue
+
+    context = " ".join(context_parts)
+    tokens = set(re.findall(r"[a-z][a-z0-9+#.-]{1,}", context))
+    inferred = (
+        ("frontend", ("react", "next", "vite", "vue", "angular")),
+        ("backend", ("laravel", "django", "fastapi", "express", "spring")),
+        ("database", ("supabase", "postgres", "mysql", "sqlite", "prisma")),
+        ("testing", ("pytest", "jest", "vitest", "playwright", "cypress")),
+        ("devops", ("docker", "vercel", "nginx", "github actions")),
+    )
+    for label, markers in inferred:
+        if any(marker in context for marker in markers):
+            tokens.add(label)
+
+    groups = {
+        "frontend": {"frontend", "react", "nextjs", "next", "vue", "angular", "svelte", "ui", "ux", "css", "tailwind", "html", "component", "design"},
+        "backend": {"backend", "api", "server", "laravel", "php", "django", "fastapi", "flask", "express", "node", "python", "rest"},
+        "database": {"database", "db", "sql", "postgres", "postgresql", "supabase", "mysql", "sqlite", "prisma", "orm", "migration"},
+        "security": {"security", "secure", "auth", "authentication", "authorization", "csrf", "xss", "owasp", "vulnerability", "secret"},
+        "testing": {"test", "tests", "testing", "pytest", "jest", "vitest", "playwright", "cypress", "qa"},
+        "devops": {"deploy", "deployment", "vercel", "docker", "ci", "cd", "devops", "linux", "nginx", "cloud"},
+        "performance": {"performance", "perf", "optimize", "optimization", "cache", "speed"},
+        "documentation": {"docs", "documentation", "readme"},
+    }
+    ranked: list[tuple[int, str]] = []
+    for name, spec in catalog.items():
+        if spec.builtin or name in selected:
+            continue
+        haystack = f"{name.removeprefix('fabric-')} {spec.summary}".lower()
+        skill_tokens = set(re.findall(r"[a-z][a-z0-9+#.-]{1,}", haystack))
+        score = len(skill_tokens & tokens)
+        for group, terms in groups.items():
+            if group in skill_tokens and terms & tokens:
+                score += 3
+            elif skill_tokens & terms and terms & tokens:
+                score += 1
+        if score:
+            ranked.append((score, name))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    selected.extend(name for _, name in ranked[:max(0, limit)])
+    return selected
+
+
 FABRIC_API = "https://api.github.com/repos/danielmiessler/fabric"
 FABRIC_RAW = "https://raw.githubusercontent.com/danielmiessler/fabric"
 FABRIC_USER_AGENT = "ZeroCode-Fabric-Integration/1.0"
