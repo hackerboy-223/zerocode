@@ -308,7 +308,7 @@ def validate_config(config: Config) -> None:
     for name, server in config.mcp_servers.items():
         if not isinstance(server, dict):
             raise ConfigError(f"mcp_servers.{name} doit etre un objet JSON.")
-        unknown = set(server) - {"command", "args", "env", "cwd", "enabled", "timeout"}
+        unknown = set(server) - {"command", "args", "env", "cwd", "enabled", "timeout", "trusted"}
         if unknown:
             raise ConfigError(
                 f"mcp_servers.{name}: cles inconnues {', '.join(sorted(unknown))}."
@@ -322,6 +322,8 @@ def validate_config(config: Config) -> None:
             raise ConfigError(f"mcp_servers.{name}.env doit etre un objet JSON.")
         if "enabled" in server and not isinstance(server["enabled"], bool):
             raise ConfigError(f"mcp_servers.{name}.enabled doit etre un booleen.")
+        if "trusted" in server and not isinstance(server["trusted"], bool):
+            raise ConfigError(f"mcp_servers.{name}.trusted doit etre un booleen.")
         if "cwd" in server:
             value = server["cwd"]
             if not isinstance(value, str) or not value.strip():
@@ -360,7 +362,11 @@ def load_config(
 
     project_path = project_config_path(cwd)
     if project_path is not None:
-        _deep_merge(merged, _read_json(project_path, label="la configuration du projet"))
+        project_data = _read_json(project_path, label="la configuration du projet")
+        # A repository must never start arbitrary MCP executables just by being opened.
+        # MCP servers are executable integrations and must be configured by the user globally.
+        project_data.pop("mcp_servers", None)
+        _deep_merge(merged, project_data)
         sources.append(str(project_path))
 
     _deep_merge(merged, _env_overrides())
