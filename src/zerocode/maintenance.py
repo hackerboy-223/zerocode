@@ -24,6 +24,10 @@ _TAG_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 _SHA256_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
 def latest_release_details(
     tag: str | None = None,
     *,
@@ -183,7 +187,7 @@ def _install_release_wheel(
     operation: str,
     allow_current_version: bool,
 ) -> tuple[bool, str]:
-    if os.name == "nt":
+    if _is_windows():
         version_hint = "latest" if tag is None else tag
         return (
             False,
@@ -272,7 +276,7 @@ def rollback_to_release(tag: str) -> tuple[bool, str]:
 
 def uninstall_from_pipx(*, remove_data: bool = False) -> tuple[bool, str]:
     """Remove the pipx app; user configuration and sessions are preserved by default."""
-    if os.name == "nt":
+    if _is_windows():
         return (
             False,
             "Ferme toutes les fenêtres ZeroCode. Dans une nouvelle fenêtre PowerShell, "
