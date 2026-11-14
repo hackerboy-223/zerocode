@@ -314,7 +314,7 @@ def _register_tool(
                 description=description[:1_000],
                 parameters=schema,
                 handler=handler,
-                approval="ask",
+                approval="confirm",
             )
         )
     except ValueError:
