@@ -3,6 +3,7 @@ use std::{env, io::{Read, Write}, path::PathBuf, process::{Command, Stdio}, thre
 use tauri::{AppHandle, Emitter, State};
 
 struct TerminalSession { writer: Box<dyn Write + Send>, master: Box<dyn MasterPty + Send>, child: Box<dyn Child + Send + Sync> }
+impl Drop for TerminalSession { fn drop(&mut self) { let _ = self.child.kill(); } }
 #[derive(Default)]
 struct AppState { terminal: std::sync::Mutex<Option<TerminalSession>> }
 
@@ -30,7 +31,7 @@ fn terminal_start(app: AppHandle, state: State<'_, AppState>, cwd: String) -> Re
     let master = pair.master;
     {
         let mut slot = state.terminal.lock().map_err(|_| "Verrou terminal indisponible.")?;
-        slot.take();
+        if let Some(mut previous) = slot.take() { let _ = previous.child.kill(); let _ = previous.child.wait(); }
         *slot = Some(TerminalSession { writer, master, child });
     }
     thread::spawn(move || {
@@ -78,7 +79,11 @@ fn agent_run(app: AppHandle, cwd: String, prompt: String, allow_changes: bool) -
     if prompt.trim().is_empty() { return Err("Demande vide.".into()); }
 
     let mut command = Command::new("zerocode");
-    command.arg("--json").arg("--cwd").arg(&path).arg("--permissions")
+    let mut search_paths = env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect::<Vec<_>>();
+    if let Some(home) = env::var_os("HOME") { let local_bin = PathBuf::from(home).join(".local/bin"); if !search_paths.contains(&local_bin) { search_paths.push(local_bin); } }
+    let path_value = env::join_paths(search_paths).map_err(|e| e.to_string())?;
+    command.env("PATH", path_value);
+    command.arg("--json").arg("--continue").arg("--cwd").arg(&path).arg("--permissions")
         .arg(if allow_changes { "allow" } else { "ask" }).arg(prompt)
         .current_dir(&path).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|e| format!("Commande zerocode introuvable dans PATH. Installe le moteur avant de lancer l'agent : {e}"))?;
