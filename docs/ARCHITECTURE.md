@@ -41,8 +41,8 @@ Le cœur de l'agent reste synchrone : une requête, un flux, un tour d'agent. Le
 | `prompts.py` | prompt système et instructions projet |
 | `security.py` | masquage DLP des secrets (`redact_secrets`) et pare-feu contre les commandes shell destructrices (`check_dangerous_command`) |
 | `checkpoints.py` | sauvegarde atomique avant écriture/édition et restauration sécurisée (`/undo`) |
-| `mcp.py` | client JSON-RPC stdio pour serveurs Model Context Protocol avec environnement assaini |
-| `tools/` | outils de fichiers, recherche, inspection Git, shell, web, cartographie et vérification de projet, tâches, sous-agents spécialisés et gestion des permissions |
+| `mcp.py` | client JSON-RPC stdio pour outils, ressources et prompts MCP, avec environnement assaini et approbation des actions distantes |
+| `tools/` | outils de fichiers, recherche, Git, shell, web, cartographie et vérification multi-stack, tâches, sous-agents spécialisés et permissions |
 
 ## Déroulement d'un tour
 
@@ -87,6 +87,17 @@ Les modes agent sont gérés par `Agent.set_mode` :
 - `build` : tous les outils sont proposés au modèle.
 - `plan` : `ToolRegistry.read_only` masque les outils dont l'approbation n'est pas `never` et refuse leur exécution ; le prompt système reçoit une consigne de lecture seule.
 - `full-stack` : preset autonome (`FULL_STACK_PRESET`) avec raisonnement max, 128k jetons de sortie, 500 étapes, timeout 3600 s, compaction à 0.95, permissions `allow`, raisonnement affiché et auto-continuation tant qu'il reste des tâches non terminées dans `todos`. Le prompt système impose de cartographier le dépôt (`project_map`), planifier, déléguer les analyses aux sous-agents spécialisés en lecture seule, puis vérifier tests/lint/types/build via `project_verify`. L'agent peut effectuer jusqu'à six reprises automatiques de continuation lorsqu'il reste des tâches. Les intégrations MCP nécessitent toujours une confirmation dédiée. Les réglages précédents sont sauvegardés en mémoire et restaurés dès que l'on quitte le mode.
+
+## Capacités d'autonomie
+
+Le mode Full-Stack s'appuie sur des outils dédiés plutôt que sur une suite de commandes shell improvisées :
+- `project_map` dresse un inventaire borné du dépôt, identifie les manifestes, les piles et les points d'entrée, sans suivre les liens symboliques ni lire les secrets.
+- `git_status` et `git_diff` exposent les modifications suivies ; les chemins sensibles sont exclus du diff.
+- `project_verify` détecte les scripts et commandes de validation pour JavaScript/TypeScript, PHP, Python, Go, Rust, JVM, Ruby, .NET, Dart/Flutter, Swift et Elixir.
+- `subagent` délègue des analyses isolées à sept profils en lecture seule : explorer, architect, reviewer, security, performance, tester et researcher. L'agent principal reste seul responsable des modifications.
+- MCP peut fournir des outils, des ressources et des prompts. Les actions distantes exigent une confirmation, sauf serveur explicitement marqué `trusted: true` dans la configuration utilisateur/projet. Les annotations `readOnlyHint` restent des indications fournies par le serveur.
+
+Les serveurs Playwright et Filesystem sont optionnels et documentés dans [MCP_SERVERS.md](MCP_SERVERS.md). Ils ne sont pas téléchargés avec ZeroCode.
 
 ## Contexte et compaction
 
