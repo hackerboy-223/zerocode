@@ -9,8 +9,7 @@ BUILD_DIR=""
 NODE_BIN=""
 INPUT_FD=""
 
-if [[ -r /dev/tty ]]; then
-  exec 3</dev/tty
+if { exec 3</dev/tty; } 2>/dev/null; then
   INPUT_FD="3"
 elif [[ -t 0 ]]; then
   INPUT_FD="0"
