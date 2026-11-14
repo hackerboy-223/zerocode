@@ -96,11 +96,45 @@ select_mode() {
   esac
 }
 
+find_python() {
+  for candidate in python3 python3.14 python3.13 python3.12 python3.11 python3.10; do
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+      PYTHON_BIN="$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 check_python() {
-  command -v python3 >/dev/null 2>&1 || die "Python 3.10+ est requis. Installe-le depuis https://www.python.org/downloads/ puis relance."
-  python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' \
-    || die "Python 3.10+ est requis (version détectée : $(python3 --version))."
-  success "Python : $(python3 --version)"
+  if ! find_python; then
+    info "Python 3.10+ absent : installation du runtime Python…"
+    case "$PLATFORM" in
+      macos)
+        command -v brew >/dev/null 2>&1 || die "Python 3.10+ est requis. Installe Homebrew (https://brew.sh), puis relance pour installer Python automatiquement."
+        brew install python@3.12
+        ;;
+      linux)
+        if command -v apt-get >/dev/null 2>&1; then
+          as_root apt-get update
+          if apt-cache show python3.12 >/dev/null 2>&1; then
+            as_root apt-get install -y python3.12 python3.12-venv
+          else
+            as_root apt-get install -y python3 python3-venv
+          fi
+        elif command -v dnf >/dev/null 2>&1; then
+          as_root dnf install -y python3 python3-pip
+        elif command -v pacman >/dev/null 2>&1; then
+          as_root pacman -Sy --needed --noconfirm python python-pip
+        else
+          die "Python 3.10+ est requis. Installe-le depuis https://www.python.org/downloads/ puis relance."
+        fi
+        ;;
+    esac
+  fi
+  find_python || die "Python 3.10+ reste introuvable après la tentative d'installation. Installe une version récente puis relance."
+  success "Python : $("$PYTHON_BIN" --version)"
 }
 
 install_git() {
@@ -136,17 +170,17 @@ setup_pipx() {
   if command -v pipx >/dev/null 2>&1; then
     PIPX_KIND="binary"
     PIPX_BIN="$(command -v pipx)"
-  elif python3 -m pipx --version >/dev/null 2>&1; then
+  elif "$PYTHON_BIN" -m pipx --version >/dev/null 2>&1; then
     PIPX_KIND="module"
   else
     info "Préparation d'un environnement isolé pour pipx…"
     BOOTSTRAP="$HOME/.local/share/zerocode/bootstrap/pipx"
     mkdir -p "$(dirname "$BOOTSTRAP")"
-    if ! python3 -m venv "$BOOTSTRAP" 2>/dev/null; then
+    if ! "$PYTHON_BIN" -m venv "$BOOTSTRAP" 2>/dev/null; then
       if command -v apt-get >/dev/null 2>&1; then
         as_root apt-get update
         as_root apt-get install -y python3-venv
-        python3 -m venv "$BOOTSTRAP"
+        "$PYTHON_BIN" -m venv "$BOOTSTRAP"
       else
         die "Le module venv de Python est absent. Installe le paquet venv de ta distribution puis relance."
       fi
@@ -161,7 +195,7 @@ setup_pipx() {
 
 pipx_run() {
   if [[ "$PIPX_KIND" == "module" ]]; then
-    python3 -m pipx "$@"
+    "$PYTHON_BIN" -m pipx "$@"
   else
     "$PIPX_BIN" "$@"
   fi
@@ -215,7 +249,7 @@ install_node() {
   info "Installation de Node.js 24 (version locale à ZeroCode)…"
   command -v curl >/dev/null 2>&1 || die "curl est requis pour télécharger Node.js."
   command -v tar >/dev/null 2>&1 || die "tar est requis pour extraire Node.js."
-  NODE_VERSION="$(curl -fsSL https://nodejs.org/dist/index.json | python3 -c 'import json,sys; print(next(x["version"] for x in json.load(sys.stdin) if x["version"].startswith("v24.")))')"
+  NODE_VERSION="$(curl -fsSL https://nodejs.org/dist/index.json | "$PYTHON_BIN" -c 'import json,sys; print(next(x["version"] for x in json.load(sys.stdin) if x["version"].startswith("v24.")))')"
   if [[ "$PLATFORM" == "macos" ]]; then NODE_OS="darwin"; NODE_EXT="tar.gz"; else NODE_OS="linux"; NODE_EXT="tar.xz"; fi
   NODE_ARCHIVE="node-$NODE_VERSION-$NODE_OS-$ARCH.$NODE_EXT"
   NODE_BASE="https://nodejs.org/dist/$NODE_VERSION"
