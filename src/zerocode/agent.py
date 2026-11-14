@@ -626,6 +626,7 @@ class Agent:
             command_timeout=self.tools.context.command_timeout,
             protect_secrets=self.tools.context.protect_secrets,
             allow_secrets=self.tools.context.allow_secrets,
+            run_hook=self.tools.context.run_hook,
         )
         sub_perms = PermissionManager(mode="deny", interactive=False)
         sub_registry = build_registry(
