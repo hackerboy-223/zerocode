@@ -25,6 +25,7 @@ from .catalog import PROVIDERS, all_choices, get_provider
 from .checkpoints import CheckpointStore
 from .config import (
     Config,
+    config_dir,
     default_config_path,
     keys_path,
     load_config,
@@ -943,8 +944,8 @@ def skills_command(args_list: list[str], console: Console) -> int:
             f"{counts['skipped']} ignorés ; {counts['failed']} erreurs.",
             style="green" if not counts["failed"] else "yellow",
         ))
-        console.print(Text(f"Skills : {Path.home() / '.config' / 'zerocode' / 'skills'}", style="dim"))
-        console.print(Text(f"Stratégies : {Path.home() / '.config' / 'zerocode' / 'strategies'}", style="dim"))
+        console.print(Text(f"Skills : {config_dir() / 'skills'}", style="dim"))
+        console.print(Text(f"Stratégies : {config_dir() / 'strategies'}", style="dim"))
         return 1 if counts["failed"] else 0
     cwd = Path.cwd().resolve()
     catalog = all_skills(cwd)
