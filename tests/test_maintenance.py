@@ -114,7 +114,7 @@ def test_update_reinstalls_verified_release_wheel(monkeypatch):
         wheel_name: wheel_url,
         "SHA256SUMS": "https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/SHA256SUMS",
     }
-    monkeypatch.setattr(maintenance, "latest_release_details", lambda: ("v1.0.1", assets))
+    monkeypatch.setattr(maintenance, "latest_release_details", lambda tag=None: ("v1.0.1", assets))
     def verify_and_save(**kwargs):
         kwargs["destination"].write_bytes(b"verified wheel")
         return True
