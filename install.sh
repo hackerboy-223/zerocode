@@ -114,6 +114,7 @@ check_python() {
       macos)
         command -v brew >/dev/null 2>&1 || die "Python 3.10+ est requis. Installe Homebrew (https://brew.sh), puis relance pour installer Python automatiquement."
         brew install python@3.12
+        export PATH="$(brew --prefix python@3.12)/bin:$PATH"
         ;;
       linux)
         if command -v apt-get >/dev/null 2>&1; then
