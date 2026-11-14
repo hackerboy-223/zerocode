@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shlex
@@ -114,7 +115,10 @@ def project_map(args: dict[str, Any], ctx: ToolContext) -> str:
         stacks.append("Python")
         manifests.append("pyproject.toml")
         try:
-            import tomllib
+            try:
+                import tomllib
+            except ImportError:  # Python 3.10
+                import tomli as tomllib
             parsed = tomllib.loads(pyproject_path.read_text(encoding="utf-8")[:100_000])
             project = parsed.get("project", {})
             if isinstance(project, dict):
@@ -215,13 +219,16 @@ def _verification_commands(root: Path, checks: list[str]) -> list[tuple[str, str
         python = shlex.quote(sys.executable)
         if "tests" in checks and ((root / "tests").is_dir() or shutil.which("pytest")):
             commands.append(("tests", f"{python} -m pytest -q"))
-        if "lint" in checks and (shutil.which("ruff") or (root / "ruff.toml").is_file()):
-            commands.append(("lint", f"{python} -m ruff check ."))
-        if "typecheck" in checks and (shutil.which("mypy") or (root / "mypy.ini").is_file()):
-            commands.append(("typecheck", f"{python} -m mypy ."))
+        if "lint" in checks and (shutil.which("ruff") or importlib.util.find_spec("ruff")):
+            commands.append(("lint", "ruff check ." if shutil.which("ruff") else f"{python} -m ruff check ."))
+        if "typecheck" in checks and (shutil.which("mypy") or importlib.util.find_spec("mypy")):
+            commands.append(("typecheck", "mypy ." if shutil.which("mypy") else f"{python} -m mypy ."))
         if "build" in checks and (root / "pyproject.toml").is_file():
             try:
-                import tomllib
+                try:
+                    import tomllib
+                except ImportError:  # Python 3.10
+                    import tomli as tomllib
                 parsed = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8")[:100_000])
             except (OSError, UnicodeError, ValueError):
                 parsed = {}
