@@ -59,6 +59,7 @@ class ToolContext:
     diff_context_lines: int = 3
     todos: list[dict[str, Any]] = field(default_factory=list)
     request_sudo_password: Callable[[str], str | None] | None = None
+    confirm_sudo_command: Callable[[str], bool] | None = None
     show_diff: Callable[[str, str], None] | None = None
     checkpoint: Callable[[Path, str | None, str], None] | None = None
     stream_output: Callable[[str, str], None] | None = None
