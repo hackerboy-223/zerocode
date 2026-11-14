@@ -162,6 +162,7 @@ export default function App() {
   const [eventsReady, setEventsReady] = useState(false);
   const agentIdRef = useRef<string | null>(null);
   const pendingAgentEventsRef = useRef<Array<{ agentId: string; event: AgentEvent }>>([]);
+  const pendingAgentStatusesRef = useRef<Array<{ agentId: string; status: string }>>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activities, setActivities] = useState<ToolActivity[]>([]);
@@ -277,6 +278,15 @@ export default function App() {
       }
       agentIdRef.current = id;
       setAgentId(id);
+      const stoppedBeforeRegistration = pendingAgentStatusesRef.current.some(
+        (entry) => entry.agentId === id && entry.status === "stopped"
+      );
+      pendingAgentStatusesRef.current = pendingAgentStatusesRef.current.filter((entry) => entry.agentId !== id);
+      if (stoppedBeforeRegistration) {
+        setAgentReady(false);
+        setBusy(false);
+        setNotice("Le processus ZeroCode s’est arrêté avant d’être prêt. Vérifiez le diagnostic de l’agent.");
+      }
       const queued = pendingAgentEventsRef.current.filter((entry) => entry.agentId === id);
       pendingAgentEventsRef.current = [];
       queued.forEach((entry) => handleAgentEvent(entry.event));
@@ -313,11 +323,14 @@ export default function App() {
         }
       });
       const offStatus = await listen<{ agent_id: string; status: string }>("agent-status", (event) => {
-        if (agentIdRef.current === event.payload.agent_id && event.payload.status === "stopped") {
+        const { agent_id: id, status } = event.payload;
+        if (agentIdRef.current === id && status === "stopped") {
           setAgentReady(false);
           setBusy(false);
           setPending(null);
           setNotice("Le processus ZeroCode s’est arrêté. Relancez l’application ou rouvrez le projet.");
+        } else if (!agentIdRef.current) {
+          pendingAgentStatusesRef.current.push({ agentId: id, status });
         }
       });
       if (!alive) {
