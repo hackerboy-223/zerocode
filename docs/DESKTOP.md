@@ -80,6 +80,8 @@ zerocode update --check
 zerocode update
 ```
 
+Pour réparer le moteur, utilise `zerocode repair`. Pour revenir à une version stable précise, utilise `zerocode rollback v1.0.0`. Les deux commandes vérifient le wheel et son empreinte avant remplacement.
+
 Pour mettre à jour Desktop, relance le même installateur ; il récupère la release la plus récente et remplace le paquet natif. Les paquets `.deb` et `.rpm` restent gérés par le gestionnaire système.
 
 Le moteur Python peut être désinstallé avec `zerocode uninstall`. Les configurations, clés API et sessions sont conservées par défaut. `zerocode uninstall --remove-data` les supprime aussi, après confirmation.
