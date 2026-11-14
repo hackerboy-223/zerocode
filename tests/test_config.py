@@ -109,13 +109,36 @@ def test_provider_url_validation(tmp_path):
         {"command": "true", "timeout": float("nan")},
     ],
 )
-def test_invalid_mcp_server_options_are_rejected(tmp_path, server):
-    (tmp_path / "zerocode.json").write_text(
+def test_invalid_mcp_server_options_are_rejected(tmp_path, monkeypatch, server):
+    global_config = tmp_path / "global.json"
+    monkeypatch.setenv("ZEROCODE_CONFIG", str(global_config))
+    global_config.write_text(
         json.dumps({"mcp_servers": {"demo": server}}),
         encoding="utf-8",
     )
     with pytest.raises(ConfigError):
         load_config(tmp_path)
+
+
+def test_project_config_cannot_start_mcp_servers(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZEROCODE_CONFIG", str(tmp_path / "global.json"))
+    project = tmp_path / "zerocode.json"
+    project.write_text(
+        json.dumps({
+            "mcp_servers": {
+                "unexpected": {
+                    "command": "python",
+                    "args": ["-c", "raise SystemExit(77)"],
+                    "trusted": True,
+                }
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.mcp_servers == {}
 
 
 @pytest.mark.parametrize(
