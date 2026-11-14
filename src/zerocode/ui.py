@@ -16,6 +16,7 @@ from rich.text import Text
 
 from .config import Config, data_dir
 from .tokens import truncate_text
+from .security import redact_secrets
 from .types import Completion, Usage
 from .version import __author__, __github__, __portfolio__, __version__
 
@@ -90,13 +91,38 @@ class NullUI:
 class JsonUI(NullUI):
     """Interface non interactive: un evenement JSON par ligne sur stdout."""
 
-    def __init__(self, stream: Any | None = None) -> None:
+    def __init__(self, stream: Any | None = None, *, approval_protocol: bool = False) -> None:
         self.stream = stream or sys.stdout
+        self.interactive = approval_protocol
 
     def _emit(self, event: str, **data: Any) -> None:
         payload = {"type": event, **data}
         self.stream.write(json.dumps(payload, ensure_ascii=False) + "\n")
         self.stream.flush()
+
+    def _approval_response(self, event: str, **data: Any) -> dict[str, Any]:
+        if not self.interactive:
+            return {}
+        self._emit(event, **data)
+        try:
+            response = json.loads(sys.stdin.readline())
+        except (EOFError, json.JSONDecodeError):
+            return {}
+        return response if isinstance(response, dict) else {}
+
+    def confirm_tool(self, name: str, args: dict[str, Any]) -> bool:
+        safe_args = json.loads(redact_secrets(json.dumps(args, ensure_ascii=False)))
+        response = self._approval_response("approval_required", name=name, arguments=safe_args)
+        return response.get("approved") is True
+
+    def confirm_sudo_command(self, command: str) -> bool:
+        response = self._approval_response("sudo_confirmation_required", command=redact_secrets(command))
+        return response.get("approved") is True
+
+    def request_sudo_password(self, command: str) -> str | None:
+        response = self._approval_response("sudo_password_required", command=redact_secrets(command))
+        password = response.get("password")
+        return password if isinstance(password, str) and password else None
 
     def stream_text(self, delta: str) -> None:
         if delta:
