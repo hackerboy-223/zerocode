@@ -7,7 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Activity, ArrowDown, ArrowUp, Bot, ChevronDown, Command, FileCode2, Folder, FolderOpen, GitBranch, History, PanelLeftClose, Plus, Send, Settings2, ShieldCheck, Sparkles, SquareTerminal, X, Zap } from "lucide-react";
 
-type EventPayload = { type?: string; delta?: string; name?: string; message?: string; arguments?: Record<string, unknown>; command?: string };\ntype Approval = { kind: "tool" | "sudo-confirm" | "sudo-password"; name: string; details: string };
+type EventPayload = { type?: string; delta?: string; name?: string; message?: string; arguments?: Record<string, unknown>; command?: string };
+type Approval = { kind: "tool" | "sudo-confirm" | "sudo-password"; name: string; details: string };
 type Message = { role: "assistant" | "user"; text: string };
 type ProjectEntry = { path: string; is_dir: boolean };
 
@@ -54,7 +55,10 @@ export default function App() {
     void listen<string>("agent-event", event => {
       let data: EventPayload; try { data = JSON.parse(event.payload) as EventPayload; } catch { return; }
       if (data.type === "text_delta" && data.delta) setMessages(old => { const next = [...old]; const last = next[next.length - 1]; if (last?.role === "assistant") next[next.length - 1] = { ...last, text: last.text + data.delta }; else next.push({ role: "assistant", text: data.delta ?? "" }); return next; });
-      else if (data.type === "approval_required") { setApproval({ kind: "tool", name: data.name ?? "Action", details: JSON.stringify(data.arguments ?? {}, null, 2) }); setStatus("Autorisation requise"); }\n      else if (data.type === "sudo_confirmation_required") { setApproval({ kind: "sudo-confirm", name: "Commande privilégiée", details: data.command ?? "" }); setStatus("Confirmation administrateur requise"); }\n      else if (data.type === "sudo_password_required") { setApproval({ kind: "sudo-password", name: "Mot de passe sudo requis", details: data.command ?? "" }); setStatus("Authentification administrateur requise"); }\n      else if (data.type === "tool_start") setStatus("Exécution : " + (data.name ?? "outil"));
+      else if (data.type === "approval_required") { setApproval({ kind: "tool", name: data.name ?? "Action", details: JSON.stringify(data.arguments ?? {}, null, 2) }); setStatus("Autorisation requise"); }
+      else if (data.type === "sudo_confirmation_required") { setApproval({ kind: "sudo-confirm", name: "Commande privilégiée", details: data.command ?? "" }); setStatus("Confirmation administrateur requise"); }
+      else if (data.type === "sudo_password_required") { setApproval({ kind: "sudo-password", name: "Mot de passe sudo requis", details: data.command ?? "" }); setStatus("Authentification administrateur requise"); }
+      else if (data.type === "tool_start") setStatus("Exécution : " + (data.name ?? "outil"));
       else if (data.type === "result" || data.type === "process_finished") { setBusy(false); setStatus("Tâche terminée"); }
       else if (data.type === "error" || data.type === "warning") setStatus(data.message ?? "Action à vérifier");
     }).then(fn => stop = fn);
@@ -69,7 +73,8 @@ export default function App() {
     try { await invoke("terminal_stop"); setCwd(path.trim()); setModal(false); }
     catch (error) { setStatus(String(error)); }
   }
-  async function respondApproval(approved: boolean) { if (!approval) return; try { await invoke("agent_respond", { approved, password: approval.kind === "sudo-password" ? sudoPassword : null }); setApproval(null); setSudoPassword(""); setStatus(approved ? "Action autorisée" : "Action refusée"); } catch (error) { setStatus(String(error)); } }\n  async function send() {
+  async function respondApproval(approved: boolean) { if (!approval) return; try { await invoke("agent_respond", { approved, password: approval.kind === "sudo-password" ? sudoPassword : null }); setApproval(null); setSudoPassword(""); setStatus(approved ? "Action autorisée" : "Action refusée"); } catch (error) { setStatus(String(error)); } }
+  async function send() {
     const task = prompt.trim(); if (!task || busy || !cwd) return;
     setPrompt(""); setMessages(old => [...old, { role: "user", text: task }, { role: "assistant", text: "" }]);
     setBusy(true); setStatus(auto ? "Agent autonome en cours" : "Analyse en cours");
