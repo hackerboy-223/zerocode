@@ -10,7 +10,7 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
-- Outils intégrés (14 outils) : lecture (`read`), écriture (`write`), édition (`edit`), édition multi-blocs atomique (`multi_edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), cartographie AST de symboles (`symbols`), audit statique de cybersécurité SAST (`security_audit`), diagnostic système/technicien (`sys_diag`), shell (`bash`), web (`fetch`, `web_search`), sous-agent d'exploration isolé (`subagent`), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
+- Outils intégrés (16 outils) : lecture (`read`), écriture (`write`), édition (`edit`), édition multi-blocs atomique (`multi_edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), cartographie AST de symboles (`symbols`), audit statique de cybersécurité SAST (`security_audit`), diagnostic système/technicien (`sys_diag`), cartographie de projet (`project_map`), vérification multi-stack (`project_verify`), shell (`bash`), web (`fetch`, `web_search`), sous-agents spécialisés isolés (`subagent`: architect, reviewer, security, performance, tester, researcher), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
 - Système de **Skills d'expertise** intégrés et extensibles (`/skills`, `/skill <nom>`, `--skill`) : `ultra-dev` (Ingénierie Senior), `cyber-sec` (Expert Cybersécurité, Audit OWASP/CWE & DevSecOps), `sys-tech` (Technicien Système, Réseau & Infra), `review` (Revue de code), `perf` (Haute Performance) et `sec-hardening` (Durcissement actif), plus découverte automatique de `.zerocode/skills/*.md` et `~/.config/zerocode/skills/*.md`.
 - Intégration Fabric native : `zerocode skills --sync-fabric` télécharge les Patterns (développement, sécurité, recherche, rédaction, apprentissage, etc.) dans le catalogue local et les stratégies de raisonnement dans un répertoire séparé. `--force` actualise les ressources déjà installées. Guide : [`docs/FABRIC_INTEGRATION.md`](docs/FABRIC_INTEGRATION.md).
 - Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`), pré-injection directe des fichiers mentionnés avec `@chemin` (0 tour réseau) et cache TTL Git.
@@ -19,7 +19,7 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Interface TUI Textual sobre et moderne : sidebar projet/sessions, chat Markdown, streaming temps réel, diffs intégrés et approbations.
 - Mascotte animée **LUPUS**, un loup veilleur qui rappelle d'observer avant d'agir.
 - Routage adaptatif : modèle spécialisé pour le code, raisonnement renforcé pour les audits et modèle rapide pour les demandes simples.
-- Mode `/full-stack` autonome : sélection contextuelle automatique des Skills intégrés et Patterns Fabric selon la demande et la stack détectée (sans charger les 266 Patterns à chaque tour), puis auto-continuation jusqu'à la livraison.
+- Mode `/full-stack` autonome : cartographie préalable du dépôt, sélection contextuelle des Skills, sous-agents spécialistes, plan de tâches, vérification multi-stack et auto-continuation renforcée jusqu'à la livraison.
 - Palette de commandes, recherche de fichiers `@`, boutons d'action rapides et panneaux de tâches/outils.
 - Cybersécurité Zero-Trust : masquage DLP automatique des clés et jetons API (`redact_secrets`), pare-feu contre les commandes shell destructrices, isolation des variables d'environnement sensibles dans les sous-processus et protection anti-SSRF.
 
@@ -237,7 +237,7 @@ Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/skills`, `/skill`, `
 - Toutes les sorties d'outils passent par un filtre DLP (`redact_secrets`) qui masque automatiquement les clés privées PEM, les jetons API (`sk-*`, `nvapi-*`, `ghp_*`, `AKIA*`, `AIza*`, `gsk_*`, `hf_*`, `Bearer`) et les mots de passe dans les URL de connexion.
 - Les sous-processus `bash` et les serveurs MCP s'exécutent dans un environnement expurgé des clés API des fournisseurs (`PROVIDER_KEY_ENVS`).
 - Les outils `fetch` et `web_search` bloquent les adresses IP privées, loopback, link-local, non spécifiées (`0.0.0.0`/`::`), IPv6 mappées IPv4 et les endpoints de métadonnées cloud (anti-SSRF).
-- Les outils de fichiers et de recherche refusent les chemins et liens symboliques hors du répertoire de travail sauf avec `--allow-outside-cwd`, et bloquent les fichiers de secrets par défaut.
+- Les outils de fichiers et de recherche refusent les chemins et liens symboliques hors du répertoire de travail sauf avec `--allow-outside-cwd`, et bloquent les fichiers de secrets par défaut.\n- Les outils MCP distants exigent une confirmation explicite dédiée, y compris en mode `/full-stack` et `--yolo`, car ils peuvent agir sur des comptes, dépôts et services externes.
 - Les écritures et la restauration `/undo` dans `.git` et les fichiers de secrets sont bloquées.
 - Les commandes ont un délai maximal ; leur sortie est diffusée en temps réel, limitée en mémoire et tronquée avant d'être renvoyée à l'agent.
 - zerocode ne commit, ne pousse et n'installe rien sans demande explicite.
