@@ -201,7 +201,11 @@ function Install-Desktop {
             Start-Process -FilePath $installer.FullName -Wait
             Write-Ok "L'assistant d'installation Desktop s'est terminé."
         } else {
-            Write-Host "Installateur conservé dans : $($installer.FullName)" -ForegroundColor Yellow
+            $downloads = Join-Path $env:USERPROFILE "Downloads"
+            New-Item -ItemType Directory -Path $downloads -Force | Out-Null
+            $savedInstaller = Join-Path $downloads ("ZeroCode-Desktop-" + (Get-Date -Format "yyyyMMdd-HHmmss") + "-Setup.exe")
+            Copy-Item -LiteralPath $installer.FullName -Destination $savedInstaller
+            Write-Host "Installateur conservé dans : $savedInstaller" -ForegroundColor Yellow
         }
     } finally {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
