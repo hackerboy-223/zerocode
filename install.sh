@@ -417,7 +417,7 @@ main() {
     fi
   fi
   printf '\nPour vérifier le moteur : zerocode doctor\n'
-  printf 'Aucune clé API personnelle n'est requise pour commencer avec le mode auto.\n'
+  printf "Aucune clé API personnelle n'est requise pour commencer avec le mode auto.\n"
   if [[ -n "$NODE_BIN" ]]; then
     printf '\nNode.js local : %s\nAjoute ce dossier à PATH si tu souhaites utiliser Node.js hors de ZeroCode.\n' "$NODE_BIN"
   fi
