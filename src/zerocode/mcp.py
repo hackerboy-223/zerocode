@@ -449,10 +449,10 @@ def _render_resource_result(result: dict[str, Any]) -> str:
             label = str(item.get("uri") or "resource")
             mime = str(item.get("mimeType") or "unknown")
             if isinstance(item.get("text"), str):
-                parts.append(f"[{label} · {mime}]\\n{item['text']}")
+                parts.append(f"[{label} · {mime}]\n{item['text']}")
             elif item.get("blob"):
                 parts.append(f"[{label} · {mime}] contenu binaire omis.")
-    return "\\n\\n".join(parts) or "(ressource MCP vide ou non textuelle)"
+    return "\n\n".join(parts) or "(ressource MCP vide ou non textuelle)"
 
 
 def _render_prompt_result(result: dict[str, Any]) -> str:
@@ -469,7 +469,7 @@ def _render_prompt_result(result: dict[str, Any]) -> str:
             elif isinstance(content, dict):
                 rendered = str(content.get("text") or content.get("uri") or "")
             elif isinstance(content, list):
-                rendered = "\\n".join(
+                rendered = "\n".join(
                     str(part.get("text") or part.get("uri") or "")
                     for part in content
                     if isinstance(part, dict)
@@ -477,8 +477,8 @@ def _render_prompt_result(result: dict[str, Any]) -> str:
             else:
                 rendered = ""
             if rendered:
-                parts.append(f"[{role}]\\n{rendered}")
-    return "\\n\\n".join(parts) or "(prompt MCP vide)"
+                parts.append(f"[{role}]\n{rendered}")
+    return "\n\n".join(parts) or "(prompt MCP vide)"
 
 
 def _tool_name(server: str, tool: str) -> str:
