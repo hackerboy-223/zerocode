@@ -81,9 +81,37 @@ def test_pipx_does_not_claim_unrelated_package(monkeypatch):
     assert not maintenance.pipx_manages_zerocode(["pipx"])
 
 
-def test_update_reinstalls_latest_tag(monkeypatch):
+def test_release_asset_checksum_accepts_matching_digest(monkeypatch):
+    import hashlib
+
+    payload = b"verified-wheel"
+
+    class Response:
+        status_code = 200
+        content = payload
+        text = f"{hashlib.sha256(payload).hexdigest()}  package.whl\n"
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(maintenance.httpx, "get", lambda *args, **kwargs: Response())
+    assert maintenance._release_asset_checksum(
+        filename="package.whl",
+        asset_url="https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/package.whl",
+        checksum_url="https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/SHA256SUMS",
+    )
+
+
+def test_update_reinstalls_verified_release_wheel(monkeypatch):
     calls: list[list[str]] = []
-    monkeypatch.setattr(maintenance, "latest_release_tag", lambda: "v1.0.1")
+    wheel_name = "zerocode-1.0.1-py3-none-any.whl"
+    wheel_url = f"https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/{wheel_name}"
+    assets = {
+        wheel_name: wheel_url,
+        "SHA256SUMS": "https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/SHA256SUMS",
+    }
+    monkeypatch.setattr(maintenance, "latest_release_details", lambda: ("v1.0.1", assets))
+    monkeypatch.setattr(maintenance, "_release_asset_checksum", lambda **kwargs: True)
     monkeypatch.setattr(maintenance, "pipx_command", lambda: ["pipx"])
     monkeypatch.setattr(maintenance, "pipx_manages_zerocode", lambda command: True)
 
@@ -96,9 +124,7 @@ def test_update_reinstalls_latest_tag(monkeypatch):
 
     assert ok
     assert "1.0.1" in message
-    assert calls == [
-        ["pipx", "install", "--force", "git+https://github.com/hackerboy-223/zerocode.git@v1.0.1"]
-    ]
+    assert calls == [["pipx", "install", "--force", wheel_url]]
 
 
 def test_uninstall_keeps_user_data_by_default(tmp_path, monkeypatch):
