@@ -89,6 +89,36 @@ python -m pip install -e ".[dev]"
 pytest
 ruff check src tests
 ```
+## Versions, mises à jour et désinstallation
+
+Les releases sont déclenchées par un tag Git `vX.Y.Z`. Le workflow vérifie que les versions du package Python, de npm, de Cargo et de Tauri correspondent au tag, puis construit les paquets natifs Windows, macOS et Linux et les distributions Python. Les fichiers publiés reçoivent un manifeste `SHA256SUMS`.
+
+Pour publier une nouvelle version, aligne les versions dans `pyproject.toml`, `desktop/package.json`, `desktop/src-tauri/Cargo.toml` et `desktop/src-tauri/tauri.conf.json`, puis pousse le tag correspondant. Le workflow refusera les versions incohérentes.
+
+Mettre à jour le moteur Python/TUI depuis la dernière release stable :
+
+```bash
+zerocode update --check
+zerocode update
+```
+
+Pour mettre à jour Desktop, relance l'installateur officiel. Il récupère la dernière release et installe le paquet natif adapté au système.
+
+Désinstaller le moteur tout en conservant la configuration, les clés API et les sessions :
+
+```bash
+zerocode uninstall
+```
+
+Supprimer aussi ces données utilisateur (opération irréversible) :
+
+```bash
+zerocode uninstall --remove-data
+```
+
+Desktop reste géré par le système d'exploitation : utilise les paramètres d'applications de Windows/macOS, `sudo apt remove zerocode-desktop` sur Debian/Ubuntu ou `sudo dnf remove zerocode-desktop` sur Fedora. Sur une installation AppImage utilisateur, retire `~/.local/opt/zerocode`, `~/.local/bin/zerocode-desktop` et `~/.local/share/applications/zerocode-desktop.desktop`.
+
+Les releases possèdent des sommes SHA-256 pour vérifier l'intégrité des téléchargements. Elles ne sont pas encore signées par un certificat éditeur Windows ou Apple ; une somme hébergée avec le paquet ne remplace pas une signature du fournisseur.
 ## Démarrage rapide
 
 Sans aucune clé :
