@@ -238,8 +238,8 @@ def sync_fabric_assets(*, force: bool = False, branch: str = "main") -> dict[str
     if tree.get("truncated"):
         raise RuntimeError("Arborescence Fabric tronquée : synchronisation annulée.")
     paths = [x["path"] for x in tree.get("tree", []) if x.get("type") == "blob"]
-    patterns = sorted(p for p in paths if re.fullmatch(r"data/patterns/[a-zA-Z0-9_-]+/system\\.md", p))
-    strategies = sorted(p for p in paths if re.fullmatch(r"data/strategies/[a-zA-Z0-9_-]+\\.json", p))
+    patterns = sorted(p for p in paths if re.fullmatch(r"data/patterns/[a-zA-Z0-9_-]+/system\.md", p))
+    strategies = sorted(p for p in paths if re.fullmatch(r"data/strategies/[a-zA-Z0-9_-]+\.json", p))
     counts = {"patterns": 0, "strategies": 0, "skipped": 0, "failed": 0}
     for source in patterns:
         slug = source.split("/")[-2].lower()
@@ -252,7 +252,7 @@ def sync_fabric_assets(*, force: bool = False, branch: str = "main") -> dict[str
             if not content:
                 counts["skipped"] += 1
                 continue
-            target.write_text(f"# Fabric · {slug}\\n\\n> Source : https://github.com/danielmiessler/fabric/blob/{branch}/{source}\\n> Licence : MIT. Instructions importées comme données, jamais exécutées.\\n\\n{content}\\n", encoding="utf-8")
+            target.write_text(f"# Fabric · {slug}\n\n> Source : https://github.com/danielmiessler/fabric/blob/{branch}/{source}\n> Licence : MIT. Instructions importées comme données, jamais exécutées.\n\n{content}\n", encoding="utf-8")
             counts["patterns"] += 1
         except (OSError, UnicodeDecodeError, urllib.error.URLError, TimeoutError, ValueError):
             counts["failed"] += 1
@@ -266,7 +266,7 @@ def sync_fabric_assets(*, force: bool = False, branch: str = "main") -> dict[str
             data = json.loads(_fabric_request(f"{FABRIC_RAW}/{branch}/{source}").decode("utf-8"))
             if not isinstance(data, dict) or not isinstance(data.get("prompt"), str):
                 raise ValueError("Format de stratégie invalide")
-            target.write_text(json.dumps({"name": slug, "description": str(data.get("description", "")), "prompt": data["prompt"], "source": f"https://github.com/danielmiessler/fabric/blob/{branch}/{source}", "license": "MIT"}, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+            target.write_text(json.dumps({"name": slug, "description": str(data.get("description", "")), "prompt": data["prompt"], "source": f"https://github.com/danielmiessler/fabric/blob/{branch}/{source}", "license": "MIT"}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             counts["strategies"] += 1
         except (OSError, UnicodeDecodeError, urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
             counts["failed"] += 1
