@@ -42,7 +42,7 @@ Le cœur de l'agent reste synchrone : une requête, un flux, un tour d'agent. Le
 | `security.py` | masquage DLP des secrets (`redact_secrets`) et pare-feu contre les commandes shell destructrices (`check_dangerous_command`) |
 | `checkpoints.py` | sauvegarde atomique avant écriture/édition et restauration sécurisée (`/undo`) |
 | `mcp.py` | client JSON-RPC stdio pour serveurs Model Context Protocol avec environnement assaini |
-| `tools/` | outils (`files`, `search`, `shell`, `web`, `todo`, `subagent`) et gestion des permissions |
+| `tools/` | outils de fichiers, recherche, shell, web, cartographie et vérification de projet, tâches, sous-agents spécialisés et gestion des permissions |
 
 ## Déroulement d'un tour
 
@@ -86,7 +86,7 @@ Les modes agent sont gérés par `Agent.set_mode` :
 
 - `build` : tous les outils sont proposés au modèle.
 - `plan` : `ToolRegistry.read_only` masque les outils dont l'approbation n'est pas `never` et refuse leur exécution ; le prompt système reçoit une consigne de lecture seule.
-- `full-stack` : preset autonome (`FULL_STACK_PRESET`) avec raisonnement max, 128k jetons de sortie, 500 étapes, timeout 3600 s, compaction à 0.95, permissions `allow`, raisonnement affiché et auto-continuation tant qu'il reste des tâches non terminées dans `todos`. Le prompt système impose de livrer et vérifier un projet complet. Les réglages précédents sont sauvegardés en mémoire et restaurés dès que l'on quitte le mode.
+- `full-stack` : preset autonome (`FULL_STACK_PRESET`) avec raisonnement max, 128k jetons de sortie, 500 étapes, timeout 3600 s, compaction à 0.95, permissions `allow`, raisonnement affiché et auto-continuation tant qu'il reste des tâches non terminées dans `todos`. Le prompt système impose de cartographier le dépôt (`project_map`), planifier, déléguer les analyses aux sous-agents spécialisés en lecture seule, puis vérifier tests/lint/types/build via `project_verify`. L'agent peut effectuer jusqu'à six reprises automatiques de continuation lorsqu'il reste des tâches. Les intégrations MCP nécessitent toujours une confirmation dédiée. Les réglages précédents sont sauvegardés en mémoire et restaurés dès que l'on quitte le mode.
 
 ## Contexte et compaction
 
