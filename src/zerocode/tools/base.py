@@ -272,7 +272,8 @@ class ToolRegistry:
             except Exception as exc:  # noqa: BLE001 - un hook de sécurité doit échouer fermé
                 return f"Action bloquee : hook PreToolUse indisponible ({exc.__class__.__name__}: {exc})."
             if reason:
-                return f"Action bloquee par le hook PreToolUse : {reason}"
+                safe_reason = redact_secrets(str(reason))
+                return f"Action bloquee par le hook PreToolUse : {safe_reason}"
         try:
             result = tool.handler(call.arguments, self.context)
         except PermissionDenied as exc:
