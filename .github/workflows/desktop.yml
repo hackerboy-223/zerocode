@@ -7,6 +7,10 @@ on:
       - "desktop/**"
       - "src/zerocode/**"
       - "tests/test_desktop_bridge.py"
+      - "tests/test_maintenance.py"
+      - "src/zerocode/cli.py"
+      - "src/zerocode/maintenance.py"
+      - ".github/workflows/release.yml"
       - "install.sh"
       - "install.ps1"
       - "README.md"
@@ -82,8 +86,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e ".[dev]"
-      - run: ruff check src/zerocode/desktop_bridge.py src/zerocode/checkpoints.py src/zerocode/tools/base.py src/zerocode/tools/files.py src/zerocode/tools/shell.py src/zerocode/security.py tests/test_desktop_bridge.py tests/test_checkpoints.py tests/test_tools.py
-      - run: pytest -q tests/test_desktop_bridge.py tests/test_checkpoints.py tests/test_tools.py
+      - run: ruff check src/zerocode/cli.py src/zerocode/maintenance.py src/zerocode/desktop_bridge.py src/zerocode/checkpoints.py src/zerocode/tools/base.py src/zerocode/tools/files.py src/zerocode/tools/shell.py src/zerocode/security.py tests/test_maintenance.py tests/test_desktop_bridge.py tests/test_checkpoints.py tests/test_tools.py
+      - run: pytest -q tests/test_maintenance.py tests/test_desktop_bridge.py tests/test_checkpoints.py tests/test_tools.py
 
   installer-linux:
     name: Linux installer syntax
@@ -111,3 +115,11 @@ jobs:
             exit 1
           }
           Write-Host "install.ps1 syntax is valid."
+
+  release-workflow:
+    name: Release workflow syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse release workflow YAML
+        run: ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release.yml"); puts "Release workflow YAML is valid."'
