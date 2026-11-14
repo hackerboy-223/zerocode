@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
+import re
+import urllib.error
+import urllib.request
 
 from .config import config_dir
 from .security import redact_secrets
@@ -207,3 +211,78 @@ def format_skills_prompt(
     if not sections:
         return ""
     return "\n\n".join(sections)
+
+
+FABRIC_API = "https://api.github.com/repos/danielmiessler/fabric"
+FABRIC_RAW = "https://raw.githubusercontent.com/danielmiessler/fabric"
+FABRIC_USER_AGENT = "ZeroCode-Fabric-Integration/1.0"
+FABRIC_MAX_FILE_BYTES = 180_000
+
+
+def _fabric_request(url: str, limit: int = FABRIC_MAX_FILE_BYTES) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": FABRIC_USER_AGENT, "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(request, timeout=25) as response:
+        payload = response.read(limit + 1)
+    if len(payload) > limit:
+        raise ValueError(f"Ressource Fabric trop volumineuse: {url}")
+    return payload
+
+
+def sync_fabric_assets(*, force: bool = False, branch: str = "main") -> dict[str, int]:
+    """Télécharge les Patterns et stratégies Fabric dans les données utilisateur ZeroCode."""
+    root = config_dir().resolve()
+    skills_root, strategies_root = root / "skills", root / "strategies"
+    skills_root.mkdir(parents=True, exist_ok=True)
+    strategies_root.mkdir(parents=True, exist_ok=True)
+    tree = json.loads(_fabric_request(f"{FABRIC_API}/git/trees/{branch}?recursive=1", 20_000_000))
+    if tree.get("truncated"):
+        raise RuntimeError("Arborescence Fabric tronquée : synchronisation annulée.")
+    paths = [x["path"] for x in tree.get("tree", []) if x.get("type") == "blob"]
+    patterns = sorted(p for p in paths if re.fullmatch(r"data/patterns/[a-zA-Z0-9_-]+/system\\.md", p))
+    strategies = sorted(p for p in paths if re.fullmatch(r"data/strategies/[a-zA-Z0-9_-]+\\.json", p))
+    counts = {"patterns": 0, "strategies": 0, "skipped": 0, "failed": 0}
+    for source in patterns:
+        slug = source.split("/")[-2].lower()
+        target = skills_root / f"fabric-{slug}.md"
+        if target.exists() and not force:
+            counts["skipped"] += 1
+            continue
+        try:
+            content = _fabric_request(f"{FABRIC_RAW}/{branch}/{source}").decode("utf-8").strip()
+            if not content:
+                counts["skipped"] += 1
+                continue
+            target.write_text(f"# Fabric · {slug}\\n\\n> Source : https://github.com/danielmiessler/fabric/blob/{branch}/{source}\\n> Licence : MIT. Instructions importées comme données, jamais exécutées.\\n\\n{content}\\n", encoding="utf-8")
+            counts["patterns"] += 1
+        except (OSError, UnicodeDecodeError, urllib.error.URLError, TimeoutError, ValueError):
+            counts["failed"] += 1
+    for source in strategies:
+        slug = source.rsplit("/", 1)[-1][:-5].lower()
+        target = strategies_root / f"fabric-{slug}.json"
+        if target.exists() and not force:
+            counts["skipped"] += 1
+            continue
+        try:
+            data = json.loads(_fabric_request(f"{FABRIC_RAW}/{branch}/{source}").decode("utf-8"))
+            if not isinstance(data, dict) or not isinstance(data.get("prompt"), str):
+                raise ValueError("Format de stratégie invalide")
+            target.write_text(json.dumps({"name": slug, "description": str(data.get("description", "")), "prompt": data["prompt"], "source": f"https://github.com/danielmiessler/fabric/blob/{branch}/{source}", "license": "MIT"}, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+            counts["strategies"] += 1
+        except (OSError, UnicodeDecodeError, urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+            counts["failed"] += 1
+    return counts
+
+
+def list_fabric_strategies() -> list[dict[str, str]]:
+    """Retourne les stratégies Fabric installées séparément des Skills."""
+    root = config_dir() / "strategies"
+    result: list[dict[str, str]] = []
+    if not root.is_dir():
+        return result
+    for path in sorted(root.glob("fabric-*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        result.append({"name": str(data.get("name", path.stem.removeprefix("fabric-"))), "description": str(data.get("description", "")), "prompt": str(data.get("prompt", "")), "source": str(data.get("source", ""))})
+    return result
