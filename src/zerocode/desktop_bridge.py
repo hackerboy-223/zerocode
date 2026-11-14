@@ -72,11 +72,16 @@ class DesktopBridgeUI:
 
         self.emit(event_name, request_id=request_id, **payload)
         try:
-            if not ready.wait(self.request_timeout):
-                self.emit("warning", message="Demande d'autorisation expirée.")
-                return default
-            response = pending.get("response") or {}
-            return response
+            remaining = self.request_timeout
+            while remaining > 0:
+                if ready.wait(min(0.1, remaining)):
+                    response = pending.get("response") or {}
+                    return response
+                if self.interrupted():
+                    return default
+                remaining -= 0.1
+            self.emit("warning", message="Demande d'autorisation expirée.")
+            return default
         finally:
             with self._pending_lock:
                 self._pending.pop(request_id, None)

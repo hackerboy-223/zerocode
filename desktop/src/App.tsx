@@ -36,6 +36,7 @@ export default function App() {
     catch { return []; }
   });
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [eventsReady, setEventsReady] = useState(false);
   const agentIdRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activities, setActivities] = useState<ToolActivity[]>([]);
@@ -60,7 +61,7 @@ export default function App() {
   useEffect(() => { agentIdRef.current = agentId; }, [agentId]);
 
   useEffect(() => {
-    if (!workspace || !isTauri()) return;
+    if (!workspace || !isTauri() || !eventsReady) return;
     let cancelled = false;
     setNotice("");
     desktopInvoke<string>("start_agent", { cwd: workspace }).then((id) => {
@@ -80,7 +81,7 @@ export default function App() {
       setAgentId(null);
       agentIdRef.current = null;
     };
-  }, [workspace]);
+  }, [workspace, eventsReady]);
 
   useEffect(() => {
     let unlisten: Array<() => void> = [];
@@ -99,6 +100,7 @@ export default function App() {
         offAgent(); offLog(); offStatus();
       } else {
         unlisten = [offAgent, offLog, offStatus];
+        setEventsReady(true);
       }
     };
     if (isTauri()) void attach();

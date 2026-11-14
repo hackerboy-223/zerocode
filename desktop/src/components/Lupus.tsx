@@ -31,7 +31,7 @@ export default function Lupus({ size = "small", calm = false }: LupusProps) {
         </defs>
         <path className="wolf-ear" d="M25 52 13 12 46 34M95 52 107 12 74 34" fill={"url(#" + metalGradient + ")"} stroke="#7b8797" strokeWidth="3" strokeLinejoin="round" />
         <path d="M25 47 28 25 44 42M95 47 92 25 76 42" fill="none" stroke="#6aaeff" strokeWidth="3" strokeLinecap="round" />
-        <path d="M22 47 Q60 17 98 47 L91 84 Q84 102 60 105 Q36 102 29 84Z" fill="url(#lupusMetal)" stroke="#748195" strokeWidth="3" />
+        <path d="M22 47 Q60 17 98 47 L91 84 Q84 102 60 105 Q36 102 29 84Z" fill={"url(#" + metalGradient + ")"} stroke="#748195" strokeWidth="3" />
         <path d="M33 54 Q60 38 87 54 L83 78 Q60 92 37 78Z" fill="#253144" />
         <path className="wolf-eye" d="M42 63 Q50 55 57 63" fill="none" stroke="#67bdff" strokeWidth="4" strokeLinecap="round" />
         <path className="wolf-eye" d="M63 63 Q70 55 78 63" fill="none" stroke="#67bdff" strokeWidth="4" strokeLinecap="round" />
