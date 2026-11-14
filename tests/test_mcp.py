@@ -82,7 +82,7 @@ def test_mcp_stdio_tool_roundtrip(tmp_path):
     server = tmp_path / "server.py"
     server.write_text(SERVER, encoding="utf-8")
     context = ToolContext(cwd=tmp_path)
-    permissions = PermissionManager(mode="allow", interactive=False)
+    permissions = PermissionManager(mode="allow", interactive=True)
     class ApprovingUI:
         def confirm_tool(self, name, args):
             return True
