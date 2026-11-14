@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Activity, ArrowDown, ArrowUp, Bot, Check, ChevronDown, CircleHelp, Command,
-  FileCode2, Folder, FolderOpen, GitBranch, History, Menu, MessageSquarePlus,
-  MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Search, Send, Settings2,
-  ShieldCheck, Sparkles, SquareTerminal, StopCircle, X
+  Activity, ArrowUpRight, Bot, Check, ChevronDown, CircleHelp, FileCode2, Folder,
+  FolderOpen, GitBranch, History, Menu, MessageSquarePlus, MoreHorizontal,
+  PanelRightClose, PanelRightOpen, Plus, Search, Send, Settings2, ShieldCheck,
+  Sparkles, SquareTerminal, StopCircle, X
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import Lupus from "./components/Lupus";

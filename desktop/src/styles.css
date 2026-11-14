@@ -1,7 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
-
 :root {
-  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Cantarell, sans-serif;
   color: #202938;
   background: #f4f5f7;
   font-synthesis: none;
@@ -37,7 +35,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 .brand-row { display: flex; align-items: center; gap: 10px; padding: 0 9px 21px; min-height: 48px; }
 .brand-copy { display: flex; flex-direction: column; gap: 1px; line-height: 1; }
-.brand-copy strong { font: 800 16px Manrope, sans-serif; letter-spacing: -.6px; color: #1e2938; }
+.brand-copy strong { font: 800 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: -.6px; color: #1e2938; }
 .brand-copy span { font-size: 8px; font-weight: 800; letter-spacing: 2.1px; color: #8390a2; margin-top: 5px; }
 .lupus { width: 36px; height: 34px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 .lupus svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 3px 3px rgba(42, 79, 126, .13)); animation: lupus-float 4.5s ease-in-out infinite; }

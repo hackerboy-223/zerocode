@@ -290,3 +290,10 @@ Les tests n'effectuent aucun appel réseau. Les fournisseurs sont simulés avec 
 ## Licence
 
 MIT. Voir [LICENSE](LICENSE).
+
+
+## ZeroCode Desktop
+
+Une interface graphique locale accompagne maintenant l’agent Python : navigation par projets, conversations, activités de l’agent, autorisations explicites et terminal PTY intégré. Les commandes et les fichiers sont exécutés sur la machine qui lance l’application ; le fournisseur de modèle peut toutefois être distant selon la configuration. La version desktop est en développement sur la branche [feature/zerocode-desktop](https://github.com/hackerboy-223/zerocode/tree/feature/zerocode-desktop).
+
+Guide d’installation, dépendances Linux et commandes de lancement : [docs/DESKTOP.md](docs/DESKTOP.md).
