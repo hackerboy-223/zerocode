@@ -26,6 +26,8 @@ ENTRYPOINTS = (
     "pom.xml", "build.gradle", "Makefile", "Dockerfile",
     "index.html", "src/main.ts", "src/main.tsx", "src/main.js",
     "src/index.ts", "src/index.tsx", "src/app/page.tsx",
+    "Program.cs", "lib/main.dart", "Package.swift", "mix.exs",
+    "app.rb", "config/application.rb",
 )
 
 
@@ -160,6 +162,22 @@ def project_map(args: dict[str, Any], ctx: ToolContext) -> str:
         stacks.append("Java / JVM")
         manifests.extend(name for name in ("pom.xml", "build.gradle", "build.gradle.kts") if (root / name).is_file())
 
+    if (root / "Gemfile").is_file():
+        stacks.append("Ruby")
+        manifests.append("Gemfile")
+    if (root / "pubspec.yaml").is_file():
+        stacks.append("Dart / Flutter")
+        manifests.append("pubspec.yaml")
+    if (root / "Package.swift").is_file():
+        stacks.append("Swift")
+        manifests.append("Package.swift")
+    if (root / "mix.exs").is_file():
+        stacks.append("Elixir")
+        manifests.append("mix.exs")
+    if any(name.lower().endswith((".csproj", ".sln")) for name in discovered):
+        stacks.append(".NET")
+        manifests.extend(name for name in discovered if name.lower().endswith((".csproj", ".sln")))
+
     if not stacks:
         stacks.append("Stack non identifiée automatiquement")
 
@@ -265,6 +283,42 @@ def _verification_commands(root: Path, checks: list[str]) -> list[tuple[str, str
             commands.append(("tests", f"{gradle} test"))
         if "build" in checks:
             commands.append(("build", f"{gradle} build"))
+
+    if (root / "Gemfile").is_file():
+        if "tests" in checks and (root / "Rakefile").is_file():
+            commands.append(("tests", "bundle exec rake test"))
+        elif "tests" in checks and (root / "spec").is_dir():
+            commands.append(("tests", "bundle exec rspec"))
+        if "lint" in checks and shutil.which("rubocop"):
+            commands.append(("lint", "bundle exec rubocop" if (root / "Gemfile").is_file() else "rubocop"))
+
+    if (root / "pubspec.yaml").is_file():
+        pubspec = (root / "pubspec.yaml").read_text(encoding="utf-8", errors="replace")[:100_000]
+        flutter_project = "flutter:" in pubspec
+        if "tests" in checks:
+            commands.append(("tests", "flutter test" if flutter_project else "dart test"))
+        if "lint" in checks:
+            commands.append(("lint", "flutter analyze" if flutter_project else "dart analyze"))
+    
+    if (root / "Package.swift").is_file():
+        if "tests" in checks:
+            commands.append(("tests", "swift test"))
+        if "lint" in checks:
+            commands.append(("lint", "swift build"))
+
+    if (root / "mix.exs").is_file():
+        if "tests" in checks:
+            commands.append(("tests", "mix test"))
+        if "build" in checks:
+            commands.append(("build", "mix compile"))
+
+    dotnet_projects = list(root.glob("*.sln")) + list(root.glob("*.csproj"))
+    dotnet_projects.extend(root.glob("*/*.csproj"))
+    if dotnet_projects:
+        if "tests" in checks:
+            commands.append(("tests", "dotnet test"))
+        if "build" in checks:
+            commands.append(("build", "dotnet build"))
 
     seen: set[str] = set()
     unique: list[tuple[str, str]] = []
