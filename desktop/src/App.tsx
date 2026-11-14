@@ -573,7 +573,7 @@ export default function App() {
 
   const changeModel = useCallback(async (nextModel: string) => {
     const cleaned = nextModel.trim();
-    if (!cleaned || !agentId || busy) return;
+    if (!cleaned || !agentId || !agentReady || busy) return;
     await desktopInvoke("send_agent_message", {
       agentId,
       message: { type: "set_model", model: cleaned }
@@ -581,7 +581,7 @@ export default function App() {
   }, [agentId, agentReady, busy]);
 
   const changePermissions = useCallback(async (nextPerm: string) => {
-    if (!agentId || busy) return;
+    if (!agentId || !agentReady || busy) return;
     setPermissionsMode(nextPerm);
     await desktopInvoke("send_agent_message", {
       agentId,
@@ -590,7 +590,7 @@ export default function App() {
   }, [agentId, agentReady, busy]);
 
   const changeThink = useCallback(async (nextThink: string) => {
-    if (!agentId || busy) return;
+    if (!agentId || !agentReady || busy) return;
     setThinkMode(nextThink);
     await desktopInvoke("send_agent_message", {
       agentId,
@@ -599,7 +599,7 @@ export default function App() {
   }, [agentId, agentReady, busy]);
 
   const undoCheckpoint = useCallback(async () => {
-    if (!agentId || busy || checkpoints <= 0) return;
+    if (!agentId || !agentReady || busy || checkpoints <= 0) return;
     await desktopInvoke("send_agent_message", {
       agentId,
       message: { type: "undo_checkpoint" }
@@ -607,13 +607,13 @@ export default function App() {
   }, [agentId, agentReady, busy, checkpoints]);
 
   const compactContext = useCallback(async () => {
-    if (!agentId || busy) return;
+    if (!agentId || !agentReady || busy) return;
     await desktopInvoke("send_agent_message", {
       agentId,
       message: { type: "compact_context" }
     }).catch((error) => setNotice(String(error)));
     setSettingsOpen(false);
-  }, [agentId, busy]);
+  }, [agentId, agentReady, busy]);
 
   const answerPermission = useCallback(async (allowed: boolean) => {
     if (!agentId || !pending) return;
@@ -639,7 +639,7 @@ export default function App() {
   }, [agentId]);
 
   const newSession = useCallback(() => {
-    if (!agentId || busy) return;
+    if (!agentId || !agentReady || busy) return;
     setMessages([]);
     setActivities([]);
     setTodos([]);
@@ -649,7 +649,7 @@ export default function App() {
   }, [agentId, agentReady, busy]);
 
   const resumeSession = useCallback(async (id: string) => {
-    if (!agentId || busy) return;
+    if (!agentId || !agentReady || busy) return;
     await desktopInvoke("send_agent_message", {
       agentId,
       message: { type: "resume_session", session_id: id }
@@ -657,12 +657,12 @@ export default function App() {
   }, [agentId, agentReady, busy]);
 
   const deleteSession = useCallback(async (id: string) => {
-    if (!agentId || busy) return;
+    if (!agentId || !agentReady || busy) return;
     await desktopInvoke("send_agent_message", {
       agentId,
       message: { type: "delete_session", session_id: id }
     }).catch((error) => setNotice(String(error)));
-  }, [agentId, busy]);
+  }, [agentId, agentReady, busy]);
 
   const mentionFileInDraft = useCallback((relativePath: string) => {
     setDraft((prev) => {
