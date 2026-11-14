@@ -248,6 +248,11 @@ def _desktop_permission_manager(config: Any) -> PermissionManager:
     if mode == "allow":
         mode = "ask"
         config.permissions = mode
+    # The desktop workspace is the only writable boundary; never inherit CLI
+    # switches that expose files outside it or disable secret-file protection.
+    config.allow_outside_cwd = False
+    config.protect_secrets = True
+    config.allow_secrets = False
     return PermissionManager(mode=mode, interactive=True)
 
 
