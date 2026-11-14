@@ -143,6 +143,11 @@ function Install-DesktopPrerequisites {
     if (-not (Get-Command rustc -ErrorAction SilentlyContinue) -or -not (Get-Command cargo -ErrorAction SilentlyContinue)) {
         Stop-Install "Rust n'est pas disponible. Ferme puis rouvre PowerShell, vérifie Rustup, puis relance l'installation."
     }
+    & rustup toolchain install stable --profile minimal
+    if ($LASTEXITCODE -ne 0) {
+        Stop-Install "Impossible de préparer la toolchain Rust stable."
+    }
+    $env:RUSTUP_TOOLCHAIN = "stable"
 
     $programFiles = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
     $vsPath = Join-Path $programFiles "Microsoft Visual Studio\Installer\vswhere.exe"
