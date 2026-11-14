@@ -5,6 +5,7 @@ import threading
 import time
 from pathlib import Path
 
+from zerocode.security import redact_secrets
 from zerocode.tools import PermissionManager, ToolContext, build_registry
 from zerocode.types import ToolCall
 
@@ -657,3 +658,29 @@ def test_hook_manager_can_deny_before_tool_execution(tmp_path):
     reason = manager.run("PreToolUse", "bash", {"command": "id"})
 
     assert reason == "bash"
+
+
+def test_redact_secrets_masks_incomplete_private_key_blocks():
+    partial_key = "-----BEGIN PRIVATE KEY-----\\n" + ("sensitive-material" * 80)
+
+    redacted = redact_secrets(partial_key)
+
+    assert "sensitive-material" not in redacted
+    assert "[SECRET MASQUE: CLE PRIVEE]" in redacted
+
+
+def test_shell_stream_redacts_tokens_split_across_pipe_chunks(tmp_path):
+    token = "ghp_123456789012345678901234567890123456"
+    streamed = []
+    context = ToolContext(
+        cwd=tmp_path,
+        stream_output=lambda _name, chunk: streamed.append(chunk),
+    )
+    registry = build_registry(context, PermissionManager(mode="allow", interactive=False))
+    code = f"import sys; sys.stdout.write('x' * 4090 + '{token}')"
+    result = call(registry, "bash", command=python_command(code))
+
+    output = "".join(streamed)
+    assert "exit_code: 0" in result
+    assert token not in output
+    assert "[SECRET MASQUE: JETON API]" in output
