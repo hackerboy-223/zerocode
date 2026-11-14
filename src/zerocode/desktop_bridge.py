@@ -297,6 +297,9 @@ def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
     context.checkpoint = lambda path, before, tool: agent.checkpoints.record(
         agent.session.id, path, before, tool
     )
+    context.checkpoint_applied = lambda path: agent.checkpoints.mark_applied(
+        agent.session.id, path
+    )
     ui.bind_runtime(context, agent.checkpoints, lambda: agent.session.id)
 
     mcp_manager = MCPManager()
@@ -561,7 +564,7 @@ def main(argv: list[str] | None = None) -> int:
                 if getattr(agent, "checkpoints", None) is None:
                     ui.error("Historique de checkpoints indisponible.")
                     continue
-                ok, undo_msg = agent.checkpoints.undo(agent.session.id)
+                ok, undo_msg = agent.checkpoints.undo(agent.session.id, cwd)
                 remaining = agent.checkpoints.pending(agent.session.id)
                 ui.emit(
                     "checkpoint_restored",
