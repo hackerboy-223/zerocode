@@ -221,7 +221,7 @@ install_linux_build_dependencies() {
     as_root apt-get update
     as_root apt-get install -y build-essential curl wget file libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
   elif command -v dnf >/dev/null 2>&1; then
-    as_root dnf install -y gcc gcc-c++ make curl wget file openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel patchelf
+    as_root dnf install -y gcc gcc-c++ make curl wget file openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel patchelf rpm-build
   elif command -v pacman >/dev/null 2>&1; then
     as_root pacman -Sy --needed --noconfirm base-devel curl wget file openssl appmenu-gtk-module webkit2gtk-4.1 libappindicator-gtk3 librsvg xdotool patchelf fuse2
   else
@@ -360,7 +360,7 @@ install_desktop() {
   (cd "$BUILD_DIR/source/desktop" && npm ci)
 
   if [[ "$PLATFORM" == "macos" ]]; then
-    BUNDLE_TARGET="dmg"
+    BUNDLE_TARGET="app,dmg"
   elif command -v apt-get >/dev/null 2>&1; then
     BUNDLE_TARGET="deb"
   elif command -v dnf >/dev/null 2>&1; then
