@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -182,6 +183,14 @@ def _install_release_wheel(
     operation: str,
     allow_current_version: bool,
 ) -> tuple[bool, str]:
+    if os.name == "nt":
+        version_hint = "latest" if tag is None else tag
+        return (
+            False,
+            "Pour éviter de remplacer des fichiers Python encore utilisés sous Windows, "
+            "ferme ZeroCode puis relance l'installateur PowerShell autonome. "
+            f"Version demandée : {version_hint}.",
+        )
     try:
         release_tag, assets = latest_release_details(tag)
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
@@ -263,6 +272,13 @@ def rollback_to_release(tag: str) -> tuple[bool, str]:
 
 def uninstall_from_pipx(*, remove_data: bool = False) -> tuple[bool, str]:
     """Remove the pipx app; user configuration and sessions are preserved by default."""
+    if os.name == "nt":
+        return (
+            False,
+            "Ferme toutes les fenêtres ZeroCode. Dans une nouvelle fenêtre PowerShell, "
+            "exécute `pipx uninstall zerocode`. La configuration, les clés et les sessions "
+            "restent conservées ; retire-les séparément seulement si tu le souhaites.",
+        )
     command = pipx_command()
     if command is None:
         return False, "pipx est introuvable. Aucune modification n'a été effectuée."
