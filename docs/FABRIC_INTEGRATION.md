@@ -29,7 +29,13 @@ zerocode strategies --show cot        # afficher le prompt d'une stratégie
 /strategy off                          # revenir au mode standard
 ```
 
-Les fichiers existants ne sont pas écrasés sans `--force`, afin de préserver les modifications locales. Les Patterns sont des instructions Markdown et ne sont jamais exécutés comme du code.\n\n## Activation automatique en mode Full-Stack\n\nUne fois les Patterns synchronisés, `/full-stack` active automatiquement les six compétences fondamentales (ingénierie, sécurité, système, revue, performance et durcissement), puis sélectionne les Patterns Fabric pertinents à partir de la demande et des manifestes du projet (`package.json`, `composer.json`, `pyproject.toml`, etc.). La sélection est réévaluée à chaque nouvelle demande. ZeroCode ne charge pas tous les Patterns en même temps : cela évite de saturer le contexte et limite les instructions non pertinentes.\n\nAucune commande `/skill` n'est nécessaire. Le mode normal conserve les compétences par défaut. Les stratégies de raisonnement restent séparées et peuvent être activées manuellement avec `/strategy <nom|off>`.
+Les fichiers existants ne sont pas écrasés sans `--force`, afin de préserver les modifications locales. Les Patterns sont des instructions Markdown et ne sont jamais exécutés comme du code.
+
+## Activation automatique en mode Full-Stack
+
+Une fois les Patterns synchronisés, `/full-stack` active automatiquement les six compétences fondamentales (ingénierie, sécurité, système, revue, performance et durcissement), puis sélectionne les Patterns Fabric pertinents à partir de la demande et des manifestes du projet (`package.json`, `composer.json`, `pyproject.toml`, etc.). La sélection est réévaluée à chaque nouvelle demande. ZeroCode ne charge pas tous les Patterns en même temps : cela évite de saturer le contexte et limite les instructions non pertinentes.
+
+Aucune commande `/skill` n'est nécessaire. Le mode normal conserve les compétences par défaut. Les stratégies de raisonnement restent séparées et peuvent être activées manuellement avec `/strategy <nom|off>`.
 
 ## Source et licence
 
