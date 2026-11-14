@@ -46,7 +46,7 @@ from .providers import (
 )
 from .router import Router
 from .session import Session, SessionStore
-from .skills import DEFAULT_ACTIVE_SKILLS, all_skills
+from .skills import DEFAULT_ACTIVE_SKILLS, all_skills, list_fabric_strategies, sync_fabric_assets
 from .tools import PermissionManager, ToolContext, build_registry
 from .tools.diagnostics import security_audit, sys_diag
 from .types import StreamCallbacks
@@ -58,6 +58,7 @@ COMMANDS = {
     "doctor",
     "audit",
     "skills",
+    "strategies",
     "models",
     "providers",
     "sessions",
@@ -102,6 +103,8 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return audit_command(argv[1:], console)
     if first == "skills":
         return skills_command(argv[1:], console)
+    if first == "strategies":
+        return strategies_command(argv[1:], console)
     if first == "models":
         return models_command(argv[1:], console)
     if first == "providers":
@@ -919,7 +922,23 @@ def _print_skills_table(
 def skills_command(args_list: list[str], console: Console) -> int:
     parser = argparse.ArgumentParser(prog="zerocode skills")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--sync-fabric", action="store_true", help="Télécharger les Patterns et stratégies Fabric.")
+    parser.add_argument("--force", action="store_true", help="Mettre à jour les ressources déjà installées.")
     args = parser.parse_args(args_list)
+    if args.sync_fabric:
+        try:
+            counts = sync_fabric_assets(force=args.force)
+        except (OSError, ValueError, RuntimeError) as exc:
+            console.print(Text(f"Synchronisation Fabric impossible : {exc}", style="red"))
+            return 1
+        console.print(Text(
+            f"Fabric : {counts['patterns']} Patterns et {counts['strategies']} stratégies importés ; "
+            f"{counts['skipped']} ignorés ; {counts['failed']} erreurs.",
+            style="green" if not counts["failed"] else "yellow",
+        ))
+        console.print(Text(f"Skills : {Path.home() / '.config' / 'zerocode' / 'skills'}", style="dim"))
+        console.print(Text(f"Stratégies : {Path.home() / '.config' / 'zerocode' / 'strategies'}", style="dim"))
+        return 1 if counts["failed"] else 0
     cwd = Path.cwd().resolve()
     catalog = all_skills(cwd)
     if args.json:
@@ -937,6 +956,35 @@ def skills_command(args_list: list[str], console: Console) -> int:
         console.print_json(json.dumps(payload, ensure_ascii=False))
         return 0
     _print_skills_table(console, cwd, DEFAULT_ACTIVE_SKILLS)
+    return 0
+
+
+def strategies_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode strategies")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--show", metavar="NAME", help="Afficher le prompt d'une stratégie.")
+    args = parser.parse_args(args_list)
+    strategies = list_fabric_strategies()
+    if args.show:
+        name = args.show.removeprefix("fabric-")
+        item = next((entry for entry in strategies if entry["name"] == name), None)
+        if item is None:
+            console.print(Text(f"Stratégie introuvable : {args.show}", style="yellow"))
+            return 1
+        console.print(item["prompt"])
+        return 0
+    if args.json:
+        console.print_json(json.dumps(strategies, ensure_ascii=False))
+        return 0
+    if not strategies:
+        console.print(Text("Aucune stratégie installée. Lance : zerocode skills --sync-fabric", style="yellow"))
+        return 0
+    table = Table(title="Stratégies de raisonnement Fabric", box=box.SIMPLE, header_style="bold cyan")
+    table.add_column("Nom")
+    table.add_column("Description", overflow="fold")
+    for item in strategies:
+        table.add_row(item["name"], item["description"])
+    console.print(table)
     return 0
 
 
