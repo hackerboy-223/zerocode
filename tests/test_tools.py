@@ -174,6 +174,8 @@ def test_sudo_command_detection():
     assert has_sudo_command("cd /tmp && sudo rm -rf build")
     assert has_sudo_command("echo x | sudo tee /etc/motd")
     assert has_sudo_command("/usr/bin/sudo id")
+    assert has_sudo_command("command sudo id")
+    assert has_sudo_command("env sudo id")
     assert not has_sudo_command("man sudo")
     assert not has_sudo_command("which sudo")
     assert not has_sudo_command("visudo")
