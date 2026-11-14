@@ -63,7 +63,7 @@ Documentation officielle : [MCP Filesystem Server](https://github.com/modelconte
 
 | Configuration | Comportement |
 | --- | --- |
-| Pas de `trusted` | Les outils MCP ordinaires exigent une confirmation explicite. |
+| Pas de `trusted` | Les outils sans annotation de lecture seule exigent une confirmation explicite. Les ressources, prompts et outils marqués `readOnlyHint` suivent les permissions normales de la session. |
 | `trusted: true` | Les outils sont utilisables en mode autonome, selon les permissions de la session. |
 | `readOnlyHint: true` | L'outil est traité comme non modificateur et suit les permissions normales. |
 | Ressource ou prompt MCP | Lecture via une autorisation normale ; aucune commande distante n'est déclenchée par leur simple découverte. |
