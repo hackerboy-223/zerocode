@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -44,6 +44,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]); const [tab, setTab] = useState<"files" | "changes">("files");
   const [status, setStatus] = useState("Prêt à travailler"); const [modal, setModal] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
+  const onTerminalReady = useCallback(() => setStatus("Terminal local prêt"), []);
 
   useEffect(() => { void invoke<string>("default_workspace").then(value => { setCwd(value); setPath(value); }).catch(() => undefined); }, []);
   useEffect(() => {
@@ -102,7 +103,7 @@ export default function App() {
         </section>
         <aside className="inspector"><div className="tabs"><button className={tab === "files" ? "selected" : ""} onClick={() => setTab("files")}>Fichiers</button><button className={tab === "changes" ? "selected" : ""} onClick={() => setTab("changes")}>Modifications</button></div><div className="empty"><FolderOpen size={21}/><b>{tab === "files" ? "Espace de travail" : "Aucune modification"}</b><small>{tab === "files" ? "Les fichiers du projet apparaîtront ici." : "Le suivi Git sera connecté au moteur."}</small><button onClick={() => setModal(true)}>Choisir un dossier</button></div><div className="inspector-foot"><label>ACTIVITÉ</label><div className="activity"><i/>{status}</div><div className="lupus-card"><Lupus small/><div><b>LUPUS veille.</b><small>Observer avant d'agir.</small></div></div></div></aside>
       </div>
-      <section className={"terminal " + (!terminalOpen ? "closed" : "")}><div className="terminal-head"><div><SquareTerminal size={14}/><b>Terminal</b><span className="local-tag"><i/> LOCAL</span></div><div className="terminal-controls"><span>{cwd}</span><button onClick={() => setTerminalOpen(false)} title="Réduire"><ArrowDown size={14}/></button><button onClick={() => setTerminalOpen(false)} title="Fermer"><X size={14}/></button></div></div>{terminalOpen && cwd && <LocalTerminal cwd={cwd} onReady={() => setStatus("Terminal local prêt")}/>}</section>
+      <section className={"terminal " + (!terminalOpen ? "closed" : "")}><div className="terminal-head"><div><SquareTerminal size={14}/><b>Terminal</b><span className="local-tag"><i/> LOCAL</span></div><div className="terminal-controls"><span>{cwd}</span><button onClick={() => setTerminalOpen(false)} title="Réduire"><ArrowDown size={14}/></button><button onClick={() => setTerminalOpen(false)} title="Fermer"><X size={14}/></button></div></div>{cwd && <LocalTerminal cwd={cwd} onReady={onTerminalReady}/>}</section>
     </main>
     <AnimatePresence>{modal && <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={event => { if (event.target === event.currentTarget) setModal(false); }}><motion.div className="modal" initial={{ opacity: 0, y: 12, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}>
       <div className="modal-head"><div><small>ESPACE DE TRAVAIL</small><h2>Ouvrir un projet</h2></div><button className="ghost" onClick={() => setModal(false)}><X size={17}/></button></div>
