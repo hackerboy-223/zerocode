@@ -102,6 +102,18 @@ zerocode update --check
 zerocode update
 ```
 
+Pour réparer le moteur avec une réinstallation vérifiée de la release actuelle :
+
+```bash
+zerocode repair
+```
+
+Pour revenir à une version stable connue :
+
+```bash
+zerocode rollback v1.0.0
+```
+
 Pour mettre à jour Desktop, relance l'installateur officiel. Il récupère la dernière release et installe le paquet natif adapté au système.
 
 Désinstaller le moteur tout en conservant la configuration, les clés API et les sessions :
