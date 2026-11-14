@@ -26,7 +26,9 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 ## Installation automatique
 
-L'installateur interactif propose trois choix : **TUI**, **Desktop** ou **les deux**. Il détecte le système, installe le moteur Python dans un environnement isolé avec `pipx`, vérifie les dépendances et effectue un contrôle final.
+L'installateur interactif propose trois choix : **TUI**, **Desktop** ou **les deux**. Par défaut, il cherche la dernière release stable. Quand elle existe, il télécharge les paquets précompilés et vérifie leur empreinte SHA-256 avant installation. Node.js, Rust et les outils C/C++ ne sont donc pas nécessaires pour installer une release.
+
+Si aucune release stable n'est publiée, l'installateur utilise la branche source `feature/zerocode-desktop`. Dans ce mode de secours, Desktop doit être compilé localement et les outils de développement correspondants sont installés.
 
 ### Linux et macOS
 
@@ -34,14 +36,22 @@ L'installateur interactif propose trois choix : **TUI**, **Desktop** ou **les de
 curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.sh | bash
 ```
 
-Le choix **TUI** installe le moteur et l'interface terminale. Le choix **Desktop** installe aussi les bibliothèques natives, Node.js, Rust, compile l'application Tauri puis installe le paquet adapté au système. Sur Debian/Ubuntu, l'installation du paquet demande les droits administrateur ; macOS installe l'application dans `~/Applications`.
+Choisis TUI, Desktop ou les deux dans le menu. Les paquets Desktop sont installés selon le système : `.deb`, `.rpm`, AppImage ou `.dmg`/`.app`.
 
-Pour lancer directement un mode sans afficher le menu :
+Pour choisir le mode ou une version sans passer par le menu :
 
 ```bash
 bash install.sh --mode tui
 bash install.sh --mode desktop
 bash install.sh --mode both
+bash install.sh --version latest --mode both
+bash install.sh --version v1.0.0 --mode desktop
+```
+
+Pour forcer le parcours depuis une branche source :
+
+```bash
+ZEROCODE_INSTALL_REF=feature/zerocode-desktop bash install.sh --mode desktop
 ```
 
 ### Windows · PowerShell
@@ -50,9 +60,16 @@ bash install.sh --mode both
 irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
 ```
 
-Le menu propose les mêmes trois choix. Le parcours Desktop installe les outils de compilation via `winget`, construit l'application et ouvre son installateur Windows natif. `winget` (App Installer) est nécessaire pour installer automatiquement les prérequis.
+Le menu propose les mêmes trois choix. Une release stable installe le moteur depuis le wheel Python vérifié puis lance l'installateur Desktop Windows. `winget`, Node.js, Rust et Visual Studio Build Tools ne sont nécessaires que pour le parcours de compilation source.
 
-### Installation manuelle
+Pour choisir une version précise :
+
+```powershell
+$env:ZEROCODE_INSTALL_REF = "v1.0.0"
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
+```
+
+### Installation manuelle du moteur
 
 ```bash
 python -m pip install --user pipx
@@ -72,34 +89,6 @@ python -m pip install -e ".[dev]"
 pytest
 ruff check src tests
 ```
-## Versions, mises à jour et désinstallation
-
-Les versions Desktop sont construites sur GitHub Actions à partir des tags `vX.Y.Z`. Une release publie les paquets natifs Windows, macOS et Linux, ainsi que les distributions Python. Le workflow vérifie d'abord que les versions Python, Tauri, npm et Cargo correspondent au tag. Une fois les builds terminés, il joint un manifeste `SHA256SUMS` à la release.
-
-Pour créer une release, incrémente les versions dans `pyproject.toml`, `desktop/package.json`, `desktop/src-tauri/Cargo.toml` et `desktop/src-tauri/tauri.conf.json`, puis pousse un tag correspondant, par exemple `v1.0.1`. Le workflow refuse de publier si les versions divergent.
-
-Mettre à jour le moteur TUI installé avec pipx :
-
-```bash
-zerocode update --check
-zerocode update
-```
-
-Désinstaller le moteur en conservant les réglages, les clés API et les sessions :
-
-```bash
-zerocode uninstall
-```
-
-Supprimer aussi les réglages, les clés et les sessions (action irréversible) :
-
-```bash
-zerocode uninstall --remove-data
-```
-
-L'application Desktop installée par paquet reste gérée par le système : utilise les réglages d'applications de Windows/macOS, `sudo apt remove zerocode-desktop` sur Debian/Ubuntu ou `sudo dnf remove zerocode-desktop` sur Fedora. Une AppImage installée dans le dossier utilisateur peut être supprimée en retirant `~/.local/opt/zerocode`, son lanceur `~/.local/bin/zerocode-desktop` et son raccourci `.desktop`.
-
-Les releases ne sont pas encore signées par un certificat éditeur Windows ou Apple. Les sommes SHA-256 détectent une corruption de téléchargement, mais ne remplacent pas une signature cryptographique du fournisseur.
 ## Démarrage rapide
 
 Sans aucune clé :
