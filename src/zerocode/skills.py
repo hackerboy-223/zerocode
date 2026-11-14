@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from pathlib import Path
 import re
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
 
 from .config import config_dir
 from .security import redact_secrets
