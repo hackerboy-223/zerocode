@@ -189,6 +189,8 @@ class PermissionManager:
     ) -> bool:
         if tool.approval == "never":
             return True
+        if self.mode == "deny":
+            return False
         # External integrations may mutate accounts, cloud resources or repositories.
         # Their confirmation requirement cannot be bypassed by full-stack or --yolo.
         if tool.approval == "confirm":
@@ -198,8 +200,6 @@ class PermissionManager:
             return bool(confirm(tool.name, args)) if callable(confirm) else False
         if self.mode == "allow":
             return True
-        if self.mode == "deny":
-            return False
         if tool.approval == "auto" and _auto_approve(tool, args, context):
             return True
         if not self.interactive or ui is None:
