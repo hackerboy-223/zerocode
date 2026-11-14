@@ -27,7 +27,7 @@ ENTRYPOINTS = (
     "index.html", "src/main.ts", "src/main.tsx", "src/main.js",
     "src/index.ts", "src/index.tsx", "src/app/page.tsx",
     "Program.cs", "lib/main.dart", "Package.swift", "mix.exs",
-    "app.rb", "config/application.rb",
+    "app.rb", "config/application.rb", "CMakeLists.txt", "Makefile", "meson.build",
 )
 
 
@@ -177,6 +177,12 @@ def project_map(args: dict[str, Any], ctx: ToolContext) -> str:
     if any(name.lower().endswith((".csproj", ".sln")) for name in discovered):
         stacks.append(".NET")
         manifests.extend(name for name in discovered if name.lower().endswith((".csproj", ".sln")))
+    if any(name in discovered for name in ("CMakeLists.txt", "Makefile", "meson.build")):
+        stacks.append("C / C++")
+        manifests.extend(
+            name for name in ("CMakeLists.txt", "Makefile", "meson.build")
+            if name in discovered
+        )
 
     if not stacks:
         stacks.append("Stack non identifiée automatiquement")
@@ -325,6 +331,39 @@ def _verification_commands(root: Path, checks: list[str]) -> list[tuple[str, str
         if "build" in checks:
             commands.append(("build", "dotnet build"))
 
+    if (root / "CMakeLists.txt").is_file():
+        configured_build = next(
+            (
+                name for name in ("build", "cmake-build-debug", "cmake-build-release")
+                if (root / name / "CMakeCache.txt").is_file()
+            ),
+            None,
+        )
+        if configured_build:
+            if "tests" in checks:
+                commands.append(("tests", f"ctest --test-dir {shlex.quote(configured_build)} --output-on-failure"))
+            if "build" in checks:
+                commands.append(("build", f"cmake --build {shlex.quote(configured_build)}"))
+    elif (root / "meson.build").is_file() and (root / "build" / "meson-private" / "coredata.dat").is_file():
+        if "tests" in checks:
+            commands.append(("tests", "meson test -C build --print-errorlogs"))
+        if "build" in checks:
+            commands.append(("build", "meson compile -C build"))
+    elif (root / "Makefile").is_file():
+        try:
+            make_targets = {
+                line.split(":", 1)[0].strip()
+                for line in (root / "Makefile").read_text(encoding="utf-8", errors="replace").splitlines()
+                if ":" in line and not line.lstrip().startswith("#")
+            }
+        except OSError:
+            make_targets = set()
+        if "tests" in checks and ({"test", "check"} & make_targets):
+            target = "test" if "test" in make_targets else "check"
+            commands.append(("tests", f"make {target}"))
+        if "build" in checks and ({"all", "build"} & make_targets):
+            commands.append(("build", "make"))
+
     seen: set[str] = set()
     unique: list[tuple[str, str]] = []
     for check, command in commands:
@@ -388,7 +427,7 @@ def register_project_tools(registry: ToolRegistry) -> None:
             name="project_verify",
             description=(
                 "Detect and run the project's available test, lint, type-check and build scripts. "
-                "Uses package.json, Composer, Python, Go, Rust, JVM, Ruby, .NET, Dart/Flutter, Swift or Elixir conventions. Run after meaningful changes."
+                "Uses package.json, Composer, Python, Go, Rust, JVM, Ruby, .NET, Dart/Flutter, Swift, Elixir or C/C++ build conventions. Run after meaningful changes."
             ),
             parameters={
                 "type": "object",
