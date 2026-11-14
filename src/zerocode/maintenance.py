@@ -74,6 +74,49 @@ def latest_release_tag(*, timeout: float = 12.0) -> str:
     return latest_release_details(timeout=timeout)[0]
 
 
+def _release_asset_checksum(
+    *,
+    filename: str,
+    asset_url: str,
+    checksum_url: str,
+    destination: Path | None = None,
+    timeout: float = 60.0,
+) -> bool:
+    """Download a release asset and save it only after its SHA-256 matches."""
+    file_response = httpx.get(
+        asset_url,
+        timeout=timeout,
+        follow_redirects=True,
+        headers={"User-Agent": "ZeroCode"},
+    )
+    file_response.raise_for_status()
+    checksum_response = httpx.get(
+        checksum_url,
+        timeout=timeout,
+        follow_redirects=True,
+        headers={"User-Agent": "ZeroCode"},
+    )
+    checksum_response.raise_for_status()
+
+    expected: str | None = None
+    for line in checksum_response.text.splitlines():
+        match = re.match(r"^([a-fA-F0-9]{64})\s+\*?(.+)$", line.strip())
+        if match and match.group(2).strip() == filename:
+            expected = match.group(1).lower()
+            break
+    if expected is None or not _SHA256_PATTERN.fullmatch(expected):
+        raise RuntimeError(f"Aucune empreinte SHA-256 publiée pour {filename}.")
+
+    actual = hashlib.sha256(file_response.content).hexdigest()
+    if not hmac.compare_digest(actual, expected):
+        raise RuntimeError(f"L'empreinte SHA-256 de {filename} ne correspond pas à la release.")
+
+    if destination is not None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(file_response.content)
+    return True
+
+
 def pipx_command() -> list[str] | None:
     """Find pipx without assuming that the current Python belongs to the host."""
     executable = shutil.which("pipx")
