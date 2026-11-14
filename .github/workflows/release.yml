@@ -131,7 +131,7 @@ jobs:
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.target-args }} --bundles ${{ matrix.bundles }}
-          releaseAssetNamePattern: "[mainBinaryName]-[version]-[platform]-[arch]-[bundle][setup][ext]"
+          releaseAssetNamePattern: "[mainBinaryName]-[version]-[platform]-[arch][setup][ext]"
 
   python:
     name: Python package and checksums
