@@ -233,3 +233,39 @@ def test_invalid_config_json_is_reported(tmp_path):
 
 def test_validate_config_accepts_defaults():
     validate_config(Config())
+
+def test_global_mcp_server_trust_flag_is_loaded(tmp_path, monkeypatch):
+    global_config = tmp_path / "global.json"
+    monkeypatch.setenv("ZEROCODE_CONFIG", str(global_config))
+    global_config.write_text(
+        json.dumps({
+            "mcp_servers": {
+                "browser": {
+                    "command": "npx",
+                    "args": ["-y", "@playwright/mcp@latest"],
+                    "trusted": True,
+                }
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.mcp_servers["browser"]["trusted"] is True
+
+
+def test_mcp_trust_flag_must_be_boolean(tmp_path, monkeypatch):
+    global_config = tmp_path / "global.json"
+    monkeypatch.setenv("ZEROCODE_CONFIG", str(global_config))
+    global_config.write_text(
+        json.dumps({
+            "mcp_servers": {
+                "browser": {"command": "npx", "trusted": "yes"}
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="trusted"):
+        load_config(tmp_path)
