@@ -101,3 +101,32 @@ def test_project_verify_detects_flutter_checks(tmp_path):
     commands = _verification_commands(tmp_path, ["tests", "lint"])
     assert ("tests", "flutter test") in commands
     assert ("lint", "flutter analyze") in commands
+
+def test_project_map_and_verify_detect_cmake(tmp_path):
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.20)\nproject(demo)\n",
+        encoding="utf-8",
+    )
+    build = tmp_path / "build"
+    build.mkdir()
+    (build / "CMakeCache.txt").write_text("CMAKE_HOME_DIRECTORY:INTERNAL=.\n", encoding="utf-8")
+
+    mapped = project_map({}, ToolContext(cwd=tmp_path))
+    commands = _verification_commands(tmp_path, ["tests", "build"])
+
+    assert "C / C++" in mapped
+    assert "CMakeLists.txt" in mapped
+    assert ("tests", "ctest --test-dir build --output-on-failure") in commands
+    assert ("build", "cmake --build build") in commands
+
+
+def test_makefile_verification_only_runs_declared_targets(tmp_path):
+    (tmp_path / "Makefile").write_text(
+        "all:\n\t@echo build\ntest:\n\t@echo test\n",
+        encoding="utf-8",
+    )
+
+    commands = _verification_commands(tmp_path, ["tests", "build"])
+
+    assert ("tests", "make test") in commands
+    assert ("build", "make") in commands
