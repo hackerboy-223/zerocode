@@ -517,4 +517,16 @@ def test_security_audit_and_sys_diag_tools(tmp_path):
     assert "[Système & Ressources]" in diag
     assert "[Toolchain Dev, Sécurité & Système]" in diag
 
+def test_sudo_requires_separate_confirmation_even_when_permissions_allow(tmp_path, monkeypatch):
+    from zerocode.tools import shell
 
+    context = ToolContext(
+        cwd=tmp_path,
+        confirm_sudo_command=lambda command: False,
+    )
+    monkeypatch.setattr(shell.shutil, "which", lambda name: "/usr/bin/sudo")
+    monkeypatch.setattr(shell, "_sudo_credentials_cached", lambda *args: True)
+
+    result = shell.run_bash({"command": "sudo true"}, context)
+
+    assert "confirmation explicite requise" in result
