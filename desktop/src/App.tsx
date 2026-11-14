@@ -271,6 +271,7 @@ export default function App() {
     let cancelled = false;
     setNotice("");
     setAgentReady(false);
+    pendingAgentStatusesRef.current = [];
     desktopInvoke<string>("start_agent", { cwd: workspace }).then((id) => {
       if (cancelled) {
         void desktopInvoke("stop_agent", { agentId: id }).catch(() => undefined);
