@@ -30,6 +30,12 @@ for line in sys.stdin:
                         "properties": {"text": {"type": "string"}},
                         "required": ["text"],
                     },
+                },
+                {
+                    "name": "lookup",
+                    "description": "Read-only lookup",
+                    "annotations": {"readOnlyHint": True, "destructiveHint": False},
+                    "inputSchema": {"type": "object", "properties": {}},
                 }
             ]
         }
@@ -138,6 +144,11 @@ def test_mcp_stdio_tool_roundtrip(tmp_path):
     )
     try:
         assert "mcp_demo_echo" in registry.names()
+        tool_specs = {tool.name: tool for tool in registry.tools()}
+        assert tool_specs["mcp_demo_echo"].approval == "confirm"
+        assert tool_specs["mcp_demo_lookup"].approval == "ask"
+        assert tool_specs["mcp_demo_resource_workspace_notes"].approval == "ask"
+        assert tool_specs["mcp_demo_prompt_code_review"].approval == "ask"
         result = registry.execute(
             ToolCall(id="call-1", name="mcp_demo_echo", arguments={"text": "bonjour"})
         )
