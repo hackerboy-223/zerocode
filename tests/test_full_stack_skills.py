@@ -9,7 +9,6 @@ def test_full_stack_skills_include_core_expertise_and_detect_project_patterns(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    global_skills = tmp_path / "global-skills"
     monkeypatch.setattr(skills, "config_dir", lambda: tmp_path / "config")
     project_skills = tmp_path / ".zerocode" / "skills"
     project_skills.mkdir(parents=True)
