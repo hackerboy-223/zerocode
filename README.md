@@ -19,7 +19,7 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Interface TUI Textual sobre et moderne : sidebar projet/sessions, chat Markdown, streaming temps réel, diffs intégrés et approbations.
 - Mascotte animée **LUPUS**, un loup veilleur qui rappelle d'observer avant d'agir.
 - Routage adaptatif : modèle spécialisé pour le code, raisonnement renforcé pour les audits et modèle rapide pour les demandes simples.
-- Mode `/full-stack` autonome : projet complet avec auto-continuation tant qu'il reste des tâches dans le plan (`todos`), raisonnement, contexte, étapes et timeouts maximaux.
+- Mode `/full-stack` autonome : sélection contextuelle automatique des Skills intégrés et Patterns Fabric selon la demande et la stack détectée (sans charger les 266 Patterns à chaque tour), puis auto-continuation jusqu'à la livraison.
 - Palette de commandes, recherche de fichiers `@`, boutons d'action rapides et panneaux de tâches/outils.
 - Cybersécurité Zero-Trust : masquage DLP automatique des clés et jetons API (`redact_secrets`), pare-feu contre les commandes shell destructrices, isolation des variables d'environnement sensibles dans les sous-processus et protection anti-SSRF.
 
