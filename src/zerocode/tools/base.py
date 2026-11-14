@@ -294,7 +294,7 @@ class ToolRegistry:
             except Exception as exc:  # noqa: BLE001 - le hook post ne doit pas annuler l'action
                 warning = f"{exc.__class__.__name__}: {exc}"
             if warning:
-                result += "\n[Hook PostToolUse] " + warning
+                result += "\n[Hook PostToolUse] " + redact_secrets(str(warning))
         return result
 
 
