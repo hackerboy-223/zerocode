@@ -207,19 +207,20 @@ def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
     env = _clean_environment()
 
     sudo_binary = shutil.which("sudo")
-    if (
-        sudo_binary
-        and SUDO_COMMAND_RE.search(command)
-        and not _sudo_credentials_cached(sudo_binary, env, ctx.cwd)
-    ):
-        provider = ctx.request_sudo_password
-        if provider is None:
-            return "Action refusee: mot de passe sudo requis."
-        password = provider(command)
-        if not password:
-            return "Action refusee: mot de passe sudo non fourni."
-        if not _prime_sudo(sudo_binary, password, env, ctx.cwd):
-            return "Action refusee: mot de passe sudo refuse."
+    if sudo_binary and SUDO_COMMAND_RE.search(command):
+        # A cached sudo ticket or --yolo must never silently authorize root access.
+        confirmer = ctx.confirm_sudo_command
+        if confirmer is None or not confirmer(command):
+            return "Action refusee: confirmation explicite requise pour toute commande sudo."
+        if not _sudo_credentials_cached(sudo_binary, env, ctx.cwd):
+            provider = ctx.request_sudo_password
+            if provider is None:
+                return "Action refusee: authentification sudo interactive indisponible."
+            password = provider(command)
+            if not password:
+                return "Action refusee: authentification sudo annulee."
+            if not _prime_sudo(sudo_binary, password, env, ctx.cwd):
+                return "Action refusee: authentification sudo refusee."
 
     bwrap_args = _build_bwrap_args(command, ctx.cwd)
     try:
