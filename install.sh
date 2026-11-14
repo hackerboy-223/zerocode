@@ -189,7 +189,7 @@ install_linux_build_dependencies() {
   elif command -v dnf >/dev/null 2>&1; then
     as_root dnf install -y gcc gcc-c++ make curl wget file openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel patchelf
   elif command -v pacman >/dev/null 2>&1; then
-    as_root pacman -Sy --needed --noconfirm base-devel curl wget file openssl appmenu-gtk-module webkit2gtk-4.1 libappindicator-gtk3 librsvg xdotool patchelf
+    as_root pacman -Sy --needed --noconfirm base-devel curl wget file openssl appmenu-gtk-module webkit2gtk-4.1 libappindicator-gtk3 librsvg xdotool patchelf fuse2
   else
     die "Distribution Linux non reconnue. Installe les dépendances Tauri indiquées dans docs/DESKTOP.md, puis relance."
   fi
