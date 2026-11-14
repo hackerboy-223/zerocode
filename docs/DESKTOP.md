@@ -82,9 +82,11 @@ zerocode update
 
 Pour réparer le moteur, utilise `zerocode repair`. Pour revenir à une version stable précise, utilise `zerocode rollback v1.0.0`. Les deux commandes vérifient le wheel et son empreinte avant remplacement.
 
+Sous Windows, ces commandes n'écrasent pas le venv Python depuis le processus qui l'utilise. Ferme ZeroCode puis relance l'installateur PowerShell ; pour un rollback, définis `$env:ZEROCODE_INSTALL_REF = "v1.0.0"` avant de le lancer.
+
 Pour mettre à jour Desktop, relance le même installateur ; il récupère la release la plus récente et remplace le paquet natif. Les paquets `.deb` et `.rpm` restent gérés par le gestionnaire système.
 
-Le moteur Python peut être désinstallé avec `zerocode uninstall`. Les configurations, clés API et sessions sont conservées par défaut. `zerocode uninstall --remove-data` les supprime aussi, après confirmation.
+Sur Linux et macOS, le moteur Python peut être désinstallé avec `zerocode uninstall`. Les configurations, clés API et sessions sont conservées par défaut. `zerocode uninstall --remove-data` les supprime aussi, après confirmation. Sous Windows, ferme ZeroCode puis exécute `pipx uninstall zerocode` dans une nouvelle fenêtre PowerShell ; cette commande conserve les données utilisateur.
 
 Pour retirer Desktop, passe par les paramètres d’applications du système, ou utilise le gestionnaire de paquets Linux. L’AppImage utilisateur se retire en supprimant `~/.local/opt/zerocode`, son lanceur `~/.local/bin/zerocode-desktop` et le raccourci `.desktop`.
 
