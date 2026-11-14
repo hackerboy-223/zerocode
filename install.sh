@@ -219,7 +219,7 @@ install_node() {
 }
 
 install_rust() {
-  if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
+  if ! command -v rustup >/dev/null 2>&1; then
     info "Installation de Rust stable pour compiler l'application native…"
     TEMP_RUST="$(mktemp)"
     curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o "$TEMP_RUST"
@@ -227,7 +227,7 @@ install_rust() {
     rm -f -- "$TEMP_RUST"
   fi
   [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
-  command -v rustc >/dev/null 2>&1 || die "Rust n'est pas disponible dans ce terminal. Rouvre le terminal puis relance."
+  command -v rustup >/dev/null 2>&1 || die "Rustup n'est pas disponible dans ce terminal. Rouvre le terminal puis relance."
   rustup toolchain install stable --profile minimal
   rustup default stable
   success "Rust : $(rustc --version)"
