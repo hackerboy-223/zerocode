@@ -15,8 +15,8 @@ from rich.prompt import Confirm
 from rich.text import Text
 
 from .config import Config, data_dir
-from .tokens import truncate_text
 from .security import redact_secrets
+from .tokens import truncate_text
 from .types import Completion, Usage
 from .version import __author__, __github__, __portfolio__, __version__
 
