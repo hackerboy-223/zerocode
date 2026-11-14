@@ -1380,6 +1380,10 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              <p className="settings-warning">
+                <ShieldAlert size={14} />
+                <span><strong>À savoir :</strong> le mode autonome autorise l’agent à modifier les fichiers et lancer des commandes avec les droits de votre compte. Gardez « Demander » pour les projets sensibles. Le terminal intégré reste un terminal local classique.</span>
+              </p>
             </div>
 
             <div className="settings-group">
