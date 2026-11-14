@@ -126,5 +126,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check shared package versions
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          import tomllib
+          from pathlib import Path
+
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+          cargo = Path("desktop/src-tauri/Cargo.toml").read_text()
+          versions = {
+              "Python": pyproject["project"]["version"],
+              "npm": json.loads(Path("desktop/package.json").read_text())["version"],
+              "Tauri": json.loads(Path("desktop/src-tauri/tauri.conf.json").read_text())["version"],
+              "Cargo": re.search(r'(?m)^version\s*=\s*"([^"]+)"', cargo).group(1),
+          }
+          if len(set(versions.values())) != 1:
+              raise SystemExit(f"Package versions are out of sync: {versions}")
+          print(f"All package versions match {next(iter(versions.values()))}.")
+          PY
       - name: Parse release workflow YAML
         run: ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release.yml"); puts "Release workflow YAML is valid."'
