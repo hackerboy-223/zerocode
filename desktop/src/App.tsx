@@ -101,7 +101,7 @@ function FormattedMessage({ content, onCopy }: { content: string; onCopy: (text:
       const heading = line.match(/^\s*(#{1,6})\s+(.+)$/);
       if (heading) {
         const level = heading[1].length;
-        const Heading = (`h${level}`) as keyof JSX.IntrinsicElements;
+        const Heading = (["h1", "h2", "h3", "h4", "h5", "h6"] as const)[level - 1];
         nodes.push(<Heading key={key++} className="markdown-heading">{renderInlineMarkdown(heading[2])}</Heading>);
         i++;
         continue;
@@ -143,7 +143,7 @@ function FormattedMessage({ content, onCopy }: { content: string; onCopy: (text:
       const paragraph = [line];
       i++;
       while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) paragraph.push(lines[i++]);
-      nodes.push(<p key={key++} className="markdown-paragraph">{paragraph.map((part, n) => <React.Fragment key={n}>{n > 0 && <br />}{renderInlineMarkdown(part)}</React.Fragment>)}</p>);
+      nodes.push(<p key={key++} className="markdown-paragraph">{paragraph.map((part, n) => <span key={n}>{n > 0 && <br />}{renderInlineMarkdown(part)}</span>)}</p>);
     }
     return nodes;
   }, [content, onCopy]);
