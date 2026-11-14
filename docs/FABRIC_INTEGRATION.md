@@ -1,57 +1,35 @@
-# Intégration Fabric dans ZeroCode
+# Intégration native de Fabric dans ZeroCode
 
-ZeroCode peut importer les Patterns du projet [Daniel Miessler/Fabric](https://github.com/danielmiessler/fabric) comme skills Markdown locaux.
+ZeroCode importe les ressources du dépôt officiel [Daniel Miessler/Fabric](https://github.com/danielmiessler/fabric) directement dans son répertoire de données utilisateur.
 
-## Pourquoi cette approche
+## Installation en une commande
 
-- Les Patterns Fabric sont des instructions textuelles, pas des plugins exécutables.
-- L'import se fait à la demande : aucun poids supplémentaire dans l'installation de base.
-- Les fichiers sont installés dans le répertoire de skills personnalisé déjà reconnu par ZeroCode.
-- Les patterns restent modifiables et peuvent être supprimés indépendamment du code de ZeroCode.
-- Le dépôt source reste attribué et la licence MIT doit être conservée avec les fichiers redistribués.
-
-## Importer les patterns
-
-Depuis la racine du dépôt ZeroCode :
+Après mise à jour de ZeroCode :
 
 ```bash
-python scripts/sync_fabric_patterns.py --dry-run
-python scripts/sync_fabric_patterns.py
+zerocode skills --sync-fabric
 ```
 
-L'import par défaut utilise la branche `main` et installe les fichiers dans `~/.config/zerocode/skills/`.
-Les fichiers sont nommés `fabric-<pattern>.md`. Les skills existants ne sont pas écrasés, sauf avec `--force`.
+Cette commande télécharge :
+- Tous les Patterns sous `data/patterns/*/system.md` et les rend immédiatement détectables comme Skills personnalisés.
+- Toutes les stratégies JSON sous `data/strategies/*.json` dans un dossier distinct.
 
-Options :
+Les fichiers sont enregistrés dans `~/.config/zerocode/skills/` et `~/.config/zerocode/strategies/`. Aucun paquet Fabric ni clé API supplémentaire n'est nécessaire.
+
+## Commandes
 
 ```bash
-python scripts/sync_fabric_patterns.py --category development
-python scripts/sync_fabric_patterns.py --dest .zerocode/skills
-python scripts/sync_fabric_patterns.py --branch main --force
+zerocode skills --sync-fabric          # importer les nouvelles ressources
+zerocode skills --sync-fabric --force  # actualiser aussi les ressources existantes
+zerocode skills                       # voir les Skills importés
+zerocode strategies                   # voir les stratégies installées
+zerocode strategies --show cot        # afficher le prompt d'une stratégie
 ```
 
-Le filtre `--category` sélectionne les noms de patterns contenant le terme fourni ; il ne s'agit pas d'une taxonomie officielle complète.
+Les fichiers existants ne sont pas écrasés sans `--force`, afin de préserver les modifications locales. Les Patterns sont des instructions Markdown et ne sont jamais exécutés comme du code. Les stratégies restent stockées séparément des Skills.
 
-## Utiliser dans ZeroCode
+## Source et licence
 
-```text
-/skills
-/skill fabric-review_code
-```
+Les ressources proviennent de [danielmiessler/fabric](https://github.com/danielmiessler/fabric), distribué sous licence MIT. Chaque Pattern importé conserve son chemin source et la mention de licence. Voir la [licence officielle Fabric](https://github.com/danielmiessler/fabric/blob/main/LICENSE).
 
-Le nom exact dépend du pattern importé. Le skill peut aussi être activé avec `--skill fabric-<nom>`.
-
-## Stratégies de raisonnement
-
-Fabric publie aussi des stratégies distinctes des Patterns : CoT, CoD, ToT, AoT, Least-to-Most, Self-Consistency, Self-Refine, Reflexion et Standard. Elles ne sont pas importées comme skills automatiquement : leur activation doit rester un choix explicite du modèle et de l'utilisateur.
-
-## Sécurité et maintenance
-
-- Le script ne télécharge que les fichiers `data/patterns/*/system.md`.
-- Les contenus sont traités comme des instructions non fiables : ils ne sont jamais exécutés comme du code.
-- Vérifier les instructions importées avant de les utiliser, particulièrement celles qui touchent au shell, aux données ou à la sécurité.
-- Relancer le script après consultation des changements amont ; l'import ne s'auto-met pas à jour.
-- Les appels réseau se font uniquement vers l'API et les fichiers bruts GitHub officiels.
-- La synchronisation ne doit pas être lancée dans un environnement sans accès réseau.
-
-Source amont : https://github.com/danielmiessler/fabric
+La synchronisation est volontaire, nécessite une connexion Internet et peut être relancée après une mise à jour du dépôt amont.
