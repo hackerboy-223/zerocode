@@ -37,8 +37,8 @@ from .config import (
 )
 from .errors import ConfigError, ToolError, ZeroCodeError
 from .hooks import HookManager
-from .mcp import MCPManager, register_mcp_tools
 from .maintenance import latest_release_tag, uninstall_from_pipx, update_from_release
+from .mcp import MCPManager, register_mcp_tools
 from .prompts import remember_project_instruction
 from .providers import (
     applied_providers,
