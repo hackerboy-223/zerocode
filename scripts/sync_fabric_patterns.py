@@ -21,10 +21,10 @@ MAX_FILE_BYTES = 180_000
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,79}$")
 
 
-def request(url: str) -> bytes:
+def request(url: str, *, limit: int = MAX_FILE_BYTES) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"})
     with urllib.request.urlopen(req, timeout=25) as response:
-        return response.read(MAX_FILE_BYTES + 1)
+        return response.read(limit + 1)
 
 
 def main() -> int:
@@ -38,7 +38,7 @@ def main() -> int:
 
     destination = (args.dest or Path.home() / ".config" / "zerocode" / "skills").expanduser()
     try:
-        tree = json.loads(request(f"{API}/git/trees/{args.branch}?recursive=1"))
+        tree = json.loads(request(f"{API}/git/trees/{args.branch}?recursive=1", limit=20_000_000))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
         print(f"Impossible de récupérer l'arborescence Fabric : {exc}", file=sys.stderr)
         return 1
