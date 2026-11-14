@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 
 from rich.console import Console
-
 from zerocode import cli
 
 
