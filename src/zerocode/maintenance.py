@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -16,10 +18,11 @@ REPOSITORY_URL = f"https://github.com/{REPOSITORY}.git"
 LATEST_RELEASE_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 _PACKAGE_NAME = "zerocode"
 _TAG_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
+_SHA256_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
-def latest_release_tag(*, timeout: float = 12.0) -> str:
-    """Return the latest stable, validated GitHub release tag."""
+def latest_release_details(*, timeout: float = 12.0) -> tuple[str, dict[str, str]]:
+    """Return the latest stable release tag and its trusted GitHub asset URLs."""
     response = httpx.get(
         LATEST_RELEASE_URL,
         headers={"Accept": "application/vnd.github+json", "User-Agent": "ZeroCode"},
@@ -33,7 +36,61 @@ def latest_release_tag(*, timeout: float = 12.0) -> str:
     tag = payload.get("tag_name") if isinstance(payload, dict) else None
     if not isinstance(tag, str) or not _TAG_PATTERN.fullmatch(tag):
         raise RuntimeError("La dernière release GitHub contient un tag de version invalide.")
-    return tag
+
+    raw_assets = payload.get("assets", []) if isinstance(payload, dict) else []
+    if not isinstance(raw_assets, list):
+        raise RuntimeError("La liste des fichiers de la release est invalide.")
+
+    assets: dict[str, str] = {}
+    expected_prefix = f"/{REPOSITORY}/releases/download/{tag}/"
+    for asset in raw_assets:
+        if not isinstance(asset, dict):
+            continue
+        name = asset.get("name")
+        url = asset.get("browser_download_url")
+        if not isinstance(name, str) or not isinstance(url, str):
+            continue
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or parsed.netloc != "github.com":
+            continue
+        if not parsed.path.startswith(expected_prefix) or ".." in parsed.path.split("/"):
+            continue
+        assets[name] = url
+    return tag, assets
+
+
+def latest_release_tag(*, timeout: float = 12.0) -> str:
+    return latest_release_details(timeout=timeout)[0]
+
+
+def _release_asset_checksum(
+    *,
+    filename: str,
+    asset_url: str,
+    checksum_url: str,
+    timeout: float = 60.0,
+) -> bool:
+    """Verify a downloaded release asset against the published SHA-256 manifest."""
+    file_response = httpx.get(asset_url, timeout=timeout, follow_redirects=True)
+    file_response.raise_for_status()
+    checksum_response = httpx.get(checksum_url, timeout=timeout, follow_redirects=True)
+    checksum_response.raise_for_status()
+
+    expected = None
+    for line in checksum_response.text.splitlines():
+        fields = line.strip().split(maxsplit=1)
+        if len(fields) != 2:
+            continue
+        digest, listed_name = fields
+        if listed_name.lstrip("*") == filename and _SHA256_PATTERN.fullmatch(digest):
+            expected = digest.lower()
+            break
+    if expected is None:
+        raise RuntimeError(f"Aucune empreinte SHA-256 publiée pour {filename}.")
+    actual = hashlib.sha256(file_response.content).hexdigest()
+    if not hashlib.compare_digest(actual, expected):
+        raise RuntimeError(f"L'empreinte SHA-256 de {filename} ne correspond pas à la release.")
+    return True
 
 
 def pipx_command() -> list[str] | None:
@@ -96,15 +153,27 @@ def pipx_manages_zerocode(command: list[str]) -> bool:
 
 
 def update_from_release() -> tuple[bool, str]:
-    """Install the newest stable GitHub tag into an existing pipx environment."""
+    """Install the newest stable, checksum-verified GitHub release into pipx."""
     try:
-        tag = latest_release_tag()
+        tag, assets = latest_release_details()
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
         return False, f"Impossible de vérifier les releases : {exc}"
 
     target_version = tag.removeprefix("v")
     if target_version == __version__:
         return True, f"ZeroCode {__version__} est déjà à jour."
+
+    wheel_name = next(
+        (
+            name
+            for name in assets
+            if name.startswith(f"zerocode-{target_version}-") and name.endswith(".whl")
+        ),
+        None,
+    )
+    checksum_url = assets.get("SHA256SUMS")
+    if wheel_name is None or checksum_url is None:
+        return False, f"La release {tag} ne contient pas le wheel Python et son manifeste SHA-256."
 
     command = pipx_command()
     if command is None:
@@ -116,17 +185,26 @@ def update_from_release() -> tuple[bool, str]:
             "Utilise l'installateur officiel pour la mettre à jour sans créer une seconde installation.",
         )
 
-    spec = f"git+{REPOSITORY_URL}@{tag}"
+    wheel_url = assets[wheel_name]
+    try:
+        _release_asset_checksum(
+            filename=wheel_name,
+            asset_url=wheel_url,
+            checksum_url=checksum_url,
+        )
+    except (httpx.HTTPError, RuntimeError) as exc:
+        return False, f"Vérification de la release impossible : {exc}"
+
     try:
         result = subprocess.run(
-            [*command, "install", "--force", spec],
+            [*command, "install", "--force", wheel_url],
             check=False,
         )
     except OSError as exc:
         return False, f"Impossible de lancer pipx : {exc}"
     if result.returncode != 0:
         return False, "La mise à jour a échoué. L'installation précédente n'a pas été supprimée volontairement."
-    return True, f"ZeroCode a été mis à jour vers {target_version}. Rouvre ton terminal."
+    return True, f"Le moteur ZeroCode a été mis à jour vers {target_version}. Rouvre ton terminal."
 
 
 def uninstall_from_pipx(*, remove_data: bool = False) -> tuple[bool, str]:
