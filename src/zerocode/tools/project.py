@@ -293,7 +293,10 @@ def _verification_commands(root: Path, checks: list[str]) -> list[tuple[str, str
             commands.append(("lint", "bundle exec rubocop" if (root / "Gemfile").is_file() else "rubocop"))
 
     if (root / "pubspec.yaml").is_file():
-        pubspec = (root / "pubspec.yaml").read_text(encoding="utf-8", errors="replace")[:100_000]
+        try:
+            pubspec = (root / "pubspec.yaml").read_text(encoding="utf-8", errors="replace")[:100_000]
+        except OSError:
+            pubspec = ""
         flutter_project = "flutter:" in pubspec
         if "tests" in checks:
             commands.append(("tests", "flutter test" if flutter_project else "dart test"))
@@ -303,8 +306,10 @@ def _verification_commands(root: Path, checks: list[str]) -> list[tuple[str, str
     if (root / "Package.swift").is_file():
         if "tests" in checks:
             commands.append(("tests", "swift test"))
-        if "lint" in checks:
-            commands.append(("lint", "swift build"))
+        if "build" in checks:
+            commands.append(("build", "swift build"))
+        if "lint" in checks and shutil.which("swift-format"):
+            commands.append(("lint", "swift-format lint --strict ."))
 
     if (root / "mix.exs").is_file():
         if "tests" in checks:
