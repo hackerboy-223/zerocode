@@ -9,6 +9,7 @@ import pytest
 from zerocode import maintenance
 
 
+
 def test_latest_release_tag_accepts_semver(monkeypatch):
     class Response:
         status_code = 200
@@ -21,6 +22,7 @@ def test_latest_release_tag_accepts_semver(monkeypatch):
 
     monkeypatch.setattr(maintenance.httpx, "get", lambda *args, **kwargs: Response())
     assert maintenance.latest_release_tag() == "v1.2.3"
+
 
 
 def test_latest_release_tag_rejects_untrusted_tag(monkeypatch):
@@ -38,6 +40,7 @@ def test_latest_release_tag_rejects_untrusted_tag(monkeypatch):
         maintenance.latest_release_tag()
 
 
+
 def test_latest_release_tag_reports_missing_release(monkeypatch):
     class Response:
         status_code = 404
@@ -53,9 +56,11 @@ def test_latest_release_tag_reports_missing_release(monkeypatch):
         maintenance.latest_release_tag()
 
 
+
 def test_pipx_command_prefers_binary(monkeypatch):
     monkeypatch.setattr(maintenance.shutil, "which", lambda name: "/usr/bin/pipx" if name == "pipx" else None)
     assert maintenance.pipx_command() == ["/usr/bin/pipx"]
+
 
 
 def test_pipx_manages_zerocode_from_json(monkeypatch):
@@ -70,6 +75,7 @@ def test_pipx_manages_zerocode_from_json(monkeypatch):
     assert maintenance.pipx_manages_zerocode(["pipx"])
 
 
+
 def test_pipx_does_not_claim_unrelated_package(monkeypatch):
     monkeypatch.setattr(
         maintenance.subprocess,
@@ -80,6 +86,7 @@ def test_pipx_does_not_claim_unrelated_package(monkeypatch):
         ),
     )
     assert not maintenance.pipx_manages_zerocode(["pipx"])
+
 
 
 def test_release_asset_checksum_accepts_matching_digest(monkeypatch, tmp_path):
@@ -104,6 +111,7 @@ def test_release_asset_checksum_accepts_matching_digest(monkeypatch, tmp_path):
         destination=destination,
     )
     assert destination.read_bytes() == payload
+
 
 
 def test_update_reinstalls_verified_release_wheel(monkeypatch):
@@ -139,6 +147,7 @@ def test_update_reinstalls_verified_release_wheel(monkeypatch):
     assert Path(calls[0][3]).parent.name.startswith("zerocode-update-")
 
 
+
 def test_repair_reinstalls_the_current_release(monkeypatch, tmp_path):
     calls: list[list[str]] = []
     wheel_name = "zerocode-1.0.0-py3-none-any.whl"
@@ -167,6 +176,7 @@ def test_repair_reinstalls_the_current_release(monkeypatch, tmp_path):
     assert len(calls) == 1
     assert calls[0][:3] == ["pipx", "install", "--force"]
     assert calls[0][3].endswith(wheel_name)
+
 
 
 def test_rollback_uses_the_requested_validated_tag(monkeypatch):
@@ -205,6 +215,7 @@ def test_rollback_uses_the_requested_validated_tag(monkeypatch):
     assert calls[0][3].endswith(wheel_name)
 
 
+
 def test_rollback_rejects_an_untrusted_tag(monkeypatch):
     monkeypatch.setattr(
         maintenance,
@@ -216,11 +227,13 @@ def test_rollback_rejects_an_untrusted_tag(monkeypatch):
     assert "tag de version demandé est invalide" in message
 
 
+
 def test_windows_update_uses_standalone_installer(monkeypatch):
     monkeypatch.setattr(maintenance.os, "name", "nt")
     ok, message = maintenance.update_from_release()
     assert not ok
     assert "PowerShell" in message
+
 
 
 def test_windows_uninstall_requires_closed_application(monkeypatch):
@@ -229,6 +242,7 @@ def test_windows_uninstall_requires_closed_application(monkeypatch):
     assert not ok
     assert "pipx uninstall zerocode" in message
     assert "sessions" in message
+
 
 
 def test_uninstall_keeps_user_data_by_default(tmp_path, monkeypatch):
@@ -253,6 +267,7 @@ def test_uninstall_keeps_user_data_by_default(tmp_path, monkeypatch):
     assert "conservées" in message
     assert config.is_dir()
     assert data.is_dir()
+
 
 
 def test_uninstall_removes_only_application_data_when_requested(tmp_path, monkeypatch):
@@ -285,6 +300,7 @@ def test_uninstall_removes_only_application_data_when_requested(tmp_path, monkey
     assert data_parent.is_dir()
 
 
+
 def test_uninstall_does_not_delete_data_when_pipx_fails(tmp_path, monkeypatch):
     config = tmp_path / "config" / "zerocode"
     data = tmp_path / "data" / "zerocode"
@@ -307,6 +323,7 @@ def test_uninstall_does_not_delete_data_when_pipx_fails(tmp_path, monkeypatch):
     assert "ont été conservées" in message
     assert config.is_dir()
     assert data.is_dir()
+
 
 
 def test_release_asset_checksum_rejects_changed_download(monkeypatch, tmp_path):
