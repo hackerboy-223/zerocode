@@ -246,7 +246,7 @@ download_verified_asset() {
     curl -fsSL --retry 3 "$checksum_url" -o "$BUILD_DIR/SHA256SUMS"
   fi
 
-  expected_hash="$(awk -v file="$ASSET_NAME" '$2 == file || $2 == "*" file {print $1; exit}' "$BUILD_DIR/SHA256SUMS")"
+  expected_hash="$(awk -v file="$ASSET_NAME" 'length($0) >= 67 && substr($0, 65, 2) == "  " && substr($0, 67) == file {print substr($0, 1, 64); exit}' "$BUILD_DIR/SHA256SUMS")"
   [[ "$expected_hash" =~ ^[A-Fa-f0-9]{64}$ ]] || die "Aucune empreinte SHA-256 valide pour $ASSET_NAME."
   if command -v sha256sum >/dev/null 2>&1; then
     actual_hash="$(sha256sum "$ASSET_PATH" | awk '{print $1}')"
