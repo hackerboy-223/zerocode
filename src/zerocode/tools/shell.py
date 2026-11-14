@@ -22,7 +22,7 @@ MAX_COMMAND_TIMEOUT = 3_600
 TERMINATE_GRACE = 2.0
 SUDO_COMMAND_RE = re.compile(
     r"(?P<prefix>(?:^|[;&|(\n]|&&|\|\|)\s*"
-    r"(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*)?)"
+    r"(?:(?:(?:env|command)\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*)?)"
     r"(?P<sudo>(?:[\w./-]*/)?sudo)(?P<suffix>(?=\s|$|[;&|)]))"
 )
 
