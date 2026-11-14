@@ -597,3 +597,61 @@ def test_git_diff_refuses_explicit_secret_path(tmp_path):
     result = call(registry, "git_diff", path=".env")
     assert result.startswith("ERREUR:")
     assert "protege" in result
+
+def test_pre_tool_hook_can_block_an_action(tmp_path):
+    context = ToolContext(
+        cwd=tmp_path,
+        run_hook=lambda event, name, args, result: (
+            "security policy" if event == "PreToolUse" and name == "write" else None
+        ),
+    )
+    registry = build_registry(context, PermissionManager(mode="allow", interactive=False))
+
+    result = call(registry, "write", path="blocked.txt", content="nope")
+
+    assert "security policy" in result
+    assert not (tmp_path / "blocked.txt").exists()
+
+
+def test_post_tool_hook_runs_after_successful_execution(tmp_path):
+    events = []
+
+    def hook(event, name, args, result):
+        events.append((event, name))
+        if event == "PostToolUse":
+            return "audit logger unavailable"
+        return None
+
+    (tmp_path / "note.txt").write_text("hello", encoding="utf-8")
+    context = ToolContext(cwd=tmp_path, run_hook=hook)
+    registry = build_registry(context, PermissionManager(mode="allow", interactive=False))
+
+    result = call(registry, "read", path="note.txt")
+
+    assert "hello" in result
+    assert "[Hook PostToolUse] audit logger unavailable" in result
+    assert events == [("PreToolUse", "read"), ("PostToolUse", "read")]
+
+
+def test_hook_manager_can_deny_before_tool_execution(tmp_path):
+    from zerocode.hooks import HookManager
+
+    manager = HookManager(
+        {
+            "PreToolUse": [
+                {
+                    "command": sys.executable,
+                    "args": [
+                        "-c",
+                        "import json,sys; event=json.load(sys.stdin); "
+                        "print(json.dumps({'decision':'deny','reason':event['tool']}))",
+                    ],
+                }
+            ]
+        },
+        tmp_path,
+    )
+
+    reason = manager.run("PreToolUse", "bash", {"command": "id"})
+
+    assert reason == "bash"
