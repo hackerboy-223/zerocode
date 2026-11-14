@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      - run: npm ci
       - run: npm run build
 
   native:
@@ -50,17 +50,25 @@ jobs:
             libayatana-appindicator3-dev librsvg2-dev \
             libxdo-dev patchelf
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path desktop/src-tauri/Cargo.toml -- --check
       - name: Check native application
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+        run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml
 
   python:
-    name: Desktop bridge tests
+    name: Desktop bridge · Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e ".[dev]"
       - run: ruff check src/zerocode/desktop_bridge.py tests/test_desktop_bridge.py
       - run: pytest -q tests/test_desktop_bridge.py
