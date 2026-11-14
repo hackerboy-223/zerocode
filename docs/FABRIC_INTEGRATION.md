@@ -24,9 +24,12 @@ zerocode skills --sync-fabric --force  # actualiser aussi les ressources existan
 zerocode skills                       # voir les Skills importés
 zerocode strategies                   # voir les stratégies installées
 zerocode strategies --show cot        # afficher le prompt d'une stratégie
+# Dans une session ZeroCode :
+/strategy cot                          # activer la stratégie pour cette session
+/strategy off                          # revenir au mode standard
 ```
 
-Les fichiers existants ne sont pas écrasés sans `--force`, afin de préserver les modifications locales. Les Patterns sont des instructions Markdown et ne sont jamais exécutés comme du code. Les stratégies restent stockées séparément des Skills.
+Les fichiers existants ne sont pas écrasés sans `--force`, afin de préserver les modifications locales. Les Patterns sont des instructions Markdown et ne sont jamais exécutés comme du code. Les stratégies restent stockées séparément des Skills et peuvent être activées dans une session avec `/strategy <nom|off>`.
 
 ## Source et licence
 
