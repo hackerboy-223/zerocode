@@ -41,7 +41,7 @@ Le cœur de l'agent reste synchrone : une requête, un flux, un tour d'agent. Le
 | `prompts.py` | prompt système et instructions projet |
 | `security.py` | masquage DLP des secrets (`redact_secrets`) et pare-feu contre les commandes shell destructrices (`check_dangerous_command`) |
 | `checkpoints.py` | sauvegarde atomique avant écriture/édition et restauration sécurisée (`/undo`) |
-| `mcp.py` | client JSON-RPC stdio pour outils, ressources et prompts MCP, avec environnement assaini et approbation des actions distantes |
+| `mcp.py` | client JSON-RPC stdio pour outils, ressources et prompts MCP, avec environnement assaini et approbation des actions distantes |\n| `hooks.py` | hooks locaux `PreToolUse` / `PostToolUse`, lancés sans shell depuis la configuration globale utilisateur |
 | `tools/` | outils de fichiers, recherche, Git, shell, web, cartographie et vérification multi-stack, tâches, sous-agents spécialisés et permissions |
 
 ## Déroulement d'un tour
@@ -86,7 +86,7 @@ Les modes agent sont gérés par `Agent.set_mode` :
 
 - `build` : tous les outils sont proposés au modèle.
 - `plan` : `ToolRegistry.read_only` masque les outils dont l'approbation n'est pas `never` et refuse leur exécution ; le prompt système reçoit une consigne de lecture seule.
-- `full-stack` : preset autonome (`FULL_STACK_PRESET`) avec raisonnement max, 128k jetons de sortie, 500 étapes, timeout 3600 s, compaction à 0.95, permissions `allow`, raisonnement affiché et auto-continuation tant qu'il reste des tâches non terminées dans `todos`. Le prompt système impose de cartographier le dépôt (`project_map`), planifier, déléguer les analyses aux sous-agents spécialisés en lecture seule, puis vérifier tests/lint/types/build via `project_verify`. L'agent peut effectuer jusqu'à six reprises automatiques de continuation lorsqu'il reste des tâches. Les intégrations MCP nécessitent toujours une confirmation dédiée. Les réglages précédents sont sauvegardés en mémoire et restaurés dès que l'on quitte le mode.
+- `full-stack` : preset autonome (`FULL_STACK_PRESET`) avec raisonnement max, 128k jetons de sortie, 500 étapes, timeout 3600 s, compaction à 0.95, permissions `allow`, raisonnement affiché et auto-continuation tant qu'il reste des tâches non terminées dans `todos`. Le prompt système impose de cartographier le dépôt (`project_map`), planifier, déléguer les analyses aux sous-agents spécialisés en lecture seule, puis vérifier tests/lint/types/build via `project_verify`. L'agent peut effectuer jusqu'à six reprises automatiques de continuation lorsqu'il reste des tâches. Les outils MCP non fiables nécessitent une confirmation dédiée ; un serveur marqué `trusted: true` dans la configuration globale utilisateur peut suivre les permissions de la session. Les hooks `PreToolUse` et `PostToolUse` complètent ce contrôle. Les réglages précédents sont sauvegardés en mémoire et restaurés dès que l'on quitte le mode.
 
 ## Capacités d'autonomie
 
