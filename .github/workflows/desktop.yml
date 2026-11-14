@@ -7,6 +7,10 @@ on:
       - "desktop/**"
       - "src/zerocode/**"
       - "tests/test_desktop_bridge.py"
+      - "install.sh"
+      - "install.ps1"
+      - "README.md"
+      - "docs/DESKTOP.md"
       - ".github/workflows/desktop.yml"
   pull_request:
     branches: [main]
@@ -76,3 +80,30 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: ruff check src/zerocode/desktop_bridge.py src/zerocode/checkpoints.py src/zerocode/tools/base.py src/zerocode/tools/files.py src/zerocode/tools/shell.py src/zerocode/security.py tests/test_desktop_bridge.py tests/test_checkpoints.py tests/test_tools.py
       - run: pytest -q tests/test_desktop_bridge.py tests/test_checkpoints.py tests/test_tools.py
+
+  installer-linux:
+    name: Linux installer syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell installer
+        run: |
+          bash -n install.sh
+          bash install.sh --help
+
+  installer-windows:
+    name: Windows installer syntax
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell installer
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "install.ps1"), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+          Write-Host "install.ps1 syntax is valid."
