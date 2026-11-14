@@ -31,6 +31,6 @@ Les paquets Linux DEB et AppImage sont configurés pour la machine de développe
 
 ## Sécurité actuelle
 
-Le mode prudent est sélectionné par défaut. Le CLI est lancé avec --permissions ask ; le protocole JSON actuel ne sait pas encore traiter une demande d'approbation interactive, donc les opérations nécessitant une autorisation sont refusées dans ce mode. Le mode autonome doit être activé explicitement dans l'interface ; il lance alors le moteur avec --permissions allow, autorisant les modifications et commandes avec les droits du compte utilisateur.
+Le mode prudent est sélectionné par défaut. Le CLI utilise un protocole JSON bidirectionnel : chaque opération qui nécessite une autorisation déclenche une demande dans l'interface, et l'agent attend la réponse avant de continuer. Le mode autonome doit être activé explicitement dans l'interface ; il lance alors le moteur avec --permissions allow, autorisant les modifications et commandes avec les droits du compte utilisateur.
 
 N'active le mode autonome que dans un dépôt de confiance. Le terminal est un shell complet et n'est pas une sandbox. Le processus de commande et l'accès aux fichiers sont locaux ; le fournisseur de modèle peut toutefois être distant. Pour conserver aussi l'inférence sur la machine, configure un fournisseur local comme Ollama. Une prochaine étape doit ajouter un protocole d'approbation JSON bidirectionnel pour afficher chaque demande sensible avant de l'autoriser.
