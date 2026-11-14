@@ -7,6 +7,7 @@ from rich.console import Console
 from zerocode import cli
 
 
+
 def test_json_without_prompt_is_rejected(monkeypatch):
     def fail(name):
         raise AssertionError("TUI ne doit pas etre lancee")
@@ -18,6 +19,7 @@ def test_json_without_prompt_is_rejected(monkeypatch):
     assert code == 1
     assert "necessite un prompt" in stream.getvalue()
 
+
 def test_update_check_reports_available_release(monkeypatch):
     monkeypatch.setattr(cli, "latest_release_tag", lambda: "v99.0.0")
     stream = io.StringIO()
@@ -25,6 +27,7 @@ def test_update_check_reports_available_release(monkeypatch):
     assert code == 0
     assert "99.0.0" in stream.getvalue()
     assert "zerocode update" in stream.getvalue()
+
 
 
 def test_repair_command_reinstalls_without_prompt_when_yes(monkeypatch):
@@ -35,6 +38,7 @@ def test_repair_command_reinstalls_without_prompt_when_yes(monkeypatch):
     assert code == 0
     assert calls == [True]
     assert "Réparation terminée" in stream.getvalue()
+
 
 
 def test_rollback_command_uses_requested_version(monkeypatch):
@@ -49,6 +53,7 @@ def test_rollback_command_uses_requested_version(monkeypatch):
     assert code == 0
     assert calls == ["v1.0.0"]
     assert "v1.0.0" in stream.getvalue()
+
 
 
 def test_uninstall_command_passes_explicit_data_removal(monkeypatch):
