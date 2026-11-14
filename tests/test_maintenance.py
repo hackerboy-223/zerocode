@@ -208,6 +208,7 @@ def test_uninstall_does_not_delete_data_when_pipx_fails(tmp_path, monkeypatch):
     assert config.is_dir()
     assert data.is_dir()
 
+
 def test_release_asset_checksum_rejects_changed_download(monkeypatch, tmp_path):
     import hashlib
 
