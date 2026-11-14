@@ -7,7 +7,9 @@
     "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

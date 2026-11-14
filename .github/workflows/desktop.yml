@@ -1,0 +1,63 @@
+name: Desktop
+
+on:
+  push:
+    branches: [feature/zerocode-desktop]
+    paths:
+      - "desktop/**"
+      - "src/zerocode/**"
+      - "tests/test_desktop_bridge.py"
+      - ".github/workflows/desktop.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "src/zerocode/**"
+      - "tests/test_desktop_bridge.py"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: TypeScript and Vite
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm install
+      - run: npm run build
+
+  native:
+    name: Tauri and PTY compile check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y             build-essential curl wget file             libssl-dev libgtk-3-dev             libwebkit2gtk-4.1-dev             libayatana-appindicator3-dev librsvg2-dev             libxdo-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check native application
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+
+  python:
+    name: Desktop bridge tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check src/zerocode/desktop_bridge.py tests/test_desktop_bridge.py
+      - run: pytest -q tests/test_desktop_bridge.py
