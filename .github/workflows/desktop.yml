@@ -18,6 +18,10 @@ on:
       - "desktop/**"
       - "src/zerocode/**"
       - "tests/test_desktop_bridge.py"
+      - "install.sh"
+      - "install.ps1"
+      - "README.md"
+      - "docs/DESKTOP.md"
       - ".github/workflows/desktop.yml"
   workflow_dispatch:
 
