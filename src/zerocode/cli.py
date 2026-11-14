@@ -877,6 +877,7 @@ def print_chat_help(console: Console) -> None:
         ("/tools", "lister les outils"),
         ("/skills", "lister les profils d'expertise"),
         ("/skill <nom|all|off>", "activer ou basculer un profil d'expertise"),
+        ("/strategy <nom|off>", "activer une stratégie Fabric pour la session"),
         ("/audit [chemin]", "lancer un audit statique de securite"),
         ("/doctor", "diagnostic systeme, reseau et Git"),
         ("/models", "catalogue des modeles"),
