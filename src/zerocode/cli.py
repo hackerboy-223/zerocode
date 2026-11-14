@@ -26,6 +26,7 @@ from .checkpoints import CheckpointStore
 from .config import (
     Config,
     config_dir,
+    data_dir,
     default_config_path,
     keys_path,
     load_config,
@@ -37,6 +38,7 @@ from .config import (
 from .errors import ConfigError, ToolError, ZeroCodeError
 from .hooks import HookManager
 from .mcp import MCPManager, register_mcp_tools
+from .maintenance import latest_release_tag, uninstall_from_pipx, update_from_release
 from .prompts import remember_project_instruction
 from .providers import (
     applied_providers,
@@ -72,6 +74,8 @@ COMMANDS = {
     "tui",
     "desktop-bridge",
     "completion",
+    "update",
+    "uninstall",
 }
 
 
@@ -118,6 +122,10 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return config_command(argv[1:], console)
     if first == "completion":
         return completion_command(argv[1:], console)
+    if first == "update":
+        return update_command(argv[1:], console)
+    if first == "uninstall":
+        return uninstall_command(argv[1:], console)
     if first == "tui":
         return run_agent(argv[1:], console, force_tui=True)
     if first == "desktop-bridge":
@@ -825,6 +833,7 @@ def print_global_help(console: Console | None = None) -> None:
     text.append("Usage\n", style="bold cyan")
     text.append("  zerocode [options] [prompt...]\n")
     text.append("  zerocode setup | doctor | audit | skills | strategies | models | providers | sessions | config\n")
+    text.append("  zerocode update [--check] | uninstall [--remove-data]\n")
     text.append("  zerocode tui [-m modele]\n\n")
     text.append("Démarrage\n", style="bold cyan")
     text.append("  zerocode                 interface TUI interactive\n")
@@ -1063,6 +1072,59 @@ def completion_command(args_list: list[str], console: Console) -> int:
         )
     sys.stdout.write(script)
     return 0
+
+
+def update_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode update")
+    parser.add_argument("--check", action="store_true", help="Vérifier la dernière version sans installer.")
+    args = parser.parse_args(args_list)
+
+    if args.check:
+        try:
+            tag = latest_release_tag()
+        except Exception as exc:  # Le réseau et l'API GitHub peuvent être indisponibles.
+            console.print(Text(f"Impossible de vérifier les releases : {exc}", style="red"))
+            return 1
+        latest = tag.removeprefix("v")
+        if latest == __version__:
+            console.print(Text(f"ZeroCode {__version__} est à jour.", style="green"))
+        else:
+            console.print(Text(f"Une nouvelle version est disponible : {latest} (installée : {__version__}).", style="yellow"))
+            console.print(Text("Lance zerocode update pour l'installer.", style="dim"))
+        return 0
+
+    console.print(Text("Recherche de la dernière version stable…", style="cyan"))
+    ok, message = update_from_release()
+    console.print(Text(message, style="green" if ok else "red"))
+    return 0 if ok else 1
+
+
+def uninstall_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode uninstall")
+    parser.add_argument("--remove-data", action="store_true", help="Supprimer aussi la configuration, les clés et les sessions.")
+    parser.add_argument("--yes", action="store_true", help="Ne pas demander de confirmation.")
+    args = parser.parse_args(args_list)
+
+    console.print(Text("Cette opération désinstalle le moteur ZeroCode géré par pipx.", style="bold"))
+    if args.remove_data:
+        console.print(Text("Les données suivantes seront également supprimées :", style="yellow"))
+        console.print(Text(f"  Configuration et clés : {config_dir()}", style="dim"))
+        console.print(Text(f"  Sessions et données : {data_dir()}", style="dim"))
+    else:
+        console.print(Text("La configuration, les clés API et les sessions seront conservées.", style="dim"))
+
+    if not args.yes:
+        try:
+            confirmed = Confirm.ask("Continuer ?", default=False, console=console)
+        except (EOFError, KeyboardInterrupt):
+            return 130
+        if not confirmed:
+            console.print(Text("Désinstallation annulée.", style="yellow"))
+            return 0
+
+    ok, message = uninstall_from_pipx(remove_data=args.remove_data)
+    console.print(Text(message, style="green" if ok else "red"))
+    return 0 if ok else 1
 
 
 def setup_command(args_list: list[str], console: Console) -> int:
