@@ -1,8 +1,8 @@
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize, PtySystem};
+use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize, PtySystem};
 use std::{env, io::{Read, Write}, path::PathBuf, process::{Command, Stdio}, thread};
 use tauri::{AppHandle, Emitter, State};
 
-struct TerminalSession { writer: Box<dyn Write + Send>, master: Box<dyn MasterPty + Send> }
+struct TerminalSession { writer: Box<dyn Write + Send>, master: Box<dyn MasterPty + Send>, child: Box<dyn Child + Send + Sync> }
 #[derive(Default)]
 struct AppState { terminal: std::sync::Mutex<Option<TerminalSession>> }
 
@@ -31,7 +31,7 @@ fn terminal_start(app: AppHandle, state: State<'_, AppState>, cwd: String) -> Re
     {
         let mut slot = state.terminal.lock().map_err(|_| "Verrou terminal indisponible.")?;
         slot.take();
-        *slot = Some(TerminalSession { writer, master });
+        *slot = Some(TerminalSession { writer, master, child });
     }
     thread::spawn(move || {
         let mut buffer = [0_u8; 8192];
@@ -45,7 +45,6 @@ fn terminal_start(app: AppHandle, state: State<'_, AppState>, cwd: String) -> Re
                 Err(_) => break,
             }
         }
-        drop(child);
     });
     Ok(())
 }
@@ -68,7 +67,7 @@ fn terminal_resize(state: State<'_, AppState>, cols: u16, rows: u16) -> Result<(
 #[tauri::command]
 fn terminal_stop(state: State<'_, AppState>) -> Result<(), String> {
     let mut slot = state.terminal.lock().map_err(|_| "Verrou terminal indisponible.")?;
-    slot.take();
+    if let Some(mut session) = slot.take() { let _ = session.child.kill(); let _ = session.child.wait(); }
     Ok(())
 }
 
