@@ -3,8 +3,8 @@ from __future__ import annotations
 import io
 
 from rich.console import Console
-from zerocode import cli
 
+from zerocode import cli
 
 
 def test_json_without_prompt_is_rejected(monkeypatch):
@@ -28,7 +28,6 @@ def test_update_check_reports_available_release(monkeypatch):
     assert "zerocode update" in stream.getvalue()
 
 
-
 def test_repair_command_reinstalls_without_prompt_when_yes(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "repair_from_release", lambda: (calls.append(True) or True, "Réparation terminée."))
@@ -37,7 +36,6 @@ def test_repair_command_reinstalls_without_prompt_when_yes(monkeypatch):
     assert code == 0
     assert calls == [True]
     assert "Réparation terminée" in stream.getvalue()
-
 
 
 def test_rollback_command_uses_requested_version(monkeypatch):
@@ -52,7 +50,6 @@ def test_rollback_command_uses_requested_version(monkeypatch):
     assert code == 0
     assert calls == ["v1.0.0"]
     assert "v1.0.0" in stream.getvalue()
-
 
 
 def test_uninstall_command_passes_explicit_data_removal(monkeypatch):
