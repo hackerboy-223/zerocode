@@ -8,7 +8,7 @@ Un serveur MCP est un programme externe : connecte uniquement des serveurs dont 
 
 Prérequis : Node.js 20+ et npm/npx disponibles dans le terminal.
 
-Dans le fichier `zerocode.json` à la racine du projet :
+Dans la configuration globale, `~/.config/zerocode/config.json` (ou le dossier défini par `XDG_CONFIG_HOME`) :
 
 ```json
 {
@@ -37,7 +37,7 @@ Documentation officielle : [Playwright MCP](https://github.com/microsoft/playwri
 
 ## Accès fichiers avec périmètre limité
 
-Tu peux ajouter un serveur de fichiers pour des opérations spécialisées sur un dossier précis :
+Tu peux ajouter un serveur de fichiers dans ce même fichier global pour des opérations spécialisées sur un dossier précis :
 
 ```json
 {
@@ -80,4 +80,4 @@ Même avec un serveur de confiance, les commandes système `sudo` conservent leu
 - Redémarre la session après toute modification de configuration.
 - Si un serveur MCP est indisponible, ZeroCode signale l'erreur sans bloquer le reste des outils intégrés.
 
-Les serveurs MCP sont des extensions facultatives. ZeroCode ne télécharge pas de navigateur ni de paquet npm dans son installation de base.
+Les serveurs MCP sont des extensions facultatives. Pour éviter qu'un dépôt cloné exécute un binaire arbitraire à son ouverture, les entrées `mcp_servers` présentes dans une configuration de projet (`zerocode.json` ou `.zerocode.json`) sont ignorées : seuls les serveurs déclarés dans la configuration globale détenue par l'utilisateur sont lancés. ZeroCode ne télécharge pas de navigateur ni de paquet npm dans son installation de base.
