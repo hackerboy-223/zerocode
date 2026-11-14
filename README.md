@@ -72,6 +72,34 @@ python -m pip install -e ".[dev]"
 pytest
 ruff check src tests
 ```
+## Versions, mises à jour et désinstallation
+
+Les versions Desktop sont construites sur GitHub Actions à partir des tags `vX.Y.Z`. Une release publie les paquets natifs Windows, macOS et Linux, ainsi que les distributions Python. Le workflow vérifie d'abord que les versions Python, Tauri, npm et Cargo correspondent au tag. Une fois les builds terminés, il joint un manifeste `SHA256SUMS` à la release.
+
+Pour créer une release, incrémente les versions dans `pyproject.toml`, `desktop/package.json`, `desktop/src-tauri/Cargo.toml` et `desktop/src-tauri/tauri.conf.json`, puis pousse un tag correspondant, par exemple `v1.0.1`. Le workflow refuse de publier si les versions divergent.
+
+Mettre à jour le moteur TUI installé avec pipx :
+
+```bash
+zerocode update --check
+zerocode update
+```
+
+Désinstaller le moteur en conservant les réglages, les clés API et les sessions :
+
+```bash
+zerocode uninstall
+```
+
+Supprimer aussi les réglages, les clés et les sessions (action irréversible) :
+
+```bash
+zerocode uninstall --remove-data
+```
+
+L'application Desktop installée par paquet reste gérée par le système : utilise les réglages d'applications de Windows/macOS, `sudo apt remove zerocode-desktop` sur Debian/Ubuntu ou `sudo dnf remove zerocode-desktop` sur Fedora. Une AppImage installée dans le dossier utilisateur peut être supprimée en retirant `~/.local/opt/zerocode`, son lanceur `~/.local/bin/zerocode-desktop` et son raccourci `.desktop`.
+
+Les releases ne sont pas encore signées par un certificat éditeur Windows ou Apple. Les sommes SHA-256 détectent une corruption de téléchargement, mais ne remplacent pas une signature cryptographique du fournisseur.
 ## Démarrage rapide
 
 Sans aucune clé :
