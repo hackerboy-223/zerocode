@@ -388,7 +388,7 @@ def register_project_tools(registry: ToolRegistry) -> None:
             name="project_verify",
             description=(
                 "Detect and run the project's available test, lint, type-check and build scripts. "
-                "Uses package.json, Composer, Python, Go, Rust or JVM conventions. Run after meaningful changes."
+                "Uses package.json, Composer, Python, Go, Rust, JVM, Ruby, .NET, Dart/Flutter, Swift or Elixir conventions. Run after meaningful changes."
             ),
             parameters={
                 "type": "object",
