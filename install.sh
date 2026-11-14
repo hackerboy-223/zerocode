@@ -285,7 +285,7 @@ install_rust() {
   [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
   command -v rustup >/dev/null 2>&1 || die "Rustup n'est pas disponible dans ce terminal. Rouvre le terminal puis relance."
   rustup toolchain install stable --profile minimal
-  rustup default stable
+  export RUSTUP_TOOLCHAIN="stable"
   success "Rust : $(rustc --version)"
 }
 
