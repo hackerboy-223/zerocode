@@ -5,3 +5,5 @@
 .terminal.closed .terminal-host{display:none}
 
 .file-tree{flex:1;min-height:0;overflow:auto;padding:8px 6px}.file-row{height:27px;display:flex;align-items:center;gap:8px;border-radius:5px;padding-right:8px;color:#8995a7;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.file-row svg{flex:none;color:#8498b8}.file-row.directory{color:#c3cddd;font-weight:600}.file-row.directory svg{color:#a6bfe7}.file-row:hover{background:#222832;color:#e5ebf4}
+
+.approval-modal>pre{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#11151c;border:1px solid #343c49;border-radius:8px;padding:12px;color:#cbd7e8;font:10px/1.6 ui-monospace,monospace}.approval-modal>.modal-head>svg{color:#a9c6f4}.sudo-input{width:100%;height:38px;border:1px solid #3b4350;background:#12151b;border-radius:7px;padding:0 11px;color:#e3eaf4;font-size:11px;outline:none}.modal-actions button:disabled{opacity:.4;cursor:not-allowed}
