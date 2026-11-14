@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -24,6 +25,7 @@ class Checkpoint:
     content: str
     tool: str
     created_at: str
+    after_hash: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -32,6 +34,7 @@ class Checkpoint:
             "content": self.content,
             "tool": self.tool,
             "created_at": self.created_at,
+            "after_hash": self.after_hash,
         }
 
     @classmethod
@@ -45,6 +48,7 @@ class Checkpoint:
             content=str(data.get("content") or ""),
             tool=str(data.get("tool") or ""),
             created_at=str(data.get("created_at") or ""),
+            after_hash=(str(data["after_hash"]) if data.get("after_hash") else None),
         )
 
 
@@ -74,7 +78,22 @@ class CheckpointStore:
         self._save(session_id, entries[-MAX_ENTRIES:])
         return True
 
-    def undo(self, session_id: str) -> tuple[bool, str]:
+    def mark_applied(self, session_id: str, path: Path) -> bool:
+        """Mémorise l'état produit par l'agent pour protéger les changements ultérieurs."""
+        target = path.resolve()
+        try:
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        except OSError:
+            return False
+        entries = self._load(session_id)
+        for checkpoint in reversed(entries):
+            if Path(checkpoint.path) == target and checkpoint.after_hash is None:
+                checkpoint.after_hash = digest
+                self._save(session_id, entries)
+                return True
+        return False
+
+    def undo(self, session_id: str, workspace: Path | None = None) -> tuple[bool, str]:
         entries = self._load(session_id)
         if not entries:
             return False, "Aucune modification a annuler."
@@ -83,6 +102,22 @@ class CheckpointStore:
         if ".git" in path.parts or is_secret_path(path):
             return False, f"Restauration refusee pour le chemin sensible: {path}"
         try:
+            if workspace is not None:
+                root = workspace.expanduser().resolve()
+                resolved = path.resolve(strict=False)
+                parent = path.parent.resolve(strict=True)
+                if not resolved.is_relative_to(root) or not parent.is_relative_to(root):
+                    return False, f"Restauration refusee hors du dossier de travail: {path}"
+            if checkpoint.after_hash is not None:
+                current_hash = (
+                    hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+                )
+                if current_hash != checkpoint.after_hash:
+                    return (
+                        False,
+                        f"Restauration refusee: {path} a change depuis le checkpoint. "
+                        "Les modifications recentes ont ete preservees.",
+                    )
             if checkpoint.existed:
                 _atomic_text_write(path, checkpoint.content)
                 message = f"Restaure {path} (avant {checkpoint.tool or 'modification'})."
