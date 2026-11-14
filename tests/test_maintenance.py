@@ -107,6 +107,7 @@ def test_release_asset_checksum_accepts_matching_digest(monkeypatch, tmp_path):
 
 
 def test_update_reinstalls_verified_release_wheel(monkeypatch):
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: False)
     calls: list[list[str]] = []
     wheel_name = "zerocode-1.0.1-py3-none-any.whl"
     wheel_url = f"https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/{wheel_name}"
@@ -140,6 +141,7 @@ def test_update_reinstalls_verified_release_wheel(monkeypatch):
 
 
 def test_repair_reinstalls_the_current_release(monkeypatch, tmp_path):
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: False)
     calls: list[list[str]] = []
     wheel_name = "zerocode-1.0.0-py3-none-any.whl"
     assets = {
@@ -170,6 +172,7 @@ def test_repair_reinstalls_the_current_release(monkeypatch, tmp_path):
 
 
 def test_rollback_uses_the_requested_validated_tag(monkeypatch):
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: False)
     calls: list[list[str]] = []
     wheel_name = "zerocode-0.9.0-py3-none-any.whl"
     assets = {
@@ -206,6 +209,7 @@ def test_rollback_uses_the_requested_validated_tag(monkeypatch):
 
 
 def test_rollback_rejects_an_untrusted_tag(monkeypatch):
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: False)
     monkeypatch.setattr(
         maintenance,
         "latest_release_details",
@@ -217,14 +221,14 @@ def test_rollback_rejects_an_untrusted_tag(monkeypatch):
 
 
 def test_windows_update_uses_standalone_installer(monkeypatch):
-    monkeypatch.setattr(maintenance.os, "name", "nt")
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: True)
     ok, message = maintenance.update_from_release()
     assert not ok
     assert "PowerShell" in message
 
 
 def test_windows_uninstall_requires_closed_application(monkeypatch):
-    monkeypatch.setattr(maintenance.os, "name", "nt")
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: True)
     ok, message = maintenance.uninstall_from_pipx()
     assert not ok
     assert "pipx uninstall zerocode" in message
@@ -232,6 +236,7 @@ def test_windows_uninstall_requires_closed_application(monkeypatch):
 
 
 def test_uninstall_keeps_user_data_by_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: False)
     config = tmp_path / "config" / "zerocode"
     data = tmp_path / "data" / "zerocode"
     config.mkdir(parents=True)
@@ -256,6 +261,7 @@ def test_uninstall_keeps_user_data_by_default(tmp_path, monkeypatch):
 
 
 def test_uninstall_removes_only_application_data_when_requested(tmp_path, monkeypatch):
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: False)
     config_parent = tmp_path / "config"
     data_parent = tmp_path / "data"
     config = config_parent / "zerocode"
@@ -286,6 +292,7 @@ def test_uninstall_removes_only_application_data_when_requested(tmp_path, monkey
 
 
 def test_uninstall_does_not_delete_data_when_pipx_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(maintenance, "_is_windows", lambda: False)
     config = tmp_path / "config" / "zerocode"
     data = tmp_path / "data" / "zerocode"
     config.mkdir(parents=True)
