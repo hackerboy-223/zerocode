@@ -216,6 +216,21 @@ def test_rollback_rejects_an_untrusted_tag(monkeypatch):
     assert "tag de version demandé est invalide" in message
 
 
+def test_windows_update_uses_standalone_installer(monkeypatch):
+    monkeypatch.setattr(maintenance.os, "name", "nt")
+    ok, message = maintenance.update_from_release()
+    assert not ok
+    assert "PowerShell" in message
+
+
+def test_windows_uninstall_requires_closed_application(monkeypatch):
+    monkeypatch.setattr(maintenance.os, "name", "nt")
+    ok, message = maintenance.uninstall_from_pipx()
+    assert not ok
+    assert "pipx uninstall zerocode" in message
+    assert "sessions" in message
+
+
 def test_uninstall_keeps_user_data_by_default(tmp_path, monkeypatch):
     config = tmp_path / "config" / "zerocode"
     data = tmp_path / "data" / "zerocode"
