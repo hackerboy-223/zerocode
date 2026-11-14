@@ -212,7 +212,8 @@ def _run_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Mode headless: evenements et resultat en JSON Lines sur stdout.",
     )
-    parser.add_argument(
+
+    parser.add_argument("--desktop-protocol", action="store_true", help=argparse.SUPPRESS)    parser.add_argument(
         "--classic",
         action="store_true",
         help="Utiliser l'ancienne interface REPL au lieu du TUI.",
@@ -289,7 +290,7 @@ def run_agent(
 
     interactive = sys.stdin.isatty() or args.desktop_protocol
     ui = (
-        JsonUI()
+        JsonUI(approval_protocol=args.desktop_protocol)
         if args.json
         else ConsoleUI(
             config,
