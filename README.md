@@ -12,7 +12,7 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
 - Outils intégrés (14 outils) : lecture (`read`), écriture (`write`), édition (`edit`), édition multi-blocs atomique (`multi_edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), cartographie AST de symboles (`symbols`), audit statique de cybersécurité SAST (`security_audit`), diagnostic système/technicien (`sys_diag`), shell (`bash`), web (`fetch`, `web_search`), sous-agent d'exploration isolé (`subagent`), plan de tâches (`todo_write`), checkpoints atomiques (`/undo`) et serveurs MCP (`mcp_servers`).
 - Système de **Skills d'expertise** intégrés et extensibles (`/skills`, `/skill <nom>`, `--skill`) : `ultra-dev` (Ingénierie Senior), `cyber-sec` (Expert Cybersécurité, Audit OWASP/CWE & DevSecOps), `sys-tech` (Technicien Système, Réseau & Infra), `review` (Revue de code), `perf` (Haute Performance) et `sec-hardening` (Durcissement actif), plus découverte automatique de `.zerocode/skills/*.md` et `~/.config/zerocode/skills/*.md`.
-- Import optionnel des Patterns Fabric (développement, sécurité, recherche, rédaction, apprentissage, etc.) vers les skills locaux avec `python scripts/sync_fabric_patterns.py` ; aucun téléchargement ni appel réseau à l'installation. Guide : [`docs/FABRIC_INTEGRATION.md`](docs/FABRIC_INTEGRATION.md).
+- Intégration Fabric native : `zerocode skills --sync-fabric` télécharge les Patterns (développement, sécurité, recherche, rédaction, apprentissage, etc.) dans le catalogue local et les stratégies de raisonnement dans un répertoire séparé. `--force` actualise les ressources déjà installées. Guide : [`docs/FABRIC_INTEGRATION.md`](docs/FABRIC_INTEGRATION.md).
 - Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`), pré-injection directe des fichiers mentionnés avec `@chemin` (0 tour réseau) et cache TTL Git.
 - Diagnostics syntaxiques instantanés (Python AST, JSON, TOML, Shell `bash -n` et JavaScript `node --check`) après chaque écriture ou édition pour auto-correction immédiate.
 - Sessions reprenables, mémoire projet persistante (`/remember`), copie rapide (`/copy`, `Ctrl+Y`), compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
@@ -217,7 +217,8 @@ Les overrides disponibles : `--model`, `--provider`, `--free-only/--no-free-only
 | `zerocode --classic` | Ouvrir l'ancienne interface REPL |
 | `zerocode doctor [--live]` | Diagnostic local et test réel du routeur |
 | `zerocode audit [chemin]` | Audit statique de sécurité (SAST, secrets, OWASP/CWE, permissions) |
-| `zerocode skills [--json]` | Lister les profils d'expertise (Dev, Cyber-Sec, Sys-Tech et personnalisés) |
+| `zerocode skills [--json] [--sync-fabric] [--force]` | Lister les skills ou importer/actualiser les Patterns Fabric |
+| `zerocode strategies [--json] [--show NOM]` | Lister ou afficher les stratégies Fabric installées séparément |
 | `zerocode models [--free] [--live]` | Catalogue des modèles |
 | `zerocode providers` | État des fournisseurs et des clés |
 | `zerocode sessions` | Lister, reprendre ou supprimer des sessions |
