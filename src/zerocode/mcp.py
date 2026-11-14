@@ -328,6 +328,12 @@ def _register_tool(
     if not isinstance(schema, dict):
         schema = {"type": "object", "properties": {}}
     description = str(item.get("description") or f"Outil MCP {server_name}/{remote_name}.")
+    annotations = item.get("annotations")
+    read_only_hint = (
+        isinstance(annotations, dict)
+        and annotations.get("readOnlyHint") is True
+        and annotations.get("destructiveHint") is not True
+    )
 
     def handler(args: dict[str, Any], ctx: Any) -> str:
         try:
@@ -342,7 +348,7 @@ def _register_tool(
                 description=description[:1_000],
                 parameters=schema,
                 handler=handler,
-                approval="confirm",
+                approval="ask" if read_only_hint else "confirm",
             )
         )
     except ValueError:
@@ -377,7 +383,7 @@ def _register_resource_tool(
                 )[:1_000],
                 parameters={"type": "object", "properties": {}},
                 handler=handler,
-                approval="confirm",
+                approval="ask",
             )
         )
     except ValueError:
@@ -432,7 +438,7 @@ def _register_prompt_tool(
                 )[:1_000],
                 parameters=schema,
                 handler=handler,
-                approval="confirm",
+                approval="ask",
             )
         )
     except ValueError:
