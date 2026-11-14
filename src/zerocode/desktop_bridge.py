@@ -174,12 +174,17 @@ def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
     session = store.load(session_ref) if session_ref else store.latest(cwd)
     if session is None:
         session = store.new(cwd, config.model, config.provider)
-    elif Path(session.cwd).expanduser().resolve() != cwd:
-        raise ConfigError("Cette session appartient à un autre dossier de travail.")
+    else:
+        if Path(session.cwd).expanduser().resolve() != cwd:
+            raise ConfigError("Cette session appartient à un autre dossier de travail.")
+        if model is None:
+            config.model = session.model
+        if config.provider is None and session.provider:
+            config.provider = session.provider
 
     session.cwd = str(cwd)
     session.model = config.model
-    session.provider = config.provider or session.provider
+    session.provider = config.provider
 
     ui = DesktopBridgeUI()
     router = Router(config, ui=ui)

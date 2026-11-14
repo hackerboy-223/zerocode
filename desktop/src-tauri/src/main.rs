@@ -227,6 +227,20 @@ fn stop_terminal(
     Ok(())
 }
 
+fn desktop_path() -> std::ffi::OsString {
+    let mut paths: Vec<std::path::PathBuf> = env::var_os("PATH")
+        .map(|value| env::split_paths(&value).collect())
+        .unwrap_or_default();
+    if let Some(home) = env::var_os("HOME").map(std::path::PathBuf::from) {
+        for candidate in [home.join(".local").join("bin"), home.join(".cargo").join("bin")] {
+            if candidate.is_dir() && !paths.contains(&candidate) {
+                paths.push(candidate);
+            }
+        }
+    }
+    env::join_paths(paths).unwrap_or_else(|_| env::var_os("PATH").unwrap_or_default())
+}
+
 fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
     let mut attempts: Vec<(String, Vec<String>)> = Vec::new();
 
@@ -234,6 +248,38 @@ fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
         if !executable.trim().is_empty() {
             attempts.push((
                 executable,
+                vec![
+                    "desktop-bridge".to_string(),
+                    "--cwd".to_string(),
+                    workspace.to_string(),
+                ],
+            ));
+        }
+    }
+
+    if let Some(home) = env::var_os("HOME").map(std::path::PathBuf::from) {
+        let pipx_entry = home.join(".local").join("bin").join("zerocode");
+        let pipx_venv = home
+            .join(".local")
+            .join("share")
+            .join("pipx")
+            .join("venvs")
+            .join("zerocode")
+            .join("bin")
+            .join("zerocode");
+        if pipx_entry.is_file() {
+            attempts.push((
+                pipx_entry.to_string_lossy().into_owned(),
+                vec![
+                    "desktop-bridge".to_string(),
+                    "--cwd".to_string(),
+                    workspace.to_string(),
+                ],
+            ));
+        }
+        if pipx_venv.is_file() {
+            attempts.push((
+                pipx_venv.to_string_lossy().into_owned(),
                 vec![
                     "desktop-bridge".to_string(),
                     "--cwd".to_string(),
@@ -294,6 +340,7 @@ fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
         command
             .args(&arguments)
             .current_dir(workspace)
+            .env("PATH", desktop_path())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
