@@ -20,6 +20,7 @@ from .skills import (
 from .tokens import compact_messages, estimate_messages, truncate_text
 from .tools import PermissionManager, ToolContext, build_registry
 from .tools.files import _is_binary
+from .tools.subagent import ROLE_PROMPTS
 from .types import StreamCallbacks, Usage
 
 FILE_MENTION_RE = re.compile(r"(?:^|(?<=\s))@([A-Za-z0-9_./-]+)")
