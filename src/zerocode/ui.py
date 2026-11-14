@@ -77,6 +77,9 @@ class NullUI:
     def confirm_tool(self, name: str, args: dict[str, Any]) -> bool:
         return False
 
+    def confirm_sudo_command(self, command: str) -> bool:
+        return False
+
     def request_sudo_password(self, command: str) -> str | None:
         return None
 
@@ -298,6 +301,33 @@ class ConsoleUI:
             return bool(
                 Confirm.ask(
                     "Autoriser cette action ?",
+                    default=False,
+                    console=self.console,
+                )
+            )
+        except (EOFError, KeyboardInterrupt):
+            return False
+
+    def confirm_sudo_command(self, command: str) -> bool:
+        """Require a fresh, explicit approval for every privileged command."""
+        self.end_assistant()
+        self.console.print(
+            Panel(
+                Text(_safe(command), style="bold"),
+                title="Commande avec privilèges administrateur",
+                title_align="left",
+                border_style="red",
+                box=box.ROUNDED,
+                expand=False,
+            )
+        )
+        if not self.interactive:
+            self.warn("Commande sudo bloquée : une confirmation interactive est obligatoire.")
+            return False
+        try:
+            return bool(
+                Confirm.ask(
+                    "Autoriser cette commande avec les droits administrateur ?",
                     default=False,
                     console=self.console,
                 )
