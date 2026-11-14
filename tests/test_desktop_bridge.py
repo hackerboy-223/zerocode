@@ -18,7 +18,17 @@ def test_desktop_bridge_emits_json_lines() -> None:
 
 
 def test_desktop_bridge_waits_for_explicit_permission_response() -> None:
-    stream = io.StringIO()
+    class WaitingStream(io.StringIO):
+        def __init__(self) -> None:
+            super().__init__()
+            self.written = threading.Event()
+
+        def write(self, value: str) -> int:
+            result = super().write(value)
+            self.written.set()
+            return result
+
+    stream = WaitingStream()
     ui = DesktopBridgeUI(stream=stream, request_timeout=1)
     result: list[bool] = []
 
@@ -26,6 +36,7 @@ def test_desktop_bridge_waits_for_explicit_permission_response() -> None:
         target=lambda: result.append(ui.confirm_tool("write", {"path": "notes.txt"}))
     )
     worker.start()
+    assert stream.written.wait(timeout=1)
 
     request = json.loads(stream.getvalue().strip())
     assert request["type"] == "permission_request"

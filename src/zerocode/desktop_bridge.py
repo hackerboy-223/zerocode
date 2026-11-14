@@ -170,6 +170,39 @@ class DesktopBridgeUI:
         return password if isinstance(password, str) and password else None
 
 
+
+def _visible_history(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
+    visible: list[dict[str, str]] = []
+    for message in messages:
+        role = message.get("role")
+        if role not in {"user", "assistant"}:
+            continue
+        content = message.get("content")
+        if isinstance(content, list):
+            content = " ".join(
+                str(part.get("text", ""))
+                for part in content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        text = str(content or "").strip()
+        if text:
+            visible.append({"role": str(role), "content": text})
+    return visible
+
+
+def _session_summaries(store: SessionStore, cwd: Path) -> list[dict[str, str]]:
+    workspace = str(cwd.resolve())
+    return [
+        {
+            "id": str(item["id"]),
+            "title": str(item.get("title") or "Nouvelle conversation"),
+            "updated_at": str(item.get("updated_at") or ""),
+        }
+        for item in store.list()
+        if item.get("cwd") == workspace
+    ][:12]
+
+
 def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
     config = load_config(cwd, {})
     if model:
@@ -255,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
             provider=config.provider,
             permissions=config.permissions,
             available=bool(router.preview()),
+            messages=_visible_history(agent.messages),
+            sessions=_session_summaries(store, cwd),
         )
         turn_lock = threading.Lock()
         active = {"value": False}
@@ -280,6 +315,7 @@ def main(argv: list[str] | None = None) -> int:
                 ui.error(f"{exc.__class__.__name__}: {exc}")
             finally:
                 ui.usage(agent.usage, router.last)
+                ui.emit("sessions_changed", sessions=_session_summaries(store, cwd))
                 ui.emit("turn_complete")
                 with turn_lock:
                     active["value"] = False
@@ -328,7 +364,12 @@ def main(argv: list[str] | None = None) -> int:
             if kind == "new_session":
                 session = store.new(cwd, config.model, config.provider)
                 agent.load_session(session)
-                ui.emit("session_changed", session_id=agent.session.id)
+                ui.emit(
+                    "session_changed",
+                    session_id=agent.session.id,
+                    messages=_visible_history(agent.messages),
+                    sessions=_session_summaries(store, cwd),
+                )
                 continue
             if kind == "resume_session":
                 ref = str(message.get("session_id") or "")
@@ -337,7 +378,12 @@ def main(argv: list[str] | None = None) -> int:
                     ui.error("Session introuvable pour ce dossier.")
                     continue
                 agent.load_session(session)
-                ui.emit("session_changed", session_id=agent.session.id)
+                ui.emit(
+                    "session_changed",
+                    session_id=agent.session.id,
+                    messages=_visible_history(agent.messages),
+                    sessions=_session_summaries(store, cwd),
+                )
                 continue
             ui.error("Commande desktop non reconnue.")
 

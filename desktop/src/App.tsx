@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Activity, ArrowUpRight, Bot, Check, ChevronDown, CircleHelp, FileCode2, Folder,
+  Activity, ArrowUpRight, Bot, Check, ChevronDown, CircleHelp, FileCode2, Folder, MessageSquare,
   FolderOpen, GitBranch, History, Menu, MessageSquarePlus, MoreHorizontal,
   PanelRightClose, PanelRightOpen, Plus, Search, Send, Settings2, ShieldCheck,
   Sparkles, SquareTerminal, StopCircle, X
@@ -11,7 +11,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import Lupus from "./components/Lupus";
 import TerminalPanel from "./components/TerminalPanel";
 import { desktopInvoke, isTauri, listen } from "./lib/desktop";
-import type { AgentEvent, ChatMessage, PermissionRequest, ToolActivity } from "./types";
+import type { AgentEvent, ChatMessage, PermissionRequest, SessionSummary, ToolActivity } from "./types";
 
 const starterIdeas = [
   { title: "Comprendre le projet", prompt: "Cartographie ce projet, explique son architecture et repère les priorités." },
@@ -40,6 +40,7 @@ export default function App() {
   const agentIdRef = useRef<string | null>(null);
   const pendingAgentEventsRef = useRef<Array<{ agentId: string; event: AgentEvent }>>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activities, setActivities] = useState<ToolActivity[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -131,6 +132,13 @@ export default function App() {
     switch (event.type) {
       case "ready":
         setSessionId(String(event.session_id || ""));
+        const restoredMessages = Array.isArray(event.messages) ? event.messages as Array<{role: string; content: string}> : [];
+        setMessages(restoredMessages.map((message) => ({
+          id: makeId(),
+          role: message.role === "user" ? "user" : "assistant",
+          content: message.content
+        })));
+        setSessions(Array.isArray(event.sessions) ? event.sessions as SessionSummary[] : []);
         setModel(String(event.model || "auto"));
         setProvider(String(event.provider || ""));
         setMode("build");
@@ -184,10 +192,20 @@ export default function App() {
         if (event.model) setModel(String(event.model));
         if (event.provider) setProvider(String(event.provider));
         break;
-      case "session_changed":
+      case "session_changed": {
         setSessionId(String(event.session_id || ""));
-        setMessages([]);
+        const restoredMessages = Array.isArray(event.messages) ? event.messages as Array<{role: string; content: string}> : [];
+        setMessages(restoredMessages.map((message) => ({
+          id: makeId(),
+          role: message.role === "user" ? "user" : "assistant",
+          content: message.content
+        })));
+        setSessions(Array.isArray(event.sessions) ? event.sessions as SessionSummary[] : []);
         setActivities([]);
+        break;
+      }
+      case "sessions_changed":
+        setSessions(Array.isArray(event.sessions) ? event.sessions as SessionSummary[] : []);
         break;
       case "mode_changed":
         setMode(String(event.mode || "build"));
@@ -292,6 +310,18 @@ export default function App() {
     void desktopInvoke("send_agent_message", { agentId, message: { type: "new_session" } }).catch((error) => setNotice(String(error)));
   }, [agentId, busy]);
 
+  const resumeSession = useCallback(async (id: string) => {
+    if (!agentId || busy) return;
+    setBusy(true);
+    await desktopInvoke("send_agent_message", {
+      agentId,
+      message: { type: "resume_session", session_id: id }
+    }).catch((error) => {
+      setBusy(false);
+      setNotice(String(error));
+    });
+  }, [agentId, busy]);
+
   const filteredRecents = useMemo(
     () => recentProjects.filter((item) => item.toLowerCase().includes(sessionSearch.toLowerCase())),
     [recentProjects, sessionSearch]
@@ -339,6 +369,26 @@ export default function App() {
             </button>
           ))}
         </div>
+
+        {workspace && (
+          <div className="sidebar-section conversation-section">
+            <div className="section-label"><span>CONVERSATIONS</span><span className="session-count">{sessions.length}</span></div>
+            {sessions.length === 0 ? (
+              <div className="sidebar-empty">Vos conversations apparaîtront ici</div>
+            ) : sessions.map((session) => (
+              <button
+                key={session.id}
+                className={"session-item" + (session.id === sessionId ? " session-selected" : "")}
+                onClick={() => void resumeSession(session.id)}
+                disabled={busy || session.id === sessionId}
+                title={session.title}
+              >
+                <MessageSquare size={14} />
+                <span>{session.title}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="sidebar-spacer" />
         <div className="sidebar-footer">

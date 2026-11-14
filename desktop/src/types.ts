@@ -26,3 +26,9 @@ export interface PermissionRequest {
   command?: string;
   type: "permission_request" | "sudo_confirmation_request" | "sudo_password_request";
 }
+
+export interface SessionSummary {
+  id: string;
+  title: string;
+  updated_at: string;
+}

@@ -311,3 +311,12 @@ kbd { background: #f2f4f7; border: 1px solid #e6e9ef; color: #98a2b1; border-rad
   .mode-switch button { padding: 6px 5px; font-size: 8px; }
   .statusbar > div:last-child { display: none; }
 }
+
+.conversation-section { margin-top: 22px; min-height: 0; }
+.session-count { padding: 2px 6px; border-radius: 10px; background: #edf1f5; color: #8b96a5; font-size: 8px; letter-spacing: 0; }
+.session-item { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; height: 32px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: #758195; text-align: left; font-size: 10px; transition: background .16s ease, color .16s ease; }
+.session-item svg { flex: 0 0 auto; color: #9aa5b4; }
+.session-item span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.session-item:hover { background: #edf1f6; color: #46576d; }
+.session-item.session-selected { background: #eaf2fc; color: #356ca9; font-weight: 650; }
+.session-item.session-selected svg { color: #4e8acb; }
