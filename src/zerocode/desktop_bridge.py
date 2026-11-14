@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import secrets
 import sys
@@ -394,11 +395,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     finally:
         if runtime is not None:
-            try:
+            with contextlib.suppress(Exception):
                 runtime[7].close()
-            except Exception:
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 runtime[3].close()
-            except Exception:
-                pass
