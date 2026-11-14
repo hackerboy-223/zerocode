@@ -20,7 +20,7 @@ Depuis ce dossier :
 
     npm run tauri build
 
-Les paquets Linux, AppImage et Windows NSIS sont configurés. La compilation Windows doit être réalisée depuis Windows ou une chaîne de cross-compilation adaptée.
+Les paquets Linux DEB et AppImage sont configurés pour la machine de développement. Pour produire un installateur Windows NSIS, lance la compilation depuis Windows avec la cible NSIS.
 
 ## Architecture
 
@@ -33,4 +33,4 @@ Les paquets Linux, AppImage et Windows NSIS sont configurés. La compilation Win
 
 Le mode prudent est sélectionné par défaut. Le CLI est lancé avec --permissions ask ; le protocole JSON actuel ne sait pas encore traiter une demande d'approbation interactive, donc les opérations nécessitant une autorisation sont refusées dans ce mode. Le mode autonome doit être activé explicitement dans l'interface ; il lance alors le moteur avec --permissions allow, autorisant les modifications et commandes avec les droits du compte utilisateur.
 
-N'active le mode autonome que dans un dépôt de confiance. Le terminal est un shell complet et n'est pas une sandbox. Une prochaine étape doit ajouter un protocole d'approbation JSON bidirectionnel pour afficher chaque demande sensible avant de l'autoriser.
+N'active le mode autonome que dans un dépôt de confiance. Le terminal est un shell complet et n'est pas une sandbox. Le processus de commande et l'accès aux fichiers sont locaux ; le fournisseur de modèle peut toutefois être distant. Pour conserver aussi l'inférence sur la machine, configure un fournisseur local comme Ollama. Une prochaine étape doit ajouter un protocole d'approbation JSON bidirectionnel pour afficher chaque demande sensible avant de l'autoriser.
