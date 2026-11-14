@@ -79,15 +79,9 @@ class HookManager:
                     check=False,
                 )
             except subprocess.TimeoutExpired:
-                message = f"Hook {event} expiré après {timeout}s."
-                if event == "PreToolUse":
-                    return message
-                continue
+                return f"Hook {event} expiré après {timeout}s."
             except OSError as exc:
-                message = f"Impossible de lancer le hook {command}: {exc}"
-                if event == "PreToolUse":
-                    return message
-                continue
+                return f"Impossible de lancer le hook {command}: {exc}"
 
             output = (process.stdout or process.stderr or "").strip()[:MAX_HOOK_OUTPUT]
             if event == "PreToolUse":
