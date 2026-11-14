@@ -2,8 +2,7 @@
 
 use std::{
     collections::HashMap,
-    env,
-    fs,
+    env, fs,
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child as ProcessChild, ChildStdin, Command as ProcessCommand, Stdio},
@@ -11,9 +10,7 @@ use std::{
     thread,
 };
 
-use portable_pty::{
-    native_pty_system, Child as PtyChild, CommandBuilder, MasterPty, PtySize,
-};
+use portable_pty::{native_pty_system, Child as PtyChild, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, State};
@@ -159,10 +156,7 @@ fn start_terminal(
             }
         }
         let closed_id = reader_id.clone();
-        let _ = app_for_reader.emit(
-            "terminal-closed",
-            json!({ "id": reader_id }),
-        );
+        let _ = app_for_reader.emit("terminal-closed", json!({ "id": reader_id }));
         if let Ok(mut terminals) = terminals_for_reader.lock() {
             terminals.remove(&closed_id);
         }
@@ -220,10 +214,7 @@ fn resize_terminal(
 }
 
 #[tauri::command]
-fn stop_terminal(
-    state: State<'_, DesktopState>,
-    terminal_id: String,
-) -> Result<(), String> {
+fn stop_terminal(state: State<'_, DesktopState>, terminal_id: String) -> Result<(), String> {
     let removed = state
         .terminals
         .lock()
@@ -238,7 +229,10 @@ fn desktop_path() -> std::ffi::OsString {
         .map(|value| env::split_paths(&value).collect())
         .unwrap_or_default();
     if let Some(home) = env::var_os("HOME").map(std::path::PathBuf::from) {
-        for candidate in [home.join(".local").join("bin"), home.join(".cargo").join("bin")] {
+        for candidate in [
+            home.join(".local").join("bin"),
+            home.join(".cargo").join("bin"),
+        ] {
             if candidate.is_dir() && !paths.contains(&candidate) {
                 paths.push(candidate);
             }
@@ -414,13 +408,7 @@ fn start_agent(
         .agents
         .lock()
         .map_err(|_| "État de l’agent indisponible.".to_string())?
-        .insert(
-            agent_id.clone(),
-            AgentProcess {
-                input,
-                child,
-            },
-        );
+        .insert(agent_id.clone(), AgentProcess { input, child });
 
     let app_for_output = app.clone();
     let agents_for_output = Arc::clone(&state.agents);
@@ -482,8 +470,8 @@ fn send_agent_message(
     let process = agents
         .get_mut(&agent_id)
         .ok_or_else(|| "Processus ZeroCode introuvable.".to_string())?;
-    let mut payload = serde_json::to_vec(&message)
-        .map_err(|error| format!("Message invalide : {error}"))?;
+    let mut payload =
+        serde_json::to_vec(&message).map_err(|error| format!("Message invalide : {error}"))?;
     payload.push(b'\n');
     process
         .input
@@ -493,10 +481,7 @@ fn send_agent_message(
 }
 
 #[tauri::command]
-fn stop_agent(
-    state: State<'_, DesktopState>,
-    agent_id: String,
-) -> Result<(), String> {
+fn stop_agent(state: State<'_, DesktopState>, agent_id: String) -> Result<(), String> {
     let removed = state
         .agents
         .lock()
@@ -661,10 +646,7 @@ fn list_workspace_files(
 }
 
 #[tauri::command]
-fn read_workspace_file(
-    cwd: String,
-    relative_path: String,
-) -> Result<WorkspaceFilePreview, String> {
+fn read_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFilePreview, String> {
     let (root, target) = resolve_inside_workspace(&cwd, &relative_path)?;
     if !target.is_file() {
         return Err("Ce chemin n’est pas un fichier.".to_string());
