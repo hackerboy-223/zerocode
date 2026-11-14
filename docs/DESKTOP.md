@@ -9,6 +9,9 @@ ZeroCode Desktop est l’interface graphique native de l’agent Python existant
 - **Terminal** : pseudo-terminal natif (PTY), ouvert dans le dossier du projet.
 - **Sessions** : réutilise le stockage de sessions de ZeroCode.
 - **Autorisations** : les demandes d’écriture, de commande et de privilèges remontent dans l’interface. Une absence de réponse est traitée comme un refus.
+- **Démarrage sûr** : Desktop démarre en mode `ask`, même si le CLI est configuré en `allow`. L’accès aux fichiers reste limité au workspace et les fichiers de secrets restent protégés. Le mode Full-stack exige une confirmation explicite.
+- **DLP** : les sorties du shell sont limitées et filtrées avant affichage ; les secrets connus sont masqués dans les événements du bridge.
+- **Annulation prudente** : les checkpoints récents enregistrent l’empreinte du fichier après modification. `Annuler` refuse d’écraser un fichier modifié depuis et bloque les chemins hors workspace.
 - **Mascotte** : LUPUS, dessin vectoriel animé, sans ressource externe.
 
 Les commandes de l’agent et le shell s’exécutent sur l’ordinateur qui héberge l’application. Les prompts, extraits de fichiers et réponses peuvent toutefois être transmis au fournisseur de modèle sélectionné. Pour garder l’inférence locale, configure un fournisseur local compatible, par exemple Ollama. Vérifie toujours les paramètres de confidentialité du fournisseur distant avant d’envoyer du code privé.
@@ -55,7 +58,7 @@ Depuis la racine du dépôt :
 
 ```bash
 cd desktop
-npm install
+npm ci
 npm run app:dev
 ```
 
@@ -65,7 +68,7 @@ L’application Tauri démarre avec le serveur Vite local. Le terminal intégré
 
 ```bash
 cd desktop
-npm install
+npm ci
 npm run app:build
 ```
 
