@@ -181,7 +181,7 @@ class Agent:
                         self._call_ui("warn", "Reponse vide ou tronquee: augmente max_tokens.")
                     elif (
                         self.mode == "full-stack"
-                        and auto_continues < 2
+                        and auto_continues < 6
                         and self._has_incomplete_todos()
                     ):
                         auto_continues += 1
