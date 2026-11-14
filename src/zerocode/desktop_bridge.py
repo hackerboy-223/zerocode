@@ -15,6 +15,7 @@ from .errors import ConfigError, ZeroCodeError
 from .hooks import HookManager
 from .mcp import MCPManager, register_mcp_tools
 from .router import Router
+from .security import redact_secrets
 from .session import SessionStore
 from .tools import PermissionManager, ToolContext, build_registry
 from .types import Completion, Usage
@@ -47,8 +48,21 @@ class DesktopBridgeUI:
         self._checkpoints = checkpoints
         self._session_id_getter = session_id_getter
 
+    @staticmethod
+    def _redact_payload(value: Any) -> Any:
+        """Masque les secrets connus avant toute exposition dans l'interface."""
+        if isinstance(value, str):
+            return redact_secrets(value)
+        if isinstance(value, dict):
+            return {key: DesktopBridgeUI._redact_payload(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [DesktopBridgeUI._redact_payload(item) for item in value]
+        if isinstance(value, tuple):
+            return [DesktopBridgeUI._redact_payload(item) for item in value]
+        return value
+
     def emit(self, event: str, **data: Any) -> None:
-        payload = {"type": event, **data}
+        payload = self._redact_payload({"type": event, **data})
         with self._write_lock:
             self.stream.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
             self.stream.flush()
@@ -209,7 +223,7 @@ def _visible_history(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
                 for part in content
                 if isinstance(part, dict) and part.get("type") == "text"
             )
-        text = str(content or "").strip()
+        text = redact_secrets(str(content or "").strip())
         if text:
             visible.append({"role": str(role), "content": text})
     return visible
