@@ -115,7 +115,7 @@ function Get-ReleaseAsset([string]$Suffix, [string]$Architecture = "any") {
     }
     $assets = @($script:Release.assets | Where-Object {
         $_.name -and $_.name.EndsWith($Suffix, [System.StringComparison]::OrdinalIgnoreCase) -and
-        $_.browser_download_url -match '^https://github\.com/hackerboy-223/zerocode/releases/download/'
+        $_.browser_download_url -like "https://github.com/hackerboy-223/zerocode/releases/download/$($script:Release.tag_name)/*"
     })
     if ($Suffix -eq "SHA256SUMS") {
         $assets = @($assets | Where-Object { $_.name -eq "SHA256SUMS" })
@@ -152,29 +152,32 @@ function Get-VerifiedReleaseAsset([string]$Suffix, [string]$Architecture = "any"
     $destination = Join-Path $downloadDir $asset.name
     $manifestPath = Join-Path $downloadDir "SHA256SUMS"
 
-    Write-Info "Téléchargement de $($asset.name)…"
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $destination -UseBasicParsing
-    Invoke-WebRequest -Uri $checksum.browser_download_url -OutFile $manifestPath -UseBasicParsing
+    try {
+        Write-Info "Téléchargement de $($asset.name)…"
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $destination -UseBasicParsing
+        Invoke-WebRequest -Uri $checksum.browser_download_url -OutFile $manifestPath -UseBasicParsing
 
-    $expected = $null
-    foreach ($line in Get-Content -LiteralPath $manifestPath) {
-        if ($line -match '^([a-fA-F0-9]{64})\s+\*?(.+)$' -and $Matches[2] -eq $asset.name) {
-            $expected = $Matches[1].ToLowerInvariant()
-            break
+        $expected = $null
+        foreach ($line in Get-Content -LiteralPath $manifestPath) {
+            if ($line -match '^([a-fA-F0-9]{64})\s+\*?(.+)$' -and $Matches[2] -eq $asset.name) {
+                $expected = $Matches[1].ToLowerInvariant()
+                break
+            }
         }
-    }
-    if (-not $expected) {
-        Remove-Item -LiteralPath $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
-        Stop-Install "Aucune empreinte SHA-256 publiée pour $($asset.name)."
-    }
-    $actual = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actual -ne $expected) {
-        Remove-Item -LiteralPath $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
-        Stop-Install "Le fichier $($asset.name) ne correspond pas à son empreinte SHA-256."
-    }
+        if (-not $expected) {
+            throw "Aucune empreinte SHA-256 publiée pour $($asset.name)."
+        }
+        $actual = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $expected) {
+            throw "Le fichier $($asset.name) ne correspond pas à son empreinte SHA-256."
+        }
 
-    Write-Ok "Intégrité vérifiée : $($asset.name)"
-    return [pscustomobject]@{ Path = $destination; Directory = $downloadDir; Name = $asset.name }
+        Write-Ok "Intégrité vérifiée : $($asset.name)"
+        return [pscustomobject]@{ Path = $destination; Directory = $downloadDir; Name = $asset.name }
+    } catch {
+        Remove-Item -LiteralPath $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
+        throw
+    }
 }
 
 function Get-PythonCommand {
