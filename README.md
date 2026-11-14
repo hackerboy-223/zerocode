@@ -232,6 +232,7 @@ Dans le chat : `/help`, `/build`, `/plan`, `/full-stack`, `/skills`, `/skill`, `
 - `read`, `list`, `grep`, `fetch`, `web_search` et `todo_write` sont sans effet de bord sur le dépôt et automatiques.
 - En mode `ask`, la création de nouveaux fichiers, les éditions dans le projet et les commandes sûres de diagnostic/tests/lint (`pytest`, `unittest`, `ruff`, `mypy`, `flake8`, `npm test`, `cargo test`, `cargo clippy`, `go test`, `go vet`, etc.) sont automatiques.
 - Le remplacement d'un fichier existant via `write`, les commandes shell non classées comme sûres et les actions sensibles demandent confirmation.
+- Toute commande `sudo` exige une confirmation dédiée à chaque exécution, même avec `/full-stack`, `--yolo` ou un ticket sudo déjà actif. Le mot de passe n'est jamais enregistré dans la configuration ou les sessions ; l'authentification est refusée en mode non interactif.
 - Un pare-feu shell bloque systématiquement les commandes catastrophiques pour l'hôte (`rm -rf /`, `rm -rf ~`, fork bombs, `mkfs`, `dd of=/dev/*`), même en mode `allow` ou `--yolo`.
 - Toutes les sorties d'outils passent par un filtre DLP (`redact_secrets`) qui masque automatiquement les clés privées PEM, les jetons API (`sk-*`, `nvapi-*`, `ghp_*`, `AKIA*`, `AIza*`, `gsk_*`, `hf_*`, `Bearer`) et les mots de passe dans les URL de connexion.
 - Les sous-processus `bash` et les serveurs MCP s'exécutent dans un environnement expurgé des clés API des fournisseurs (`PROVIDER_KEY_ENVS`).
