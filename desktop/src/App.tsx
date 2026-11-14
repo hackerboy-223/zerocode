@@ -158,6 +158,7 @@ export default function App() {
     catch { return []; }
   });
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [agentReady, setAgentReady] = useState(false);
   const [eventsReady, setEventsReady] = useState(false);
   const agentIdRef = useRef<string | null>(null);
   const pendingAgentEventsRef = useRef<Array<{ agentId: string; event: AgentEvent }>>([]);
@@ -268,6 +269,7 @@ export default function App() {
     if (!workspace || !isTauri() || !eventsReady) return;
     let cancelled = false;
     setNotice("");
+    setAgentReady(false);
     desktopInvoke<string>("start_agent", { cwd: workspace }).then((id) => {
       if (cancelled) {
         void desktopInvoke("stop_agent", { agentId: id }).catch(() => undefined);
@@ -286,6 +288,7 @@ export default function App() {
       const current = agentIdRef.current;
       if (current) void desktopInvoke("stop_agent", { agentId: current }).catch(() => undefined);
       setAgentId(null);
+      setAgentReady(false);
       agentIdRef.current = null;
     };
   }, [workspace, eventsReady]);
@@ -311,7 +314,10 @@ export default function App() {
       });
       const offStatus = await listen<{ agent_id: string; status: string }>("agent-status", (event) => {
         if (agentIdRef.current === event.payload.agent_id && event.payload.status === "stopped") {
+          setAgentReady(false);
           setBusy(false);
+          setPending(null);
+          setNotice("Le processus ZeroCode s’est arrêté. Relancez l’application ou rouvrez le projet.");
         }
       });
       if (!alive) {
@@ -333,6 +339,7 @@ export default function App() {
   const handleAgentEvent = useCallback((event: AgentEvent) => {
     switch (event.type) {
       case "ready": {
+        setAgentReady(true);
         setSessionId(String(event.session_id || ""));
         const restoredMessages = Array.isArray(event.messages) ? event.messages as Array<{ role: string; content: string }> : [];
         setMessages(restoredMessages.map((message) => ({
@@ -455,6 +462,7 @@ export default function App() {
         if (event.provider) setProvider(String(event.provider));
         break;
       case "session_changed": {
+        setAgentReady(true);
         setSessionId(String(event.session_id || ""));
         const restoredMessages = Array.isArray(event.messages) ? event.messages as Array<{ role: string; content: string }> : [];
         setMessages(restoredMessages.map((message) => ({
@@ -544,7 +552,7 @@ export default function App() {
 
   const sendPrompt = useCallback(async (value?: string) => {
     const text = (value ?? draft).trim();
-    if (!text || !agentId || busy || pending) return;
+    if (!text || !agentId || !agentReady || busy || pending) return;
     setMessages((items) => [...items, { id: makeId(), role: "user", content: text }]);
     setDraft("");
     if (composerRef.current) composerRef.current.style.height = "auto";
@@ -555,13 +563,13 @@ export default function App() {
       setBusy(false);
       setNotice(String(error));
     }
-  }, [agentId, busy, draft, pending]);
+  }, [agentId, agentReady, busy, draft, pending]);
 
   const changeMode = useCallback(async (next: string) => {
-    if (!agentId || busy) return;
+    if (!agentId || !agentReady || busy) return;
     setMode(next);
     await desktopInvoke("send_agent_message", { agentId, message: { type: "set_mode", mode: next } }).catch((error) => setNotice(String(error)));
-  }, [agentId, busy]);
+  }, [agentId, agentReady, busy]);
 
   const changeModel = useCallback(async (nextModel: string) => {
     const cleaned = nextModel.trim();
@@ -570,7 +578,7 @@ export default function App() {
       agentId,
       message: { type: "set_model", model: cleaned }
     }).catch((error) => setNotice(String(error)));
-  }, [agentId, busy]);
+  }, [agentId, agentReady, busy]);
 
   const changePermissions = useCallback(async (nextPerm: string) => {
     if (!agentId || busy) return;
@@ -579,7 +587,7 @@ export default function App() {
       agentId,
       message: { type: "set_permissions", permissions: nextPerm }
     }).catch((error) => setNotice(String(error)));
-  }, [agentId, busy]);
+  }, [agentId, agentReady, busy]);
 
   const changeThink = useCallback(async (nextThink: string) => {
     if (!agentId || busy) return;
@@ -588,7 +596,7 @@ export default function App() {
       agentId,
       message: { type: "set_think", think: nextThink }
     }).catch((error) => setNotice(String(error)));
-  }, [agentId, busy]);
+  }, [agentId, agentReady, busy]);
 
   const undoCheckpoint = useCallback(async () => {
     if (!agentId || busy || checkpoints <= 0) return;
@@ -596,7 +604,7 @@ export default function App() {
       agentId,
       message: { type: "undo_checkpoint" }
     }).catch((error) => setNotice(String(error)));
-  }, [agentId, busy, checkpoints]);
+  }, [agentId, agentReady, busy, checkpoints]);
 
   const compactContext = useCallback(async () => {
     if (!agentId || busy) return;
@@ -638,7 +646,7 @@ export default function App() {
     setDiffs([]);
     setPending(null);
     void desktopInvoke("send_agent_message", { agentId, message: { type: "new_session" } }).catch((error) => setNotice(String(error)));
-  }, [agentId, busy]);
+  }, [agentId, agentReady, busy]);
 
   const resumeSession = useCallback(async (id: string) => {
     if (!agentId || busy) return;
@@ -646,7 +654,7 @@ export default function App() {
       agentId,
       message: { type: "resume_session", session_id: id }
     }).catch((error) => setNotice(String(error)));
-  }, [agentId, busy]);
+  }, [agentId, agentReady, busy]);
 
   const deleteSession = useCallback(async (id: string) => {
     if (!agentId || busy) return;
@@ -733,7 +741,7 @@ export default function App() {
           <button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Fermer le menu"><X size={17} /></button>
         </div>
 
-        <button className="new-task-button" onClick={newSession} disabled={!agentId || busy}>
+        <button className="new-task-button" onClick={newSession} disabled={!agentId || !agentReady || busy}>
           <MessageSquarePlus size={16} /> <span>Nouvelle tâche</span> <kbd>Ctrl N</kbd>
         </button>
 
@@ -951,7 +959,7 @@ export default function App() {
                   onKeyDown={onComposerKeyDown}
                   placeholder={workspace ? "Décrivez ce que vous souhaitez construire (utilisez @fichier pour cibler un fichier)…" : "Ouvrez un dossier pour commencer…"}
                   rows={1}
-                  disabled={!workspace || !agentId || busy || Boolean(pending)}
+                  disabled={!workspace || !agentId || !agentReady || busy || Boolean(pending)}
                 />
                 <div className="composer-bottom">
                   <div className="composer-tools">
@@ -967,7 +975,7 @@ export default function App() {
                   </div>
                   <div className="composer-actions">
                     {busy && <button className="stop-button" onClick={interrupt}><StopCircle size={15} /> Arrêter</button>}
-                    <button className="send-button" onClick={() => void sendPrompt()} disabled={!draft.trim() || !agentId || busy || Boolean(pending)} title="Envoyer">
+                    <button className="send-button" onClick={() => void sendPrompt()} disabled={!draft.trim() || !agentId || !agentReady || busy || Boolean(pending)} title="Envoyer">
                       {busy ? <span className="mini-spinner" /> : <Send size={16} />}
                     </button>
                   </div>
@@ -1027,7 +1035,7 @@ export default function App() {
 
                     <div className="context-section">
                       <div className="context-label">AGENT</div>
-                      <div className="agent-status"><div className="agent-status-icon"><Bot size={17} /></div><div><strong>{busy ? "Travail en cours" : agentId ? "Prêt" : "En attente"}</strong><span>{mode === "full-stack" ? "Autonomie Full-stack" : mode === "plan" ? "Lecture seule" : "Construction"}</span></div><i className={busy ? "status-live pulse" : "status-live"} /></div>
+                      <div className="agent-status"><div className="agent-status-icon"><Bot size={17} /></div><div><strong>{busy ? "Travail en cours" : agentReady ? "Prêt" : agentId ? "Connexion…" : "En attente"}</strong><span>{mode === "full-stack" ? "Autonomie Full-stack" : mode === "plan" ? "Lecture seule" : "Construction"}</span></div><i className={busy ? "status-live pulse" : "status-live"} /></div>
                       <div className="context-line"><span>Modèle</span><strong>{model}</strong></div>
                       <div className="context-line"><span>Fournisseur</span><strong>{provider || "Auto"}</strong></div>
                       <div className="context-line"><span>Autorisations</span><strong>{permissionsMode}</strong></div>
