@@ -191,3 +191,30 @@ def test_mcp_client_scrubs_provider_api_keys_unless_explicit(monkeypatch, tmp_pa
         cwd=tmp_path,
     )
     assert explicit._env.get("OPENROUTER_API_KEY") == "explicit-key"
+
+def test_trusted_mcp_server_can_run_in_autonomous_mode(tmp_path):
+    server = tmp_path / "server.py"
+    server.write_text(SERVER, encoding="utf-8")
+    context = ToolContext(cwd=tmp_path)
+    permissions = PermissionManager(mode="allow", interactive=False)
+    registry = build_registry(context, permissions)
+    manager = register_mcp_tools(
+        registry,
+        {
+            "demo": {
+                "command": sys.executable,
+                "args": [str(server)],
+                "trusted": True,
+            }
+        },
+        cwd=tmp_path,
+    )
+    try:
+        tool_specs = {tool.name: tool for tool in registry.tools()}
+        assert tool_specs["mcp_demo_echo"].approval == "ask"
+        result = registry.execute(
+            ToolCall(id="trusted-call", name="mcp_demo_echo", arguments={"text": "autonomous"})
+        )
+        assert result == "autonomous"
+    finally:
+        manager.close()
