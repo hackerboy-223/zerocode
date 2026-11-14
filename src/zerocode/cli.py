@@ -70,6 +70,7 @@ COMMANDS = {
     "run",
     "chat",
     "tui",
+    "desktop-bridge",
     "completion",
 }
 
@@ -119,6 +120,10 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return completion_command(argv[1:], console)
     if first == "tui":
         return run_agent(argv[1:], console, force_tui=True)
+    if first == "desktop-bridge":
+        from .desktop_bridge import main as desktop_bridge_main
+
+        return desktop_bridge_main(argv[1:])
     if first in {"run", "chat"}:
         return run_agent(argv[1:], console)
     return run_agent(argv, console)
