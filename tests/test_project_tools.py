@@ -66,3 +66,38 @@ def test_subagent_rejects_unknown_specialist(tmp_path):
 
     assert result.startswith("ERREUR:")
     assert "Rôle de sous-agent inconnu" in result
+
+def test_project_map_detects_swift_dotnet_and_ruby(tmp_path):
+    (tmp_path / "Package.swift").write_text("// swift package\n", encoding="utf-8")
+    (tmp_path / "app.csproj").write_text("<Project />\n", encoding="utf-8")
+    (tmp_path / "Gemfile").write_text("source 'https://rubygems.org'\n", encoding="utf-8")
+
+    result = project_map({}, ToolContext(cwd=tmp_path))
+
+    assert "Swift" in result
+    assert ".NET" in result
+    assert "Ruby" in result
+    assert "Package.swift" in result
+    assert "app.csproj" in result
+
+
+def test_project_verify_detects_ruby_and_swift_checks(tmp_path):
+    (tmp_path / "Gemfile").write_text("source 'https://rubygems.org'\n", encoding="utf-8")
+    (tmp_path / "Rakefile").write_text("task :test\n", encoding="utf-8")
+    (tmp_path / "Package.swift").write_text("// swift package\n", encoding="utf-8")
+
+    commands = _verification_commands(tmp_path, ["tests", "build"])
+    assert ("tests", "bundle exec rake test") in commands
+    assert ("tests", "swift test") in commands
+    assert ("build", "swift build") in commands
+
+
+def test_project_verify_detects_flutter_checks(tmp_path):
+    (tmp_path / "pubspec.yaml").write_text(
+        "name: demo\ndependencies:\n  flutter:\n    sdk: flutter\n",
+        encoding="utf-8",
+    )
+
+    commands = _verification_commands(tmp_path, ["tests", "lint"])
+    assert ("tests", "flutter test") in commands
+    assert ("lint", "flutter analyze") in commands
