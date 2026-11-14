@@ -282,10 +282,12 @@ fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
         }
     }
 
-    if let Some(home) = env::var_os("HOME")
-        .or_else(|| env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-    {
+    #[cfg(target_os = "windows")]
+    let user_home = env::var_os("USERPROFILE").or_else(|| env::var_os("HOME"));
+    #[cfg(not(target_os = "windows"))]
+    let user_home = env::var_os("HOME");
+
+    if let Some(home) = user_home.map(PathBuf::from) {
         #[cfg(target_os = "windows")]
         let pipx_entry = home.join(".local").join("bin").join("zerocode.exe");
         #[cfg(not(target_os = "windows"))]
