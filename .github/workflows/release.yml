@@ -128,9 +128,10 @@ jobs:
 
             Installeur interactif et paquets natifs pour Linux, Windows et macOS.
             Les empreintes SHA-256 des fichiers publiés sont disponibles dans SHA256SUMS.
-          releaseDraft: false
+          releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.target-args }} --bundles ${{ matrix.bundles }}
+          releaseAssetNamePattern: "[name]-[version]-[platform]-[arch]-[bundle][setup][ext]"
 
   python:
     name: Python package and checksums
@@ -157,6 +158,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
+          PRERELEASE: ${{ contains(github.ref_name, '-') }}
         run: |
           mkdir -p release-assets
           gh release download "$TAG_NAME" --dir release-assets
@@ -164,3 +166,4 @@ jobs:
           cd release-assets
           find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
           gh release upload "$TAG_NAME" * --clobber
+          gh release edit "$TAG_NAME" --draft=false --prerelease="$PRERELEASE"
