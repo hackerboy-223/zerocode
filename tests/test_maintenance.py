@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -124,7 +125,10 @@ def test_update_reinstalls_verified_release_wheel(monkeypatch):
 
     assert ok
     assert "1.0.1" in message
-    assert calls == [["pipx", "install", "--force", wheel_url]]
+    assert len(calls) == 1
+    assert calls[0][:3] == ["pipx", "install", "--force"]
+    assert calls[0][3].endswith(wheel_name)
+    assert Path(calls[0][3]).parent.name.startswith("zerocode-update-")
 
 
 def test_uninstall_keeps_user_data_by_default(tmp_path, monkeypatch):
@@ -203,3 +207,29 @@ def test_uninstall_does_not_delete_data_when_pipx_fails(tmp_path, monkeypatch):
     assert "ont été conservées" in message
     assert config.is_dir()
     assert data.is_dir()
+
+def test_release_asset_checksum_rejects_changed_download(monkeypatch, tmp_path):
+    import hashlib
+
+    expected_payload = b"official-wheel"
+    changed_payload = b"modified-wheel"
+
+    class Response:
+        status_code = 200
+        content = changed_payload
+        text = f"{hashlib.sha256(expected_payload).hexdigest()}  package.whl\n"
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(maintenance.httpx, "get", lambda *args, **kwargs: Response())
+    destination = tmp_path / "package.whl"
+    with pytest.raises(RuntimeError, match="ne correspond pas"):
+        maintenance._release_asset_checksum(
+            filename="package.whl",
+            asset_url="https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/package.whl",
+            checksum_url="https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/SHA256SUMS",
+            destination=destination,
+        )
+    assert not destination.exists()
+
