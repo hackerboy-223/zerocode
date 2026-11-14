@@ -2,11 +2,9 @@
 set -Eeuo pipefail
 
 REPO_URL="https://github.com/hackerboy-223/zerocode.git"
-INSTALL_REF="$ZEROCODE_INSTALL_REF"
-[[ -n "$INSTALL_REF" ]] || INSTALL_REF="feature/zerocode-desktop"
-INSTALL_MODE="$ZEROCODE_INSTALL_MODE"
-AUTO_YES="$ZEROCODE_INSTALL_YES"
-[[ -n "$AUTO_YES" ]] || AUTO_YES="0"
+INSTALL_REF="${ZEROCODE_INSTALL_REF:-feature/zerocode-desktop}"
+INSTALL_MODE="${ZEROCODE_INSTALL_MODE:-}"
+AUTO_YES="${ZEROCODE_INSTALL_YES:-0}"
 BUILD_DIR=""
 NODE_BIN=""
 
@@ -123,19 +121,29 @@ install_git() {
 
 setup_pipx() {
   if command -v pipx >/dev/null 2>&1; then
+    PIPX_KIND="binary"
     PIPX_BIN="$(command -v pipx)"
   elif python3 -m pipx --version >/dev/null 2>&1; then
-    PIPX_BIN="python3 -m pipx"
+    PIPX_KIND="module"
   else
     info "Préparation d'un environnement isolé pour pipx…"
     BOOTSTRAP="$HOME/.local/share/zerocode/bootstrap/pipx"
     mkdir -p "$(dirname "$BOOTSTRAP")"
     python3 -m venv "$BOOTSTRAP" || die "Impossible de créer un environnement Python. Sur Debian/Ubuntu, installe python3-venv puis relance."
     "$BOOTSTRAP/bin/python" -m pip install --upgrade pip pipx
+    PIPX_KIND="binary"
     PIPX_BIN="$BOOTSTRAP/bin/pipx"
   fi
   export PATH="$HOME/.local/bin:$PATH"
-  "$PIPX_BIN" ensurepath >/dev/null 2>&1 || true
+  pipx_run ensurepath >/dev/null 2>&1 || true
+}
+
+pipx_run() {
+  if [[ "$PIPX_KIND" == "module" ]]; then
+    python3 -m pipx "$@"
+  else
+    "$PIPX_BIN" "$@"
+  fi
 }
 
 install_engine() {
@@ -144,7 +152,7 @@ install_engine() {
   install_git
   setup_pipx
   info "Installation du moteur et de ses dépendances dans un environnement isolé…"
-  "$PIPX_BIN" install --force "git+$REPO_URL@$INSTALL_REF"
+  pipx_run install --force "git+$REPO_URL@$INSTALL_REF"
   export PATH="$HOME/.local/bin:$PATH"
   command -v zerocode >/dev/null 2>&1 || die "ZeroCode a été installé, mais sa commande n'est pas dans PATH. Ajoute ~/.local/bin à PATH puis relance."
   zerocode --version
@@ -297,10 +305,18 @@ install_desktop() {
 
 main() {
   [[ "$(id -u)" != "0" ]] || die "Ne lance pas l'installateur avec sudo. Il gère sudo uniquement pour les dépendances système."
-  if [[ "$1" == "--help" || "$1" == "-h" ]]; then usage; return 0; fi
-  if [[ "$1" == "--yes" ]]; then AUTO_YES="1"; shift; fi
-  if [[ "$1" == "--mode" ]]; then INSTALL_MODE="$2"; shift 2; fi
-  [[ "$#" == "0" ]] || die "Option inconnue. Utilise --help pour voir les options."
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --help|-h) usage; return 0 ;;
+      --yes) AUTO_YES="1"; shift ;;
+      --mode)
+        [[ "$#" -ge 2 ]] || die "L'option --mode attend tui, desktop ou both."
+        INSTALL_MODE="$2"
+        shift 2
+        ;;
+      *) die "Option inconnue : $1. Utilise --help pour voir les options." ;;
+    esac
+  done
   detect_platform
   select_mode
   case "$INSTALL_MODE" in
