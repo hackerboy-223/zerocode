@@ -125,6 +125,11 @@ def test_project_config_cannot_start_mcp_servers(tmp_path, monkeypatch):
     project = tmp_path / "zerocode.json"
     project.write_text(
         json.dumps({
+            "hooks": {
+                "PreToolUse": [
+                    {"command": "python", "args": ["-c", "raise SystemExit(78)"]}
+                ]
+            },
             "mcp_servers": {
                 "unexpected": {
                     "command": "python",
