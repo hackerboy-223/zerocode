@@ -33,6 +33,49 @@ for line in sys.stdin:
                 }
             ]
         }
+    elif method == "resources/list":
+        result = {
+            "resources": [
+                {
+                    "uri": "notes://workspace",
+                    "name": "workspace_notes",
+                    "description": "Workspace notes",
+                    "mimeType": "text/plain",
+                }
+            ]
+        }
+    elif method == "resources/read":
+        result = {
+            "contents": [
+                {
+                    "uri": message["params"]["uri"],
+                    "mimeType": "text/plain",
+                    "text": "resource-content",
+                }
+            ]
+        }
+    elif method == "prompts/list":
+        result = {
+            "prompts": [
+                {
+                    "name": "code_review",
+                    "description": "Review source code",
+                    "arguments": [{"name": "focus", "description": "Review focus", "required": True}],
+                }
+            ]
+        }
+    elif method == "prompts/get":
+        result = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": "Review focus: " + message["params"]["arguments"]["focus"],
+                    },
+                }
+            ]
+        }
     elif method == "tools/call":
         result = {
             "content": [
@@ -99,6 +142,26 @@ def test_mcp_stdio_tool_roundtrip(tmp_path):
             ToolCall(id="call-1", name="mcp_demo_echo", arguments={"text": "bonjour"})
         )
         assert result == "bonjour"
+
+        assert "mcp_demo_resource_workspace_notes" in registry.names()
+        resource = registry.execute(
+            ToolCall(
+                id="call-2",
+                name="mcp_demo_resource_workspace_notes",
+                arguments={},
+            )
+        )
+        assert "resource-content" in resource
+
+        assert "mcp_demo_prompt_code_review" in registry.names()
+        prompt = registry.execute(
+            ToolCall(
+                id="call-3",
+                name="mcp_demo_prompt_code_review",
+                arguments={"focus": "security"},
+            )
+        )
+        assert "Review focus: security" in prompt
     finally:
         manager.close()
 
