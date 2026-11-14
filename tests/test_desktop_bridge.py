@@ -8,6 +8,7 @@ from pathlib import Path
 from zerocode.checkpoints import CheckpointStore
 from zerocode.desktop_bridge import (
     DesktopBridgeUI,
+    _desktop_permission_manager,
     _session_summaries,
     _think_value,
     _visible_history,
@@ -166,3 +167,23 @@ def test_visible_history_redacts_secrets_before_desktop_display() -> None:
 
     assert token not in visible[0]["content"]
     assert "[SECRET MASQUE: JETON API]" in visible[0]["content"]
+
+
+def test_desktop_bridge_downgrades_inherited_autonomous_permissions() -> None:
+    class Config:
+        permissions = "allow"
+
+    config = Config()
+    permissions = _desktop_permission_manager(config)
+
+    assert permissions.mode == "ask"
+    assert config.permissions == "ask"
+
+
+def test_desktop_bridge_preserves_explicit_deny_permissions() -> None:
+    class Config:
+        permissions = "deny"
+
+    permissions = _desktop_permission_manager(Config())
+
+    assert permissions.mode == "deny"
