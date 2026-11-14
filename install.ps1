@@ -1,5 +1,4 @@
 param(
-    [ValidateSet("tui", "desktop", "both")]
     [string]$Mode = "",
     [switch]$Yes
 )
@@ -198,7 +197,10 @@ function Install-Desktop {
 
         Write-Ok "Installateur natif généré : $($installer.FullName)"
         if (Confirm-Install "Lancer maintenant l'installateur graphique de ZeroCode Desktop ?") {
-            Start-Process -FilePath $installer.FullName -Wait
+            $process = Start-Process -FilePath $installer.FullName -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+                Stop-Install "L'installateur Desktop s'est terminé avec le code $($process.ExitCode)."
+            }
             Write-Ok "L'assistant d'installation Desktop s'est terminé."
         } else {
             $downloads = Join-Path $env:USERPROFILE "Downloads"
