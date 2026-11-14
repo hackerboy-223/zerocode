@@ -9,13 +9,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-\${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   desktop:
-    name: Desktop · \${{ matrix.label }}
-    runs-on: \${{ matrix.os }}
+    name: Desktop · ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     strategy:
@@ -68,13 +68,13 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: \${{ matrix.rust-target }}
+          targets: ${{ matrix.rust-target }}
 
       - name: Cache Rust build outputs
         uses: swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri -> target
-          key: \${{ matrix.os }}-\${{ matrix.rust-target }}
+          key: ${{ matrix.os }}-${{ matrix.rust-target }}
 
       - name: Install frontend dependencies
         working-directory: desktop
@@ -83,19 +83,19 @@ jobs:
       - name: Build and publish Desktop bundles
         uses: tauri-apps/tauri-action@v1
         env:
-          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: ./desktop
-          tagName: \${{ github.ref_name }}
-          releaseName: "ZeroCode \${{ github.ref_name }}"
+          tagName: ${{ github.ref_name }}
+          releaseName: "ZeroCode ${{ github.ref_name }}"
           releaseBody: |
-            ZeroCode \${{ github.ref_name }}
+            ZeroCode ${{ github.ref_name }}
 
             Installeur interactif et paquets natifs pour Linux, Windows et macOS.
             Les empreintes SHA-256 des fichiers publiés sont disponibles dans SHA256SUMS.
           releaseDraft: false
-          prerelease: \${{ contains(github.ref_name, '-') }}
-          args: \${{ matrix.target-args }} --bundles \${{ matrix.bundles }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: ${{ matrix.target-args }} --bundles ${{ matrix.bundles }}
 
   python:
     name: Python package and checksums
@@ -120,8 +120,8 @@ jobs:
 
       - name: Add Python packages and SHA-256 manifest to the release
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: \${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           mkdir -p release-assets
           gh release download "$TAG_NAME" --dir release-assets
