@@ -327,6 +327,11 @@ def validate_config(config: Config) -> None:
             command = hook.get("command")
             if not isinstance(command, str) or not command.strip():
                 raise ConfigError(f"hooks.{event}[{index}].command doit etre une chaine non vide.")
+            if any(char.isspace() for char in command) and not Path(command).expanduser().is_file():
+                raise ConfigError(
+                    f"hooks.{event}[{index}].command doit être un exécutable seul ; "
+                    "place les arguments dans args."
+                )
             args = hook.get("args", [])
             if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
                 raise ConfigError(f"hooks.{event}[{index}].args doit etre une liste de chaines.")
