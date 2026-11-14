@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -69,6 +70,7 @@ def _release_asset_checksum(
     filename: str,
     asset_url: str,
     checksum_url: str,
+    destination: Path | None = None,
     timeout: float = 60.0,
 ) -> bool:
     """Verify a downloaded release asset against the published SHA-256 manifest."""
@@ -91,6 +93,9 @@ def _release_asset_checksum(
     actual = hashlib.sha256(file_response.content).hexdigest()
     if not hmac.compare_digest(actual, expected):
         raise RuntimeError(f"L'empreinte SHA-256 de {filename} ne correspond pas à la release.")
+    if destination is not None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(file_response.content)
     return True
 
 
@@ -188,21 +193,20 @@ def update_from_release() -> tuple[bool, str]:
 
     wheel_url = assets[wheel_name]
     try:
-        _release_asset_checksum(
-            filename=wheel_name,
-            asset_url=wheel_url,
-            checksum_url=checksum_url,
-        )
-    except (httpx.HTTPError, RuntimeError) as exc:
-        return False, f"Vérification de la release impossible : {exc}"
-
-    try:
-        result = subprocess.run(
-            [*command, "install", "--force", wheel_url],
-            check=False,
-        )
-    except OSError as exc:
-        return False, f"Impossible de lancer pipx : {exc}"
+        with tempfile.TemporaryDirectory(prefix="zerocode-update-") as temp_dir:
+            wheel_path = Path(temp_dir) / wheel_name
+            _release_asset_checksum(
+                filename=wheel_name,
+                asset_url=wheel_url,
+                checksum_url=checksum_url,
+                destination=wheel_path,
+            )
+            result = subprocess.run(
+                [*command, "install", "--force", str(wheel_path)],
+                check=False,
+            )
+    except (httpx.HTTPError, RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"La mise à jour n'a pas pu être appliquée : {exc}"
     if result.returncode != 0:
         return False, "La mise à jour a échoué. L'installation précédente n'a pas été supprimée volontairement."
     return True, f"Le moteur ZeroCode a été mis à jour vers {target_version}. Rouvre ton terminal."
