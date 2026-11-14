@@ -101,6 +101,30 @@ class MCPClient:
         tools = result.get("tools") if isinstance(result, dict) else None
         return [item for item in tools or [] if isinstance(item, dict)]
 
+    def list_resources(self) -> list[dict[str, Any]]:
+        try:
+            result = self._request("resources/list", {})
+        except MCPError:
+            return []
+        resources = result.get("resources") if isinstance(result, dict) else None
+        return [item for item in resources or [] if isinstance(item, dict)]
+
+    def list_prompts(self) -> list[dict[str, Any]]:
+        try:
+            result = self._request("prompts/list", {})
+        except MCPError:
+            return []
+        prompts = result.get("prompts") if isinstance(result, dict) else None
+        return [item for item in prompts or [] if isinstance(item, dict)]
+
+    def read_resource(self, uri: str) -> str:
+        result = self._request("resources/read", {"uri": uri})
+        return _render_resource_result(result)
+
+    def get_prompt(self, name: str, arguments: dict[str, str]) -> str:
+        result = self._request("prompts/get", {"name": name, "arguments": arguments})
+        return _render_prompt_result(result)
+
     def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
         result = self._request(
             "tools/call",
@@ -277,6 +301,10 @@ def register_mcp_tools(
         manager.clients.append(client)
         for item in tools:
             _register_tool(registry, client, str(server_name), item)
+        for item in client.list_resources()[:100]:
+            _register_resource_tool(registry, client, str(server_name), item)
+        for item in client.list_prompts()[:100]:
+            _register_prompt_tool(registry, client, str(server_name), item)
     return manager
 
 
@@ -319,6 +347,138 @@ def _register_tool(
         )
     except ValueError:
         return
+
+
+def _register_resource_tool(
+    registry: ToolRegistry,
+    client: MCPClient,
+    server_name: str,
+    item: dict[str, Any],
+) -> None:
+    uri = str(item.get("uri") or "").strip()
+    if not uri:
+        return
+    label = str(item.get("name") or uri.rsplit("/", 1)[-1] or "resource")
+    name = _tool_name(server_name, "resource_" + label)
+
+    def handler(args: dict[str, Any], ctx: Any) -> str:
+        try:
+            return truncate_text(client.read_resource(uri), ctx.max_output_chars)
+        except MCPError as exc:
+            raise ToolError(str(exc)) from exc
+
+    try:
+        registry.register(
+            Tool(
+                name=name,
+                description=(
+                    "Read an MCP resource from " + server_name + ": "
+                    + str(item.get("description") or label)
+                )[:1_000],
+                parameters={"type": "object", "properties": {}},
+                handler=handler,
+                approval="confirm",
+            )
+        )
+    except ValueError:
+        return
+
+
+def _register_prompt_tool(
+    registry: ToolRegistry,
+    client: MCPClient,
+    server_name: str,
+    item: dict[str, Any],
+) -> None:
+    prompt_name = str(item.get("name") or "").strip()
+    if not prompt_name:
+        return
+    name = _tool_name(server_name, "prompt_" + prompt_name)
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    raw_arguments = item.get("arguments")
+    if isinstance(raw_arguments, list):
+        for argument in raw_arguments[:40]:
+            if not isinstance(argument, dict) or not argument.get("name"):
+                continue
+            key = str(argument["name"])
+            properties[key] = {
+                "type": "string",
+                "description": str(argument.get("description") or "")[:300],
+            }
+            if argument.get("required") is True:
+                required.append(key)
+    schema: dict[str, Any] = {"type": "object", "properties": properties}
+    if required:
+        schema["required"] = required
+
+    def handler(args: dict[str, Any], ctx: Any) -> str:
+        try:
+            safe_args = {str(key): str(value) for key, value in args.items()}
+            return truncate_text(
+                client.get_prompt(prompt_name, safe_args),
+                ctx.max_output_chars,
+            )
+        except MCPError as exc:
+            raise ToolError(str(exc)) from exc
+
+    try:
+        registry.register(
+            Tool(
+                name=name,
+                description=(
+                    "Get an MCP prompt from " + server_name + ": "
+                    + str(item.get("description") or prompt_name)
+                )[:1_000],
+                parameters=schema,
+                handler=handler,
+                approval="confirm",
+            )
+        )
+    except ValueError:
+        return
+
+
+def _render_resource_result(result: dict[str, Any]) -> str:
+    contents = result.get("contents")
+    parts: list[str] = []
+    if isinstance(contents, list):
+        for item in contents[:30]:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("uri") or "resource")
+            mime = str(item.get("mimeType") or "unknown")
+            if isinstance(item.get("text"), str):
+                parts.append(f"[{label} · {mime}]\\n{item['text']}")
+            elif item.get("blob"):
+                parts.append(f"[{label} · {mime}] contenu binaire omis.")
+    return "\\n\\n".join(parts) or "(ressource MCP vide ou non textuelle)"
+
+
+def _render_prompt_result(result: dict[str, Any]) -> str:
+    messages = result.get("messages")
+    parts: list[str] = []
+    if isinstance(messages, list):
+        for message in messages[:40]:
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role") or "assistant")
+            content = message.get("content")
+            if isinstance(content, str):
+                rendered = content
+            elif isinstance(content, dict):
+                rendered = str(content.get("text") or content.get("uri") or "")
+            elif isinstance(content, list):
+                rendered = "\\n".join(
+                    str(part.get("text") or part.get("uri") or "")
+                    for part in content
+                    if isinstance(part, dict)
+                )
+            else:
+                rendered = ""
+            if rendered:
+                parts.append(f"[{role}]\\n{rendered}")
+    return "\\n\\n".join(parts) or "(prompt MCP vide)"
 
 
 def _tool_name(server: str, tool: str) -> str:
