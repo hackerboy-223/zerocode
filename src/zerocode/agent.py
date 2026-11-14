@@ -10,7 +10,13 @@ from .errors import ConfigError, ToolError
 from .prompts import build_system_prompt
 from .security import redact_secrets
 from .session import Session, SessionStore
-from .skills import (\n    DEFAULT_ACTIVE_SKILLS,\n    all_skills,\n    list_fabric_strategies,\n    normalize_skill_names,\n    select_full_stack_skills,\n)
+from .skills import (
+    DEFAULT_ACTIVE_SKILLS,
+    all_skills,
+    list_fabric_strategies,
+    normalize_skill_names,
+    select_full_stack_skills,
+)
 from .tokens import compact_messages, estimate_messages, truncate_text
 from .tools import PermissionManager, ToolContext, build_registry
 from .tools.files import _is_binary
