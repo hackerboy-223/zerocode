@@ -5,6 +5,7 @@ from typing import Any
 from .base import PermissionManager, Tool, ToolContext, ToolRegistry
 from .diagnostics import register_diagnostic_tools
 from .files import register_file_tools
+from .git import register_git_tools
 from .project import register_project_tools
 from .search import register_search_tools
 from .shell import register_shell_tools
@@ -30,6 +31,7 @@ def build_registry(
 ) -> ToolRegistry:
     registry = ToolRegistry(context, permissions, ui)
     register_file_tools(registry)
+    register_git_tools(registry)
     register_search_tools(registry)
     register_diagnostic_tools(registry)
     register_project_tools(registry)
