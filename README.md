@@ -93,7 +93,7 @@ zerocode -m auto
 zerocode -c
 ```
 
-`--yolo` autorise toutes les actions de la session. À utiliser uniquement dans un dépôt de confiance.
+`--yolo` autorise les actions ordinaires sans confirmation. Il ne contourne pas les confirmations dédiées à `sudo` ni aux serveurs MCP non fiables. À utiliser uniquement dans un dépôt de confiance.
 
 ## Interface TUI
 
