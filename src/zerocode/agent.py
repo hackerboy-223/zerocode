@@ -10,7 +10,7 @@ from .errors import ConfigError, ToolError
 from .prompts import build_system_prompt
 from .security import redact_secrets
 from .session import Session, SessionStore
-from .skills import DEFAULT_ACTIVE_SKILLS, all_skills, normalize_skill_names
+from .skills import DEFAULT_ACTIVE_SKILLS, all_skills, list_fabric_strategies, normalize_skill_names
 from .tokens import compact_messages, estimate_messages, truncate_text
 from .tools import PermissionManager, ToolContext, build_registry
 from .tools.files import _is_binary
@@ -91,6 +91,7 @@ class Agent:
         self.usage = session.usage
         self.mode = "build"
         self.skills: list[str] = list(DEFAULT_ACTIVE_SKILLS)
+        self.strategy: str | None = None
         self._full_stack_backup: dict[str, Any] | None = None
         self.messages: list[dict[str, Any]] = session.messages
         self.tools.context.todos[:] = [todo for todo in session.todos if isinstance(todo, dict)]
@@ -469,6 +470,21 @@ class Agent:
         self._save_quiet()
         return True, f"Skill {token} {state} (actifs : {', '.join(self.skills) or 'aucun'})."
 
+    def set_strategy(self, raw_name: str | None) -> tuple[bool, str]:
+        token = (raw_name or "").strip().lower().removeprefix("fabric-")
+        if token in {"", "off", "none", "standard"}:
+            self.strategy = None
+            self._refresh_system_mode()
+            self._save_quiet()
+            return True, "Stratégie Fabric désactivée (mode standard)."
+        available = {item["name"]: item for item in list_fabric_strategies()}
+        if token not in available:
+            return False, f"Stratégie inconnue : {token}. Lance zerocode strategies pour voir la liste."
+        self.strategy = token
+        self._refresh_system_mode()
+        self._save_quiet()
+        return True, f"Stratégie Fabric activée : {token}."
+
     def session_path(self) -> str:
         if self.store is None:
             return "(non sauvegardee)"
@@ -477,6 +493,10 @@ class Agent:
     def _system_message(self) -> dict[str, Any]:
         cwd = self.tools.context.cwd
         content = build_system_prompt(cwd, skills=self.skills)
+        if self.strategy:
+            selected = next((item for item in list_fabric_strategies() if item["name"] == self.strategy), None)
+            if selected and selected["prompt"]:
+                content += "\n\nStratégie de raisonnement active (Fabric):\n" + selected["prompt"]
         if self.mode == "plan":
             content += "\n\n" + PLAN_MODE_INSTRUCTION
         elif self.mode == "full-stack":
