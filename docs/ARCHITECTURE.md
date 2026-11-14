@@ -95,7 +95,7 @@ Le mode Full-Stack s'appuie sur des outils dédiés plutôt que sur une suite de
 - `git_status` et `git_diff` exposent les modifications suivies ; les chemins sensibles sont exclus du diff.
 - `project_verify` détecte les scripts et commandes de validation pour JavaScript/TypeScript, PHP, Python, Go, Rust, JVM, Ruby, .NET, Dart/Flutter, Swift et Elixir.
 - `subagent` délègue des analyses isolées à sept profils en lecture seule : explorer, architect, reviewer, security, performance, tester et researcher. L'agent principal reste seul responsable des modifications.
-- MCP peut fournir des outils, des ressources et des prompts. Les actions distantes exigent une confirmation, sauf serveur explicitement marqué `trusted: true` dans la configuration utilisateur/projet. Les annotations `readOnlyHint` restent des indications fournies par le serveur.
+- MCP peut fournir des outils, des ressources et des prompts. Les actions distantes exigent une confirmation, sauf serveur explicitement marqué `trusted: true` dans la configuration globale détenue par l'utilisateur. Les annotations `readOnlyHint` restent des indications fournies par le serveur.
 
 Les serveurs Playwright et Filesystem sont optionnels et documentés dans [MCP_SERVERS.md](MCP_SERVERS.md). Ils ne sont pas téléchargés avec ZeroCode.
 
