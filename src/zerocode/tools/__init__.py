@@ -32,6 +32,7 @@ def build_registry(
     register_file_tools(registry)
     register_search_tools(registry)
     register_diagnostic_tools(registry)
+    register_project_tools(registry)
     register_shell_tools(registry)
     register_todo_tools(registry)
     register_web_tools(registry)
