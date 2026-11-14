@@ -12,7 +12,8 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
 - Outils intégrés (18 outils) : lecture (`read`), écriture (`write`), édition (`edit`), édition multi-blocs atomique (`multi_edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), cartographie AST de symboles (`symbols`), inspection Git sécurisée (`git_status`, `git_diff`), audit statique de cybersécurité SAST (`security_audit`), diagnostic système/technicien (`sys_diag`), cartographie de projet (`project_map`), vérification multi-stack (`project_verify`), shell (`bash`), web (`fetch`, `web_search`), sous-agents spécialisés isolés (`subagent`: explorer, architect, reviewer, security, performance, tester, researcher), plan de tâches (`todo_write`) et checkpoints atomiques (`/undo`). Les outils des serveurs MCP configurés sont ajoutés dynamiquement.
 - Système de **Skills d'expertise** intégrés et extensibles (`/skills`, `/skill <nom>`, `--skill`) : `ultra-dev` (Ingénierie Senior), `cyber-sec` (Expert Cybersécurité, Audit OWASP/CWE & DevSecOps), `sys-tech` (Technicien Système, Réseau & Infra), `review` (Revue de code), `perf` (Haute Performance) et `sec-hardening` (Durcissement actif), plus découverte automatique de `.zerocode/skills/*.md` et `~/.config/zerocode/skills/*.md`.
-- Hooks de cycle de vie `PreToolUse` / `PostToolUse` configurables pour bloquer ou auditer les actions. Les hooks sont lus uniquement dans la configuration globale utilisateur et exécutés sans shell. Guide : [`docs/HOOKS.md`](docs/HOOKS.md).\n- Intégration Fabric native : `zerocode skills --sync-fabric` télécharge les Patterns (développement, sécurité, recherche, rédaction, apprentissage, etc.) dans le catalogue local et les stratégies de raisonnement dans un répertoire séparé. `--force` actualise les ressources déjà installées. Guide : [`docs/FABRIC_INTEGRATION.md`](docs/FABRIC_INTEGRATION.md). Connecteurs navigateur/fichiers (Playwright, filesystem) : [`docs/MCP_SERVERS.md`](docs/MCP_SERVERS.md).
+- Hooks de cycle de vie `PreToolUse` / `PostToolUse` configurables pour bloquer ou auditer les actions. Les hooks sont lus uniquement dans la configuration globale utilisateur et exécutés sans shell. Guide : [`docs/HOOKS.md`](docs/HOOKS.md).
+- Intégration Fabric native : `zerocode skills --sync-fabric` télécharge les Patterns (développement, sécurité, recherche, rédaction, apprentissage, etc.) dans le catalogue local et les stratégies de raisonnement dans un répertoire séparé. `--force` actualise les ressources déjà installées. Guide : [`docs/FABRIC_INTEGRATION.md`](docs/FABRIC_INTEGRATION.md). Connecteurs navigateur/fichiers (Playwright, filesystem) : [`docs/MCP_SERVERS.md`](docs/MCP_SERVERS.md).
 - Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`), pré-injection directe des fichiers mentionnés avec `@chemin` (0 tour réseau) et cache TTL Git.
 - Diagnostics syntaxiques instantanés (Python AST, JSON, TOML, Shell `bash -n` et JavaScript `node --check`) après chaque écriture ou édition pour auto-correction immédiate.
 - Sessions reprenables, mémoire projet persistante (`/remember`), copie rapide (`/copy`, `Ctrl+Y`), compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
@@ -25,25 +26,31 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 ## Installation automatique
 
-ZeroCode installe ses dépendances Python dans un environnement isolé via **pipx**. Aucune clé API, aucun compte OpenRouter et aucune carte bancaire ne sont nécessaires pour démarrer.
+L'installateur interactif propose trois choix : **TUI**, **Desktop** ou **les deux**. Il détecte le système, installe le moteur Python dans un environnement isolé avec `pipx`, vérifie les dépendances et effectue un contrôle final.
 
 ### Linux et macOS
 
-Une seule commande :
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.sh | bash
 ```
 
-Ou télécharge le dépôt et lance `bash install.sh`.
+Le choix **TUI** installe le moteur et l'interface terminale. Le choix **Desktop** installe aussi les bibliothèques natives, Node.js, Rust, compile l'application Tauri puis installe le paquet adapté au système. Sur Debian/Ubuntu, l'installation du paquet demande les droits administrateur ; macOS installe l'application dans `~/Applications`.
+
+Pour lancer directement un mode sans afficher le menu :
+
+```bash
+bash install.sh --mode tui
+bash install.sh --mode desktop
+bash install.sh --mode both
+```
 
 ### Windows · PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
 ```
 
-Le script vérifie Python 3.10+, installe pipx si nécessaire, installe ZeroCode avec toutes ses dépendances déclarées, puis vérifie la commande. Ferme et rouvre le terminal si Windows ou ton shell ne trouve pas encore `zerocode`.
+Le menu propose les mêmes trois choix. Le parcours Desktop installe les outils de compilation via `winget`, construit l'application et ouvre son installateur Windows natif. `winget` (App Installer) est nécessaire pour installer automatiquement les prérequis.
 
 ### Installation manuelle
 
@@ -65,7 +72,6 @@ python -m pip install -e ".[dev]"
 pytest
 ruff check src tests
 ```
-
 ## Démarrage rapide
 
 Sans aucune clé :
