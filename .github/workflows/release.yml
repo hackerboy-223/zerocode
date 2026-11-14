@@ -13,8 +13,43 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify-version:
+    name: Verify release version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure the tag matches every package version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["TAG_NAME"]
+          if not re.fullmatch(r"v?\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?", tag):
+              raise SystemExit(f"Invalid release tag: {tag}")
+          expected = tag.removeprefix("v")
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+          cargo = Path("desktop/src-tauri/Cargo.toml").read_text()
+          versions = {
+              "Python package": pyproject["project"]["version"],
+              "Tauri config": json.loads(Path("desktop/src-tauri/tauri.conf.json").read_text())["version"],
+              "npm package": json.loads(Path("desktop/package.json").read_text())["version"],
+              "Cargo package": re.search(r'(?m)^version\\s*=\\s*"([^"]+)"', cargo).group(1),
+          }
+          mismatches = {name: version for name, version in versions.items() if version != expected}
+          if mismatches:
+              raise SystemExit(f"Release tag {expected} does not match: {mismatches}")
+          print(f"All package versions match {expected}.")
+          PY
+
   desktop:
     name: Desktop · ${{ matrix.label }}
+    needs: verify-version
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -127,5 +162,5 @@ jobs:
           gh release download "$TAG_NAME" --dir release-assets
           cp dist/* release-assets/
           cd release-assets
-          sha256sum * > SHA256SUMS
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
           gh release upload "$TAG_NAME" * --clobber
