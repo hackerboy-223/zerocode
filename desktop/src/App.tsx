@@ -5,7 +5,7 @@ import {
   Activity, ArrowUpRight, Bot, Check, ChevronDown, CircleHelp, FileCode2, Folder, MessageSquare,
   FolderOpen, GitBranch, History, Menu, MessageSquarePlus, MoreHorizontal,
   PanelRightClose, PanelRightOpen, Plus, Search, Send, Settings2, ShieldCheck,
-  Sparkles, SquareTerminal, StopCircle, X
+  Sparkles, StopCircle, X
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import Lupus from "./components/Lupus";
@@ -318,6 +318,24 @@ export default function App() {
     }).catch((error) => setNotice(String(error)));
   }, [agentId, busy]);
 
+
+  useEffect(() => {
+    const onShortcut = (event: globalThis.KeyboardEvent) => {
+      const modifier = event.metaKey || event.ctrlKey;
+      if (modifier && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      } else if (modifier && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        newSession();
+      } else if (event.key === "Escape") {
+        setSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, [newSession]);
+
   const filteredRecents = useMemo(
     () => recentProjects.filter((item) => item.toLowerCase().includes(sessionSearch.toLowerCase())),
     [recentProjects, sessionSearch]
@@ -340,12 +358,12 @@ export default function App() {
         </div>
 
         <button className="new-task-button" onClick={newSession} disabled={!agentId || busy}>
-          <MessageSquarePlus size={16} /> <span>Nouvelle tâche</span> <kbd>⌘ N</kbd>
+          <MessageSquarePlus size={16} /> <span>Nouvelle tâche</span> <kbd>Ctrl N</kbd>
         </button>
 
         <nav className="side-nav">
           <button className={searchOpen ? "nav-item active" : "nav-item"} onClick={() => setSearchOpen((value) => !value)}>
-            <Search size={16} /><span>Rechercher</span><kbd>⌘ K</kbd>
+            <Search size={16} /><span>Rechercher</span><kbd>Ctrl K</kbd>
           </button>
           <button className="nav-item" onClick={chooseWorkspace}>
             <FolderOpen size={16} /><span>Ouvrir un dossier</span>
