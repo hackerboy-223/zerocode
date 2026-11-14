@@ -1,6 +1,6 @@
 [package]
 name = "zerocode-desktop"
-version = "0.1.0"
+version = "1.0.0"
 description = "Agent de développement local ZeroCode Desktop"
 authors = ["H@CKERBOY"]
 edition = "2021"
