@@ -38,6 +38,7 @@ export default function App() {
   const [agentId, setAgentId] = useState<string | null>(null);
   const [eventsReady, setEventsReady] = useState(false);
   const agentIdRef = useRef<string | null>(null);
+  const pendingAgentEventsRef = useRef<Array<{ agentId: string; event: AgentEvent }>>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activities, setActivities] = useState<ToolActivity[]>([]);
   const [draft, setDraft] = useState("");
@@ -69,8 +70,11 @@ export default function App() {
         void desktopInvoke("stop_agent", { agentId: id }).catch(() => undefined);
         return;
       }
-      setAgentId(id);
       agentIdRef.current = id;
+      setAgentId(id);
+      const queued = pendingAgentEventsRef.current.filter((entry) => entry.agentId === id);
+      pendingAgentEventsRef.current = [];
+      queued.forEach((entry) => handleAgentEvent(entry.event));
     }).catch((error) => {
       if (!cancelled) setNotice("Agent indisponible : " + String(error));
     });
@@ -87,14 +91,25 @@ export default function App() {
     let unlisten: Array<() => void> = [];
     let alive = true;
     const attach = async () => {
+      const routeEvent = (id: string, event: AgentEvent) => {
+        if (agentIdRef.current === id) {
+          handleAgentEvent(event);
+        } else if (!agentIdRef.current) {
+          pendingAgentEventsRef.current.push({ agentId: id, event });
+        }
+      };
       const offAgent = await listen<{ agent_id: string; event: AgentEvent }>("agent-event", (event) => {
-        handleAgentEvent(event.payload.event);
+        routeEvent(event.payload.agent_id, event.payload.event);
       });
       const offLog = await listen<{ agent_id: string; message: string }>("agent-log", (event) => {
-        setNotice(event.payload.message);
+        if (!agentIdRef.current || agentIdRef.current === event.payload.agent_id) {
+          setNotice(event.payload.message);
+        }
       });
       const offStatus = await listen<{ agent_id: string; status: string }>("agent-status", (event) => {
-        if (event.payload.status === "stopped") setBusy(false);
+        if (agentIdRef.current === event.payload.agent_id && event.payload.status === "stopped") {
+          setBusy(false);
+        }
       });
       if (!alive) {
         offAgent(); offLog(); offStatus();

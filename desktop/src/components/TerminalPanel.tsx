@@ -23,6 +23,7 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sessionRef = useRef<string | null>(null);
+  const pendingOutputRef = useRef<OutputEvent[]>([]);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -64,6 +65,7 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
     let observer: ResizeObserver | undefined;
     let alive = true;
 
+    pendingOutputRef.current = [];
     const connect = async () => {
       if (!isTauri()) {
         terminal.writeln("\x1b[90mLe terminal local est disponible dans l’application native.\x1b[0m");
@@ -71,9 +73,13 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
       }
       try {
         unlisten = await listen<OutputEvent>("terminal-output", (event) => {
-          if (event.payload.id === sessionRef.current && terminalRef.current) {
+          if (!terminalRef.current) return;
+          if (event.payload.id === sessionRef.current) {
             terminalRef.current.write(Uint8Array.from(event.payload.data));
+            return;
           }
+          pendingOutputRef.current.push(event.payload);
+          if (pendingOutputRef.current.length > 80) pendingOutputRef.current.shift();
         });
         const id = await desktopInvoke<string>("start_terminal", { cwd });
         if (!alive) {
@@ -82,6 +88,10 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
         }
         sessionRef.current = id;
         setConnected(true);
+        for (const output of pendingOutputRef.current) {
+          if (output.id === id) terminal.write(Uint8Array.from(output.data));
+        }
+        pendingOutputRef.current = [];
         fit.fit();
         await desktopInvoke("resize_terminal", {
           terminalId: id,
