@@ -1,5 +1,6 @@
 param(
     [string]$Mode = "",
+    [string]$Version = "",
     [switch]$Yes
 )
 
@@ -7,6 +8,7 @@ $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/hackerboy-223/zerocode.git"
 $InstallRef = $env:ZEROCODE_INSTALL_REF
 if ([string]::IsNullOrWhiteSpace($InstallRef)) { $InstallRef = "latest" }
+if (-not [string]::IsNullOrWhiteSpace($Version)) { $InstallRef = $Version }
 $SourceRef = $env:ZEROCODE_SOURCE_REF
 if ([string]::IsNullOrWhiteSpace($SourceRef)) { $SourceRef = "feature/zerocode-desktop" }
 $script:ReleaseMode = $false
