@@ -327,6 +327,9 @@ def run_agent(
     context.checkpoint = lambda path, before, tool: checkpoints.record(
         agent.session.id, path, before, tool
     )
+    context.checkpoint_applied = lambda path: checkpoints.mark_applied(
+        agent.session.id, path
+    )
     mcp_manager = MCPManager()
     if config.mcp_servers:
         mcp_manager = register_mcp_tools(
@@ -788,7 +791,7 @@ def _slash_command(
         if checkpoints is None:
             ui.warn("Undo indisponible.")
             return False
-        ok, message = checkpoints.undo(agent.session.id)
+        ok, message = checkpoints.undo(agent.session.id, agent.tools.context.cwd)
         if ok:
             ui.success(message)
         else:
