@@ -126,11 +126,57 @@ fn agent_run(app: AppHandle, cwd: String, prompt: String, allow_changes: bool) -
     Ok(())
 }
 
+
+#[derive(serde::Serialize)]
+struct ProjectEntry { path: String, is_dir: bool }
+
+fn skip_project_entry(name: &str) -> bool {
+    matches!(name, ".git" | "node_modules" | "vendor" | ".venv" | "venv" | ".next" | "dist" | "build" | "target" | "__pycache__" | ".idea" | ".vscode")
+        || name.starts_with(".env")
+        || name.ends_with(".pem")
+        || name.ends_with(".key")
+        || name.ends_with(".p12")
+        || name == "id_rsa"
+}
+
+fn collect_project_entries(root: &std::path::Path, current: &std::path::Path, depth: usize, output: &mut Vec<ProjectEntry>) -> Result<(), String> {
+    if depth > 4 || output.len() >= 300 { return Ok(()); }
+    let mut items = std::fs::read_dir(current).map_err(|e| e.to_string())?
+        .filter_map(Result::ok).collect::<Vec<_>>();
+    items.sort_by_key(|entry| {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let is_dir = entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
+        (!is_dir, name.to_lowercase())
+    });
+    for item in items {
+        if output.len() >= 300 { break; }
+        let name = item.file_name().to_string_lossy().to_string();
+        if skip_project_entry(&name) { continue; }
+        let metadata = item.file_type().map_err(|e| e.to_string())?;
+        if metadata.is_symlink() { continue; }
+        let is_dir = metadata.is_dir();
+        let full_path = item.path();
+        let relative = full_path.strip_prefix(root).map_err(|e| e.to_string())?;
+        output.push(ProjectEntry { path: relative.to_string_lossy().replace('\\', "/"), is_dir });
+        if is_dir { collect_project_entries(root, &full_path, depth + 1, output)?; }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn list_project_files(cwd: String) -> Result<Vec<ProjectEntry>, String> {
+    let root = PathBuf::from(cwd).canonicalize().map_err(|e| e.to_string())?;
+    if !root.is_dir() { return Err("Dossier de projet introuvable.".into()); }
+    let mut output = Vec::new();
+    collect_project_entries(&root, &root, 0, &mut output)?;
+    Ok(output)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![default_workspace, terminal_start, terminal_write, terminal_resize, terminal_stop, agent_run])
+        .invoke_handler(tauri::generate_handler![default_workspace, list_project_files, terminal_start, terminal_write, terminal_resize, terminal_stop, agent_run])
         .run(tauri::generate_context!())
         .expect("Erreur au démarrage de ZeroCode Desktop");
 }
