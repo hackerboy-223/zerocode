@@ -232,7 +232,9 @@ def _verification_commands(root: Path, checks: list[str]) -> list[tuple[str, str
                 parsed = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8")[:100_000])
             except (OSError, UnicodeError, ValueError):
                 parsed = {}
-            if parsed.get("build-system"):
+            if parsed.get("build-system") and (
+                shutil.which("build") or importlib.util.find_spec("build")
+            ):
                 commands.append(("build", f"{python} -m build"))
 
     if (root / "go.mod").is_file():
