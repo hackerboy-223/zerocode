@@ -145,7 +145,8 @@ function Install-DesktopPrerequisites {
         Stop-Install "Rust n'est pas disponible. Ferme puis rouvre PowerShell, vérifie Rustup, puis relance l'installation."
     }
 
-    $vsPath = Join-Path $env:ProgramFiles "Microsoft Visual Studio\Installer\vswhere.exe"
+    $programFiles = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+    $vsPath = Join-Path $programFiles "Microsoft Visual Studio\Installer\vswhere.exe"
     if (-not (Test-Path $vsPath)) {
         Install-WingetPackage "Microsoft.VisualStudio.2022.BuildTools" "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
     }
@@ -153,7 +154,8 @@ function Install-DesktopPrerequisites {
         Stop-Install "Visual Studio C++ Build Tools n'a pas été détecté après installation."
     }
 
-    $webViewPath = Join-Path $env:ProgramFiles(x86) "Microsoft\EdgeWebView\Application"
+    $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+    $webViewPath = Join-Path $programFilesX86 "Microsoft\EdgeWebView\Application"
     if (-not (Test-Path $webViewPath)) {
         Install-WingetPackage "Microsoft.EdgeWebView2Runtime"
     }
