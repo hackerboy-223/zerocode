@@ -309,12 +309,22 @@ install_linux_app() {
     PACKAGE="$(find "$BUNDLE_DIR/deb" -maxdepth 1 -type f -name '*.deb' -print -quit 2>/dev/null || true)"
     [[ -n "$PACKAGE" ]] || die "Le paquet .deb n'a pas été généré."
     info "Installation du paquet système : $PACKAGE"
-    as_root apt-get install -y "$PACKAGE"
+    PACKAGE_NAME="$(dpkg-deb -f "$PACKAGE" Package)"
+    if dpkg-query -W -f='${Status}' "$PACKAGE_NAME" 2>/dev/null | grep -q "install ok installed"; then
+      as_root apt-get install -y --reinstall "$PACKAGE"
+    else
+      as_root apt-get install -y "$PACKAGE"
+    fi
   elif command -v dnf >/dev/null 2>&1; then
     PACKAGE="$(find "$BUNDLE_DIR/rpm" -maxdepth 1 -type f -name '*.rpm' -print -quit 2>/dev/null || true)"
     [[ -n "$PACKAGE" ]] || die "Le paquet .rpm n'a pas été généré."
     info "Installation du paquet système : $PACKAGE"
-    as_root dnf install -y "$PACKAGE"
+    PACKAGE_NAME="$(rpm -qp --qf '%{NAME}' "$PACKAGE")"
+    if rpm -q "$PACKAGE_NAME" >/dev/null 2>&1; then
+      as_root dnf reinstall -y "$PACKAGE"
+    else
+      as_root dnf install -y "$PACKAGE"
+    fi
   else
     APP_SOURCE="$(find "$BUNDLE_DIR/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit 2>/dev/null || true)"
     [[ -n "$APP_SOURCE" ]] || die "Aucun paquet AppImage n'a été généré pour cette distribution."
