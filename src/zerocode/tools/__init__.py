@@ -5,6 +5,7 @@ from typing import Any
 from .base import PermissionManager, Tool, ToolContext, ToolRegistry
 from .diagnostics import register_diagnostic_tools
 from .files import register_file_tools
+from .project import register_project_tools
 from .search import register_search_tools
 from .shell import register_shell_tools
 from .subagent import register_subagent_tools
