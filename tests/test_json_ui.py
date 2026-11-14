@@ -28,7 +28,7 @@ def test_json_ui_refuses_when_approval_protocol_is_disabled() -> None:
 
 def test_json_ui_returns_sudo_password_from_protocol(monkeypatch) -> None:
     output = io.StringIO()
-    monkeypatch.setattr("zerocode.ui.sys.stdin", io.StringIO('{"approved": true, "password": "test-password"}\n'))
+    monkeypatch.setattr("zerocode.ui.sys.stdin", io.StringIO('{"approved": true}\n{"password": "test-password"}\n'))
     ui = JsonUI(stream=output, approval_protocol=True)
 
     assert ui.confirm_sudo_command("apt install package") is True
