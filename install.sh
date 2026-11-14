@@ -147,18 +147,24 @@ check_python() {
 resolve_install_ref() {
   command -v curl >/dev/null 2>&1 || die "curl est requis pour vérifier les releases ZeroCode."
   if [[ "$INSTALL_REF" == "latest" ]]; then
-    if RELEASE_JSON="$(curl -fsSL "https://api.github.com/repos/hackerboy-223/zerocode/releases/latest" 2>/dev/null)"; then
+    release_url="https://api.github.com/repos/hackerboy-223/zerocode/releases/latest"
+    if RELEASE_JSON="$(curl -fsSL --retry 2 --retry-delay 1 "$release_url" 2>/dev/null)"; then
       INSTALL_REF="$(printf '%s' "$RELEASE_JSON" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin).get("tag_name", ""))')"
       [[ "$INSTALL_REF" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die "La dernière release GitHub possède un tag invalide."
       RELEASE_MODE="1"
       success "Release stable sélectionnée : $INSTALL_REF"
     else
-      warn "Aucune release stable accessible. Installation depuis la branche $SOURCE_REF."
-      INSTALL_REF="$SOURCE_REF"
-      RELEASE_MODE="0"
+      http_code="$(curl -sS -o /dev/null -w '%{http_code}' "$release_url" 2>/dev/null || true)"
+      if [[ "$http_code" == "404" ]]; then
+        warn "Aucune release stable publiée. Installation depuis la branche $SOURCE_REF."
+        INSTALL_REF="$SOURCE_REF"
+        RELEASE_MODE="0"
+      else
+        die "Impossible de joindre les releases GitHub (HTTP \${http_code:-inconnu}). Vérifie ta connexion puis relance."
+      fi
     fi
   elif [[ "$INSTALL_REF" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
-    RELEASE_JSON="$(curl -fsSL "https://api.github.com/repos/hackerboy-223/zerocode/releases/tags/$INSTALL_REF")" || die "Release $INSTALL_REF introuvable."
+    RELEASE_JSON="$(curl -fsSL --retry 2 --retry-delay 1 "https://api.github.com/repos/hackerboy-223/zerocode/releases/tags/$INSTALL_REF")" || die "Release $INSTALL_REF introuvable ou inaccessible."
     RELEASE_MODE="1"
     success "Release sélectionnée : $INSTALL_REF"
   else
