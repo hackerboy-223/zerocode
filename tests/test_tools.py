@@ -677,7 +677,7 @@ def test_shell_stream_redacts_tokens_split_across_pipe_chunks(tmp_path):
         stream_output=lambda _name, chunk: streamed.append(chunk),
     )
     registry = build_registry(context, PermissionManager(mode="allow", interactive=False))
-    code = f"import sys; sys.stdout.write('x' * 4090 + '{token}')"
+    code = f"import sys; sys.stdout.write('x' * 4089); sys.stdout.write(chr(10)); sys.stdout.write('{token}')"
     result = call(registry, "bash", command=python_command(code))
 
     output = "".join(streamed)
