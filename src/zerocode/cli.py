@@ -828,7 +828,7 @@ def print_global_help(console: Console | None = None) -> None:
     text.append("  auto           chaîne gratuite, sans clé via Kilo Gateway\n\n")
     text.append("Dans le chat\n", style="bold cyan")
     text.append(
-        "  /help  /build  /plan  /full-stack  /skills  /skill  /audit  /doctor  "
+        "  /help  /build  /plan  /full-stack  /skills  /skill  /strategy  /audit  /doctor  "
         "/model  /provider  /permissions  /compact  /cost  /quit\n"
     )
     text.append("\nCréé par ", style="dim")
