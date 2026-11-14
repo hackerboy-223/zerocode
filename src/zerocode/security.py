@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 
 PEM_PRIVATE_KEY_RE = re.compile(
-    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----"
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?"
+    r"(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)"
 )
 API_TOKEN_RE = re.compile(
     r"\b(?:"
