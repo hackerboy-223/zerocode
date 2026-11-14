@@ -1,11 +1,11 @@
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize, PtySystem};
-use std::{env, io::{Read, Write}, path::PathBuf, process::{Command, Stdio}, thread};
+use std::{env, io::{Read, Write}, path::PathBuf, process::{ChildStdin, Command, Stdio}, sync::{Arc, Mutex}, thread};
 use tauri::{AppHandle, Emitter, State};
 
 struct TerminalSession { writer: Box<dyn Write + Send>, master: Box<dyn MasterPty + Send>, child: Box<dyn Child + Send + Sync> }
 impl Drop for TerminalSession { fn drop(&mut self) { let _ = self.child.kill(); } }
 #[derive(Default)]
-struct AppState { terminal: std::sync::Mutex<Option<TerminalSession>> }
+struct AppState { terminal: Mutex<Option<TerminalSession>>, agent_stdin: Arc<Mutex<Option<ChildStdin>>> }
 
 fn shell() -> String {
     if cfg!(target_os = "windows") { env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".into()) }
@@ -73,7 +73,7 @@ fn terminal_stop(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn agent_run(app: AppHandle, cwd: String, prompt: String, allow_changes: bool) -> Result<(), String> {
+fn agent_run(app: AppHandle, state: State<'_, AppState>, cwd: String, prompt: String, allow_changes: bool) -> Result<(), String> {
     let path = PathBuf::from(cwd).canonicalize().map_err(|e| e.to_string())?;
     if !path.is_dir() { return Err("Dossier de projet introuvable.".into()); }
     if prompt.trim().is_empty() { return Err("Demande vide.".into()); }
@@ -83,10 +83,13 @@ fn agent_run(app: AppHandle, cwd: String, prompt: String, allow_changes: bool) -
     if let Some(home) = env::var_os("HOME") { let local_bin = PathBuf::from(home).join(".local/bin"); if !search_paths.contains(&local_bin) { search_paths.push(local_bin); } }
     let path_value = env::join_paths(search_paths).map_err(|e| e.to_string())?;
     command.env("PATH", path_value);
-    command.arg("--json").arg("--continue").arg("--cwd").arg(&path).arg("--permissions")
+    command.arg("--json").arg("--desktop-protocol").arg("--continue").arg("--cwd").arg(&path).arg("--permissions")
         .arg(if allow_changes { "allow" } else { "ask" }).arg(prompt)
-        .current_dir(&path).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        .current_dir(&path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|e| format!("Commande zerocode introuvable dans PATH. Installe le moteur avant de lancer l'agent : {e}"))?;
+    let stdin = child.stdin.take().ok_or("Entrée agent indisponible.")?;
+    { let mut slot = state.agent_stdin.lock().map_err(|_| "Verrou agent indisponible.")?; *slot = Some(stdin); }
+    let stdin_store = state.agent_stdin.clone();
     let stdout = child.stdout.take().ok_or("Sortie de l'agent indisponible.")?;
     let stderr = child.stderr.take().ok_or("Erreurs de l'agent indisponibles.")?;
     let handle = app.clone();
@@ -120,12 +123,23 @@ fn agent_run(app: AppHandle, cwd: String, prompt: String, allow_changes: bool) -
         let _ = output_thread.join();
         let _ = error_thread.join();
         let code = child.wait().ok().and_then(|status| status.code());
+        if let Ok(mut slot) = stdin_store.lock() { slot.take(); }
         let event = serde_json::json!({"type":"process_finished","exit_code":code});
         let _ = handle.emit("agent-event", event.to_string());
     });
     Ok(())
 }
 
+
+
+#[tauri::command]
+fn agent_respond(state: State<'_, AppState>, approved: bool, password: Option<String>) -> Result<(), String> {
+    let mut slot = state.agent_stdin.lock().map_err(|_| "Verrou agent indisponible.")?;
+    let stdin = slot.as_mut().ok_or("Aucune demande d'autorisation en attente.")?;
+    let response = serde_json::json!({"approved": approved, "password": password});
+    writeln!(stdin, "{}", response).map_err(|e| e.to_string())?;
+    stdin.flush().map_err(|e| e.to_string())
+}
 
 #[derive(serde::Serialize)]
 struct ProjectEntry { path: String, is_dir: bool }
@@ -176,7 +190,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![default_workspace, list_project_files, terminal_start, terminal_write, terminal_resize, terminal_stop, agent_run])
+        .invoke_handler(tauri::generate_handler![default_workspace, list_project_files, terminal_start, terminal_write, terminal_resize, terminal_stop, agent_run, agent_respond])
         .run(tauri::generate_context!())
         .expect("Erreur au démarrage de ZeroCode Desktop");
 }
