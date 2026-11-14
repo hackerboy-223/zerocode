@@ -11,7 +11,7 @@ use std::{
 };
 
 use portable_pty::{
-    native_pty_system, Child as PtyChild, CommandBuilder, MasterPty, PtySize, PtySystem,
+    native_pty_system, Child as PtyChild, CommandBuilder, MasterPty, PtySize,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -49,13 +49,13 @@ struct DesktopState {
     agents: Mutex<HashMap<String, AgentProcess>>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct TerminalOutput {
     id: String,
     data: Vec<u8>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct AgentEnvelope {
     agent_id: String,
     event: Value,
