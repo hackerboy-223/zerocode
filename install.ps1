@@ -13,6 +13,8 @@ $SourceRef = $env:ZEROCODE_SOURCE_REF
 if ([string]::IsNullOrWhiteSpace($SourceRef)) { $SourceRef = "feature/zerocode-desktop" }
 $script:ReleaseMode = $false
 $script:Release = $null
+$script:WindowsArch = "x64"
+if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { $script:WindowsArch = "arm64" }
 if ([string]::IsNullOrWhiteSpace($Mode)) { $Mode = $env:ZEROCODE_INSTALL_MODE }
 if ($env:ZEROCODE_INSTALL_YES -eq "1") { $Yes = $true }
 
@@ -136,7 +138,7 @@ function Get-ReleaseAsset([string]$Suffix, [string]$Architecture = "any") {
                 }
             }
         }
-        if ($ranked.Count -gt 0) { $assets = $ranked }
+        $assets = $ranked
     }
     if ($assets.Count -ne 1) {
         Stop-Install "La release ne contient pas un seul fichier $Suffix compatible avec l'architecture $Architecture."
@@ -299,7 +301,7 @@ function Install-DesktopPrerequisites {
 }
 function Install-Desktop {
     if ($script:ReleaseMode) {
-        $asset = Get-VerifiedReleaseAsset ".exe" "x64"
+        $asset = Get-VerifiedReleaseAsset ".exe" $script:WindowsArch
         try {
             Write-Info "Lancement de l'installateur natif ZeroCode Desktop…"
             $process = Start-Process -FilePath $asset.Path -Wait -PassThru
