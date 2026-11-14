@@ -241,7 +241,7 @@ def select_full_stack_skills(cwd: Path, task: str = "", limit: int = 8) -> list[
             continue
 
     context = " ".join(context_parts)
-    tokens = set(re.findall(r"[a-z][a-z0-9+#.-]{1,}", context))
+    tokens = set(re.findall(r"[a-z][a-z0-9+#.-]{1,}", context.replace("_", " ")))
     inferred = (
         ("frontend", ("react", "next", "vite", "vue", "angular")),
         ("backend", ("laravel", "django", "fastapi", "express", "spring")),
@@ -268,7 +268,7 @@ def select_full_stack_skills(cwd: Path, task: str = "", limit: int = 8) -> list[
         if spec.builtin or name in selected:
             continue
         haystack = f"{name.removeprefix('fabric-')} {spec.summary}".lower()
-        skill_tokens = set(re.findall(r"[a-z][a-z0-9+#.-]{1,}", haystack))
+        skill_tokens = set(re.findall(r"[a-z][a-z0-9+#.-]{1,}", haystack.replace("_", " ")))
         score = len(skill_tokens & tokens)
         for group, terms in groups.items():
             if group in skill_tokens and terms & tokens:
