@@ -553,3 +553,47 @@ def test_confirm_approval_cannot_be_bypassed_by_allow_or_yolo(tmp_path):
     assert not PermissionManager(mode="deny", interactive=True).allow(
         action, {}, ui=RejectingUI(), context=ToolContext(cwd=tmp_path)
     )
+
+def test_git_status_and_diff_exclude_secret_contents(tmp_path):
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "ZeroCode Tests"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "zerocode@example.invalid"], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("before\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("API_KEY=original-secret\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md", ".env"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=tmp_path, check=True)
+
+    (tmp_path / "README.md").write_text("after\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("API_KEY=changed-secret\n", encoding="utf-8")
+    registry, _ = make_registry(tmp_path)
+
+    status = call(registry, "git_status")
+    assert "README.md" in status
+    assert "Branche" in status
+
+    diff = call(registry, "git_diff", scope="working")
+    assert "before" in diff
+    assert "after" in diff
+    assert "original-secret" not in diff
+    assert "changed-secret" not in diff
+    assert ".env" not in diff
+
+
+def test_git_diff_refuses_explicit_secret_path(tmp_path):
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "ZeroCode Tests"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "zerocode@example.invalid"], cwd=tmp_path, check=True)
+    secret = tmp_path / ".env"
+    secret.write_text("TOKEN=hidden\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".env"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=tmp_path, check=True)
+    secret.write_text("TOKEN=still-hidden\n", encoding="utf-8")
+
+    registry, _ = make_registry(tmp_path)
+    result = call(registry, "git_diff", path=".env")
+    assert result.startswith("ERREUR:")
+    assert "protege" in result
