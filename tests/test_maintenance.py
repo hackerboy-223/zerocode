@@ -82,7 +82,7 @@ def test_pipx_does_not_claim_unrelated_package(monkeypatch):
     assert not maintenance.pipx_manages_zerocode(["pipx"])
 
 
-def test_release_asset_checksum_accepts_matching_digest(monkeypatch):
+def test_release_asset_checksum_accepts_matching_digest(monkeypatch, tmp_path):
     import hashlib
 
     payload = b"verified-wheel"
@@ -96,11 +96,14 @@ def test_release_asset_checksum_accepts_matching_digest(monkeypatch):
             return None
 
     monkeypatch.setattr(maintenance.httpx, "get", lambda *args, **kwargs: Response())
+    destination = tmp_path / "package.whl"
     assert maintenance._release_asset_checksum(
         filename="package.whl",
         asset_url="https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/package.whl",
         checksum_url="https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/SHA256SUMS",
+        destination=destination,
     )
+    assert destination.read_bytes() == payload
 
 
 def test_update_reinstalls_verified_release_wheel(monkeypatch):
@@ -112,12 +115,17 @@ def test_update_reinstalls_verified_release_wheel(monkeypatch):
         "SHA256SUMS": "https://github.com/hackerboy-223/zerocode/releases/download/v1.0.1/SHA256SUMS",
     }
     monkeypatch.setattr(maintenance, "latest_release_details", lambda: ("v1.0.1", assets))
-    monkeypatch.setattr(maintenance, "_release_asset_checksum", lambda **kwargs: True)
+    def verify_and_save(**kwargs):
+        kwargs["destination"].write_bytes(b"verified wheel")
+        return True
+
+    monkeypatch.setattr(maintenance, "_release_asset_checksum", verify_and_save)
     monkeypatch.setattr(maintenance, "pipx_command", lambda: ["pipx"])
     monkeypatch.setattr(maintenance, "pipx_manages_zerocode", lambda command: True)
 
     def fake_run(command, **kwargs):
         calls.append(command)
+        assert Path(command[3]).read_bytes() == b"verified wheel"
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(maintenance.subprocess, "run", fake_run)
