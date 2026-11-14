@@ -6,6 +6,12 @@ Créé par **H@CKERBOY** · [GitHub](https://github.com/hackerboy-223) · [Portf
 
 zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et exécute des commandes. Il ne se contente pas de générer du texte : chaque action est vérifiable, les modifications sûres et les commandes de contrôle courantes sont automatiques, et les opérations sensibles restent soumises à autorisation.
 
+## Application de bureau
+
+Une première version de **ZeroCode Desktop** est en cours dans [`desktop/`](desktop/README.md). Elle apporte une interface native inspirée des environnements de travail d'agents, un terminal PTY exécuté sur la machine, une conversation reliée au moteur ZeroCode et la mascotte animée LUPUS. Guide : [`desktop/README.md`](desktop/README.md).
+
+Cette version est encore expérimentale : le mode prudent bloque les actions qui nécessitent une approbation interactive ; le mode autonome doit être activé manuellement et donne au moteur les permissions du compte local. Le protocole d'approbation interactif est la prochaine étape.
+
 ## Points clés
 
 - Chaîne de repli automatique si un modèle est indisponible, limité ou saturé.
