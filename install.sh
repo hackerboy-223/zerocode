@@ -286,6 +286,13 @@ install_linux_app() {
     [[ -n "$APP_SOURCE" ]] || die "Aucun paquet AppImage n'a été généré pour cette distribution."
     APP_DIR="$HOME/.local/opt/zerocode"
     mkdir -p "$APP_DIR" "$HOME/.local/bin" "$HOME/.local/share/applications"
+    if [[ -e "$APP_DIR/ZeroCode.AppImage" ]]; then
+      cp -p "$APP_DIR/ZeroCode.AppImage" "$APP_DIR/ZeroCode.AppImage.backup-$(date +%Y%m%d-%H%M%S)"
+      warn "Ancienne AppImage conservée avant remplacement."
+    fi
+    if [[ -e "$HOME/.local/bin/zerocode-desktop" && ! -L "$HOME/.local/bin/zerocode-desktop" ]]; then
+      mv "$HOME/.local/bin/zerocode-desktop" "$HOME/.local/bin/zerocode-desktop.backup-$(date +%Y%m%d-%H%M%S)"
+    fi
     cp "$APP_SOURCE" "$APP_DIR/ZeroCode.AppImage"
     chmod 755 "$APP_DIR/ZeroCode.AppImage"
     ln -sfn "$APP_DIR/ZeroCode.AppImage" "$HOME/.local/bin/zerocode-desktop"
