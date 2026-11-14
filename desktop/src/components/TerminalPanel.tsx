@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { ChevronDown, ChevronUp, Maximize2, SquareTerminal } from "lucide-react";
+import { ChevronDown, ChevronUp, Eraser, Maximize2, Minimize2, SquareTerminal } from "lucide-react";
 import { desktopInvoke, isTauri, listen } from "../lib/desktop";
 
 import "@xterm/xterm/css/xterm.css";
@@ -18,6 +18,10 @@ interface OutputEvent {
   data: number[];
 }
 
+interface ClosedEvent {
+  id: string;
+}
+
 export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -25,6 +29,7 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
   const sessionRef = useRef<string | null>(null);
   const pendingOutputRef = useRef<OutputEvent[]>([]);
   const [connected, setConnected] = useState(false);
+  const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -61,7 +66,8 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
     terminalRef.current = terminal;
     fitRef.current = fit;
 
-    let unlisten: (() => void) | undefined;
+    let unlistenOutput: (() => void) | undefined;
+    let unlistenClosed: (() => void) | undefined;
     let observer: ResizeObserver | undefined;
     let alive = true;
 
@@ -72,7 +78,7 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
         return;
       }
       try {
-        unlisten = await listen<OutputEvent>("terminal-output", (event) => {
+        unlistenOutput = await listen<OutputEvent>("terminal-output", (event) => {
           if (!terminalRef.current) return;
           if (event.payload.id === sessionRef.current) {
             terminalRef.current.write(Uint8Array.from(event.payload.data));
@@ -80,6 +86,11 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
           }
           pendingOutputRef.current.push(event.payload);
           if (pendingOutputRef.current.length > 80) pendingOutputRef.current.shift();
+        });
+        unlistenClosed = await listen<ClosedEvent>("terminal-closed", (event) => {
+          if (event.payload.id === sessionRef.current) {
+            setConnected(false);
+          }
         });
         const id = await desktopInvoke<string>("start_terminal", { cwd });
         if (!alive) {
@@ -120,7 +131,8 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
     return () => {
       alive = false;
       observer?.disconnect();
-      unlisten?.();
+      unlistenOutput?.();
+      unlistenClosed?.();
       const id = sessionRef.current;
       sessionRef.current = null;
       if (id && isTauri()) void desktopInvoke("stop_terminal", { terminalId: id }).catch(() => undefined);
@@ -137,10 +149,25 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
       fitRef.current?.fit();
     });
     return () => cancelAnimationFrame(frame);
-  }, [open]);
+  }, [open, maximized]);
+
+  const clearTerminal = () => {
+    terminalRef.current?.clear();
+  };
+
+  const toggleMaximize = () => {
+    if (!open) onToggle();
+    setMaximized((value) => !value);
+  };
 
   return (
-    <section className={"terminal-panel" + (open ? " terminal-open" : " terminal-closed")}>
+    <section
+      className={
+        "terminal-panel" +
+        (open ? " terminal-open" : " terminal-closed") +
+        (open && maximized ? " terminal-maximized" : "")
+      }
+    >
       <header className="terminal-header">
         <div className="terminal-title">
           <SquareTerminal size={15} />
@@ -149,8 +176,15 @@ export default function TerminalPanel({ cwd, open, onToggle }: TerminalPanelProp
           <small>{connected ? "session locale" : cwd ? "initialisation" : "en attente"}</small>
         </div>
         <div className="terminal-actions">
-          <button className="icon-button terminal-expand" title="Agrandir le terminal" onClick={onToggle}>
-            <Maximize2 size={14} />
+          <button className="icon-button" title="Effacer le terminal" onClick={clearTerminal}>
+            <Eraser size={13} />
+          </button>
+          <button
+            className="icon-button terminal-expand"
+            title={maximized ? "Restaurer la hauteur" : "Agrandir le terminal"}
+            onClick={toggleMaximize}
+          >
+            {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
           <button className="icon-button" title={open ? "Réduire" : "Afficher"} onClick={onToggle}>
             {open ? <ChevronDown size={16} /> : <ChevronUp size={16} />}

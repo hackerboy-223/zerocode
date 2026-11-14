@@ -3,8 +3,9 @@
 use std::{
     collections::HashMap,
     env,
+    fs,
     io::{BufRead, BufReader, Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child as ProcessChild, ChildStdin, Command as ProcessCommand, Stdio},
     sync::Mutex,
     thread,
@@ -257,6 +258,31 @@ fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
         }
     }
 
+    for root in [
+        Some(PathBuf::from(workspace)),
+        Path::new(workspace).parent().map(PathBuf::from),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        for rel in [
+            Path::new(".venv").join("bin").join("zerocode"),
+            Path::new(".venv").join("Scripts").join("zerocode.exe"),
+        ] {
+            let candidate = root.join(rel);
+            if candidate.is_file() {
+                attempts.push((
+                    candidate.to_string_lossy().into_owned(),
+                    vec![
+                        "desktop-bridge".to_string(),
+                        "--cwd".to_string(),
+                        workspace.to_string(),
+                    ],
+                ));
+            }
+        }
+    }
+
     if let Some(home) = env::var_os("HOME").map(std::path::PathBuf::from) {
         let pipx_entry = home.join(".local").join("bin").join("zerocode");
         let pipx_venv = home
@@ -470,6 +496,270 @@ fn stop_agent(
     Ok(())
 }
 
+#[derive(Serialize)]
+struct WorkspaceEntry {
+    name: String,
+    path: String,
+    kind: String,
+    size: u64,
+}
+
+#[derive(Serialize)]
+struct WorkspaceFilePreview {
+    path: String,
+    content: String,
+    lines: usize,
+    truncated: bool,
+}
+
+#[derive(Serialize)]
+struct GitChangedFile {
+    status: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+struct GitWorkspaceInfo {
+    is_repo: bool,
+    branch: String,
+    dirty_count: usize,
+    changed_files: Vec<GitChangedFile>,
+}
+
+fn is_sensitive_path(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .map(|value| value.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if matches!(
+        name.as_str(),
+        ".env.example" | ".env.sample" | ".env.template" | ".env.dist"
+    ) {
+        return false;
+    }
+    if matches!(
+        name.as_str(),
+        ".env"
+            | ".netrc"
+            | ".npmrc"
+            | ".pypirc"
+            | ".git-credentials"
+            | "credentials"
+            | "credentials.json"
+            | "id_rsa"
+            | "id_dsa"
+            | "id_ecdsa"
+            | "id_ed25519"
+    ) || name.starts_with(".env.")
+    {
+        return true;
+    }
+    if [".pem", ".key", ".p12", ".pfx", ".keystore", ".jks"]
+        .iter()
+        .any(|suffix| name.ends_with(suffix))
+    {
+        return true;
+    }
+    path.components().any(|comp| {
+        let part = comp.as_os_str().to_string_lossy().to_lowercase();
+        matches!(part.as_str(), ".ssh" | ".aws" | ".gnupg")
+    })
+}
+
+fn resolve_inside_workspace(workspace: &str, relative: &str) -> Result<(PathBuf, PathBuf), String> {
+    let root = Path::new(workspace)
+        .canonicalize()
+        .map_err(|error| format!("Dossier de travail inaccessible : {error}"))?;
+    let trimmed = relative.trim().trim_start_matches(['/', '\\']);
+    let candidate = if trimmed.is_empty() || trimmed == "." {
+        root.clone()
+    } else {
+        root.join(trimmed)
+    };
+    let resolved = candidate
+        .canonicalize()
+        .map_err(|error| format!("Chemin introuvable : {error}"))?;
+    if !resolved.starts_with(&root) {
+        return Err("Accès hors du dossier de travail refusé.".to_string());
+    }
+    Ok((root, resolved))
+}
+
+#[tauri::command]
+fn list_workspace_files(
+    cwd: String,
+    relative_dir: Option<String>,
+) -> Result<Vec<WorkspaceEntry>, String> {
+    let rel = relative_dir.unwrap_or_default();
+    let (root, target_dir) = resolve_inside_workspace(&cwd, &rel)?;
+    if !target_dir.is_dir() {
+        return Err("Le chemin demandé n’est pas un dossier.".to_string());
+    }
+    let ignored_dirs = [
+        ".git",
+        "node_modules",
+        "target",
+        "__pycache__",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
+        "dist",
+        "build",
+    ];
+    let entries = fs::read_dir(&target_dir)
+        .map_err(|error| format!("Impossible de lire le dossier : {error}"))?;
+    let mut items: Vec<WorkspaceEntry> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.is_empty() {
+            continue;
+        }
+        let metadata = match entry.metadata() {
+            Ok(meta) => meta,
+            Err(_) => continue,
+        };
+        let is_dir = metadata.is_dir();
+        if is_dir && ignored_dirs.contains(&name.as_str()) {
+            continue;
+        }
+        let rel_path = path
+            .strip_prefix(&root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        items.push(WorkspaceEntry {
+            name,
+            path: rel_path,
+            kind: if is_dir {
+                "dir".to_string()
+            } else {
+                "file".to_string()
+            },
+            size: if is_dir { 0 } else { metadata.len() },
+        });
+    }
+    items.sort_by(|a, b| match (a.kind.as_str(), b.kind.as_str()) {
+        ("dir", "file") => std::cmp::Ordering::Less,
+        ("file", "dir") => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+    });
+    if items.len() > 250 {
+        items.truncate(250);
+    }
+    Ok(items)
+}
+
+#[tauri::command]
+fn read_workspace_file(
+    cwd: String,
+    relative_path: String,
+) -> Result<WorkspaceFilePreview, String> {
+    let (root, target) = resolve_inside_workspace(&cwd, &relative_path)?;
+    if !target.is_file() {
+        return Err("Ce chemin n’est pas un fichier.".to_string());
+    }
+    if is_sensitive_path(&target) {
+        return Err("Fichier de secrets protégé par ZeroCode.".to_string());
+    }
+    let mut file = fs::File::open(&target)
+        .map_err(|error| format!("Ouverture du fichier impossible : {error}"))?;
+    let max_bytes: usize = 120_000;
+    let mut buffer = Vec::with_capacity(8192);
+    let mut handle = (&mut file).take((max_bytes + 1) as u64);
+    handle
+        .read_to_end(&mut buffer)
+        .map_err(|error| format!("Lecture du fichier impossible : {error}"))?;
+    let truncated = buffer.len() > max_bytes;
+    if truncated {
+        buffer.truncate(max_bytes);
+    }
+    if buffer.iter().take(4096).any(|&byte| byte == 0) {
+        return Err("Aperçu indisponible pour un fichier binaire.".to_string());
+    }
+    let content = String::from_utf8_lossy(&buffer).into_owned();
+    let lines = content.lines().count().max(1);
+    let rel_path = target
+        .strip_prefix(&root)
+        .unwrap_or(&target)
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(WorkspaceFilePreview {
+        path: rel_path,
+        content,
+        lines,
+        truncated,
+    })
+}
+
+#[tauri::command]
+fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
+    let workspace = resolve_workspace(&cwd)?;
+    let branch_out = ProcessCommand::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(&workspace)
+        .output();
+    let Ok(branch_res) = branch_out else {
+        return Ok(GitWorkspaceInfo {
+            is_repo: false,
+            branch: "local".to_string(),
+            dirty_count: 0,
+            changed_files: Vec::new(),
+        });
+    };
+    if !branch_res.status.success() {
+        return Ok(GitWorkspaceInfo {
+            is_repo: false,
+            branch: "local".to_string(),
+            dirty_count: 0,
+            changed_files: Vec::new(),
+        });
+    }
+    let branch = String::from_utf8_lossy(&branch_res.stdout)
+        .trim()
+        .to_string();
+    let status_out = ProcessCommand::new("git")
+        .args(["status", "--porcelain", "-uall"])
+        .current_dir(&workspace)
+        .output();
+    let mut changed_files: Vec<GitChangedFile> = Vec::new();
+    if let Ok(status_res) = status_out {
+        if status_res.status.success() {
+            for line in String::from_utf8_lossy(&status_res.stdout).lines() {
+                if line.len() < 4 {
+                    continue;
+                }
+                let status = line[..2].trim().to_string();
+                let path = line[3..].trim().to_string();
+                if !path.is_empty() {
+                    changed_files.push(GitChangedFile {
+                        status: if status.is_empty() {
+                            "M".to_string()
+                        } else {
+                            status
+                        },
+                        path,
+                    });
+                }
+            }
+        }
+    }
+    let dirty_count = changed_files.len();
+    if changed_files.len() > 60 {
+        changed_files.truncate(60);
+    }
+    Ok(GitWorkspaceInfo {
+        is_repo: true,
+        branch: if branch.is_empty() {
+            "HEAD".to_string()
+        } else {
+            branch
+        },
+        dirty_count,
+        changed_files,
+    })
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -481,7 +771,10 @@ fn main() {
             stop_terminal,
             start_agent,
             send_agent_message,
-            stop_agent
+            stop_agent,
+            list_workspace_files,
+            read_workspace_file,
+            workspace_git_info
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de ZeroCode Desktop");

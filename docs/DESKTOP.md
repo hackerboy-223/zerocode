@@ -82,6 +82,14 @@ Vérifie le réseau et lance `zerocode doctor --live`. Le shell et les fichiers 
 **Le terminal est vide ou ne démarre pas**  
 Vérifie que le shell défini par `$SHELL` existe. Sur Linux, installe les dépendances WebKit listées plus haut.
 
-## Périmètre de cette première version
+## Périmètre de cette version
 
-Cette version fournit la fenêtre desktop, la sélection de dossier, un fil de conversation, les modes Build/Plan/Full-stack, les événements et autorisations de l’agent, ainsi qu’un terminal PTY local. L’explorateur de fichiers complet, les vues de diff avancées, la gestion multi-agents et la distribution signée restent des étapes suivantes.
+Cette version fournit :
+- **Fenêtre desktop native** (Tauri 2 + React + TypeScript) avec icônes multi-plateformes configurées.
+- **Fil de conversation enrichi** : blocs de code formatés avec copie rapide, affichage repliable du raisonnement (`think`), et gestion complète des sessions (reprise, création, suppression).
+- **Modes d'agent & Préférences (`Ctrl + ,`)** : bascule Build / Plan / Full-stack, sélection du modèle (`auto` ou modèle spécifique), politique d'autorisation (`ask`, `auto`, `allow`), profondeur de raisonnement (`off`, `low`, `high`, `max`) et compactage de contexte.
+- **Inspecteur latéral à 3 onglets** :
+  - **Aperçu** : statut Git (branche et fichiers modifiés), plan de travail (`todos` en temps réel), restauration de checkpoints (`Annuler`), et historique détaillé des outils.
+  - **Fichiers** : explorateur de fichiers du projet avec filtrage, aperçu sécurisé en lecture seule et mention rapide `@fichier` dans le prompt.
+  - **Diffs** : visualisation colorée des diffs générés par l'agent et statut Git du dépôt.
+- **Palette de commandes (`Ctrl + K`)** et **Terminal PTY local (`Ctrl + \``)** redimensionnable.

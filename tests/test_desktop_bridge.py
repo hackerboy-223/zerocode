@@ -5,8 +5,15 @@ import json
 import threading
 from pathlib import Path
 
-from zerocode.desktop_bridge import DesktopBridgeUI, _session_summaries, _visible_history
+from zerocode.checkpoints import CheckpointStore
+from zerocode.desktop_bridge import (
+    DesktopBridgeUI,
+    _session_summaries,
+    _think_value,
+    _visible_history,
+)
 from zerocode.session import SessionStore
+from zerocode.tools import ToolContext
 
 
 def test_desktop_bridge_emits_json_lines() -> None:
@@ -96,3 +103,43 @@ def test_session_summaries_are_limited_to_the_active_workspace(tmp_path: Path) -
     assert len(summaries) == 1
     assert summaries[0]["id"] == current.id
     assert summaries[0]["title"] == "Créer une API"
+
+
+def test_desktop_bridge_emits_todos_and_checkpoints_on_tool_result(tmp_path: Path) -> None:
+    stream = io.StringIO()
+    ui = DesktopBridgeUI(stream=stream)
+    ctx = ToolContext(
+        cwd=tmp_path,
+        todos=[{"content": "Configurer les icônes", "status": "in_progress"}],
+    )
+    checkpoints = CheckpointStore(root=tmp_path / "checkpoints")
+    sample_file = tmp_path / "demo.txt"
+    checkpoints.record("sess-1", sample_file, None, "write")
+    ui.bind_runtime(ctx, checkpoints, lambda: "sess-1")
+
+    ui.tool_result("todo_write", "Plan mis à jour")
+    ui.tool_result("write", "Fichier écrit")
+
+    events = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    assert events == [
+        {"type": "tool_result", "name": "todo_write", "result": "Plan mis à jour"},
+        {
+            "type": "todos",
+            "todos": [{"content": "Configurer les icônes", "status": "in_progress"}],
+        },
+        {"type": "tool_result", "name": "write", "result": "Fichier écrit"},
+        {"type": "checkpoints_changed", "checkpoints": 1},
+    ]
+
+
+def test_think_value_normalizes_reasoning_config() -> None:
+    class DummyConfig:
+        show_reasoning = False
+        reasoning_effort = "high"
+
+    cfg = DummyConfig()
+    assert _think_value(cfg) == "off"
+    cfg.show_reasoning = True
+    assert _think_value(cfg) == "high"
+    cfg.reasoning_effort = "unknown"
+    assert _think_value(cfg) == "low"

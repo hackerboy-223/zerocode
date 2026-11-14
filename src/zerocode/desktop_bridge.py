@@ -28,10 +28,24 @@ class DesktopBridgeUI:
     def __init__(self, stream: Any | None = None, *, request_timeout: float = 900.0) -> None:
         self.stream = stream or sys.stdout
         self.request_timeout = request_timeout
+        self.show_reasoning = False
+        self._context: ToolContext | None = None
+        self._checkpoints: CheckpointStore | None = None
+        self._session_id_getter: Any = None
         self._write_lock = threading.Lock()
         self._pending_lock = threading.Lock()
         self._pending: dict[str, dict[str, Any]] = {}
         self._interrupt = threading.Event()
+
+    def bind_runtime(
+        self,
+        context: ToolContext,
+        checkpoints: CheckpointStore | None = None,
+        session_id_getter: Any = None,
+    ) -> None:
+        self._context = context
+        self._checkpoints = checkpoints
+        self._session_id_getter = session_id_getter
 
     def emit(self, event: str, **data: Any) -> None:
         payload = {"type": event, **data}
@@ -114,6 +128,16 @@ class DesktopBridgeUI:
 
     def tool_result(self, name: str, result: str) -> None:
         self.emit("tool_result", name=name, result=result)
+        if name == "todo_write" and self._context is not None:
+            self.todos(list(self._context.todos))
+        if (
+            name in {"write", "edit", "multi_edit"}
+            and self._checkpoints is not None
+            and callable(self._session_id_getter)
+        ):
+            session_id = str(self._session_id_getter() or "")
+            if session_id:
+                self.emit("checkpoints_changed", checkpoints=self._checkpoints.pending(session_id))
 
     def stream_tool_output(self, name: str, chunk: str) -> None:
         if chunk:
@@ -250,6 +274,7 @@ def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
     context.checkpoint = lambda path, before, tool: agent.checkpoints.record(
         agent.session.id, path, before, tool
     )
+    ui.bind_runtime(context, agent.checkpoints, lambda: agent.session.id)
 
     mcp_manager = MCPManager()
     if config.mcp_servers:
@@ -260,6 +285,55 @@ def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
             ui=ui,
         )
     return config, store, ui, router, agent, permissions, context, mcp_manager
+
+
+def _available_models(router: Router) -> list[str]:
+    models: list[str] = ["auto"]
+    for item in router.preview("auto"):
+        if item not in models:
+            models.append(item)
+    return models[:24]
+
+
+def _think_value(config: Any) -> str:
+    if not getattr(config, "show_reasoning", False):
+        return "off"
+    effort = str(getattr(config, "reasoning_effort", "low") or "low").lower()
+    return effort if effort in {"low", "high", "max"} else "low"
+
+
+def _emit_session_state(
+    ui: DesktopBridgeUI,
+    event_name: str,
+    cwd: Path,
+    config: Any,
+    store: SessionStore,
+    router: Router,
+    agent: Any,
+    permissions: PermissionManager,
+    context: ToolContext,
+) -> None:
+    checkpoints = (
+        agent.checkpoints.pending(agent.session.id)
+        if getattr(agent, "checkpoints", None) is not None
+        else 0
+    )
+    ui.emit(
+        event_name,
+        cwd=str(cwd),
+        session_id=agent.session.id,
+        model=config.model,
+        provider=config.provider,
+        mode=agent.mode,
+        permissions=permissions.mode,
+        think=_think_value(config),
+        available=bool(router.preview()),
+        models=_available_models(router),
+        messages=_visible_history(agent.messages),
+        sessions=_session_summaries(store, cwd),
+        todos=list(context.todos),
+        checkpoints=checkpoints,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -281,16 +355,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         runtime = _build_runtime(cwd, args.session, args.model)
         config, store, ui, router, agent, permissions, context, mcp_manager = runtime
-        ui.emit(
-            "ready",
-            cwd=str(cwd),
-            session_id=agent.session.id,
-            model=config.model,
-            provider=config.provider,
-            permissions=config.permissions,
-            available=bool(router.preview()),
-            messages=_visible_history(agent.messages),
-            sessions=_session_summaries(store, cwd),
+        _emit_session_state(
+            ui, "ready", cwd, config, store, router, agent, permissions, context
         )
         turn_lock = threading.Lock()
         active = {"value": False}
@@ -316,6 +382,12 @@ def main(argv: list[str] | None = None) -> int:
                 ui.error(f"{exc.__class__.__name__}: {exc}")
             finally:
                 ui.usage(agent.usage, router.last)
+                ui.todos(list(context.todos))
+                if getattr(agent, "checkpoints", None) is not None:
+                    ui.emit(
+                        "checkpoints_changed",
+                        checkpoints=agent.checkpoints.pending(agent.session.id),
+                    )
                 ui.emit("sessions_changed", sessions=_session_summaries(store, cwd))
                 ui.emit("turn_complete")
                 with turn_lock:
@@ -340,6 +412,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             if kind == "interrupt":
                 ui.request_interrupt()
+                context.terminate_active_process(user=True)
                 continue
             if kind == "prompt":
                 prompt = message.get("text")
@@ -360,16 +433,72 @@ def main(argv: list[str] | None = None) -> int:
                     ui.error("Mode inconnu.")
                     continue
                 agent.set_mode(mode)
-                ui.emit("mode_changed", mode=agent.mode)
+                ui.emit(
+                    "mode_changed",
+                    mode=agent.mode,
+                    permissions=permissions.mode,
+                    think=_think_value(config),
+                )
+                continue
+            if kind == "set_model":
+                next_model = str(message.get("model") or "").strip()
+                if not next_model:
+                    ui.error("Modèle invalide.")
+                    continue
+                next_provider = message.get("provider")
+                if isinstance(next_provider, str):
+                    next_provider = next_provider.strip() or None
+                elif "/" in next_model and next_model.split("/", 1)[0] in router.providers:
+                    next_provider, next_model = next_model.split("/", 1)
+                else:
+                    next_provider = None
+                config.model = next_model
+                config.provider = next_provider
+                agent.session.model = next_model
+                agent.session.provider = next_provider
+                store.save(agent.session)
+                ui.emit(
+                    "config_changed",
+                    model=config.model,
+                    provider=config.provider,
+                    permissions=permissions.mode,
+                    think=_think_value(config),
+                )
+                continue
+            if kind == "set_permissions":
+                perm_mode = str(message.get("permissions") or "").strip()
+                if perm_mode not in {"ask", "auto", "allow", "deny"}:
+                    ui.error("Mode d'autorisation inconnu.")
+                    continue
+                permissions.mode = perm_mode
+                config.permissions = perm_mode
+                ui.emit(
+                    "config_changed",
+                    model=config.model,
+                    provider=config.provider,
+                    permissions=permissions.mode,
+                    think=_think_value(config),
+                )
+                continue
+            if kind == "set_think":
+                think_mode = str(message.get("think") or "").strip().lower()
+                if think_mode not in {"off", "low", "high", "max"}:
+                    ui.error("Mode de raisonnement inconnu.")
+                    continue
+                agent.set_think(think_mode)
+                ui.emit(
+                    "config_changed",
+                    model=config.model,
+                    provider=config.provider,
+                    permissions=permissions.mode,
+                    think=_think_value(config),
+                )
                 continue
             if kind == "new_session":
                 session = store.new(cwd, config.model, config.provider)
                 agent.load_session(session)
-                ui.emit(
-                    "session_changed",
-                    session_id=agent.session.id,
-                    messages=_visible_history(agent.messages),
-                    sessions=_session_summaries(store, cwd),
+                _emit_session_state(
+                    ui, "session_changed", cwd, config, store, router, agent, permissions, context
                 )
                 continue
             if kind == "resume_session":
@@ -379,22 +508,63 @@ def main(argv: list[str] | None = None) -> int:
                     ui.error("Session introuvable pour ce dossier.")
                     continue
                 agent.load_session(session)
+                _emit_session_state(
+                    ui, "session_changed", cwd, config, store, router, agent, permissions, context
+                )
+                continue
+            if kind == "delete_session":
+                ref = str(message.get("session_id") or "").strip()
+                if not ref:
+                    ui.error("Identifiant de session manquant.")
+                    continue
+                target = store.load(ref)
+                if target is None or Path(target.cwd).expanduser().resolve() != cwd:
+                    ui.error("Session introuvable pour ce dossier.")
+                    continue
+                was_active = target.id == agent.session.id
+                store.delete(target.id)
+                if getattr(agent, "checkpoints", None) is not None:
+                    agent.checkpoints.clear(target.id)
+                if was_active:
+                    next_session = store.latest(cwd) or store.new(cwd, config.model, config.provider)
+                    agent.load_session(next_session)
+                    _emit_session_state(
+                        ui, "session_changed", cwd, config, store, router, agent, permissions, context
+                    )
+                else:
+                    ui.emit("sessions_changed", sessions=_session_summaries(store, cwd))
+                continue
+            if kind == "undo_checkpoint":
+                if getattr(agent, "checkpoints", None) is None:
+                    ui.error("Historique de checkpoints indisponible.")
+                    continue
+                ok, undo_msg = agent.checkpoints.undo(agent.session.id)
+                remaining = agent.checkpoints.pending(agent.session.id)
                 ui.emit(
-                    "session_changed",
-                    session_id=agent.session.id,
-                    messages=_visible_history(agent.messages),
-                    sessions=_session_summaries(store, cwd),
+                    "checkpoint_restored",
+                    ok=ok,
+                    message=undo_msg,
+                    checkpoints=remaining,
+                )
+                continue
+            if kind == "compact_context":
+                agent.compact(force=True)
+                _emit_session_state(
+                    ui, "session_changed", cwd, config, store, router, agent, permissions, context
                 )
                 continue
             ui.error("Commande desktop non reconnue.")
 
         ui.request_interrupt()
+        context.terminate_active_process(user=True)
         return 0
     except (ConfigError, ZeroCodeError) as exc:
         print(json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False), flush=True)
         return 1
     finally:
         if runtime is not None:
+            with contextlib.suppress(Exception):
+                runtime[6].terminate_active_process(user=True)
             with contextlib.suppress(Exception):
                 runtime[7].close()
             with contextlib.suppress(Exception):
