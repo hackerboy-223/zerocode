@@ -242,6 +242,15 @@ def _session_summaries(store: SessionStore, cwd: Path) -> list[dict[str, str]]:
     ][:12]
 
 
+def _desktop_permission_manager(config: Any) -> PermissionManager:
+    """Le bureau ne doit jamais hériter silencieusement du mode autonome du CLI."""
+    mode = str(getattr(config, "permissions", "ask") or "ask")
+    if mode == "allow":
+        mode = "ask"
+        config.permissions = mode
+    return PermissionManager(mode=mode, interactive=True)
+
+
 def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
     config = load_config(cwd, {})
     if model:
@@ -278,7 +287,7 @@ def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
         todos=[todo for todo in session.todos if isinstance(todo, dict)],
         request_sudo_password=ui.request_sudo_password,
     )
-    permissions = PermissionManager(mode=config.permissions, interactive=True)
+    permissions = _desktop_permission_manager(config)
     registry = build_registry(context, permissions, ui)
 
     from .agent import Agent
