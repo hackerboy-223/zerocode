@@ -619,7 +619,7 @@ def test_post_tool_hook_runs_after_successful_execution(tmp_path):
     def hook(event, name, args, result):
         events.append((event, name))
         if event == "PostToolUse":
-            return "audit logger unavailable"
+            return "audit token sk-or-v1-1234567890abcdef1234567890abcdef"
         return None
 
     (tmp_path / "note.txt").write_text("hello", encoding="utf-8")
@@ -629,7 +629,9 @@ def test_post_tool_hook_runs_after_successful_execution(tmp_path):
     result = call(registry, "read", path="note.txt")
 
     assert "hello" in result
-    assert "[Hook PostToolUse] audit logger unavailable" in result
+    assert "[Hook PostToolUse]" in result
+    assert "[SECRET MASQUE: JETON API]" in result
+    assert "1234567890abcdef1234567890abcdef" not in result
     assert events == [("PreToolUse", "read"), ("PostToolUse", "read")]
 
 
