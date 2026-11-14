@@ -1,0 +1,35 @@
+name: ZeroCode Desktop
+on:
+  push:
+    branches: [main, "feat/desktop-local-first"]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop.yml"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop.yml"
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run build
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev libwebkit2gtk-4.1-dev
+      - name: Check native backend
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
