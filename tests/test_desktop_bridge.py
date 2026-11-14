@@ -172,12 +172,18 @@ def test_visible_history_redacts_secrets_before_desktop_display() -> None:
 def test_desktop_bridge_downgrades_inherited_autonomous_permissions() -> None:
     class Config:
         permissions = "allow"
+        allow_outside_cwd = True
+        protect_secrets = False
+        allow_secrets = True
 
     config = Config()
     permissions = _desktop_permission_manager(config)
 
     assert permissions.mode == "ask"
     assert config.permissions == "ask"
+    assert config.allow_outside_cwd is False
+    assert config.protect_secrets is True
+    assert config.allow_secrets is False
 
 
 def test_desktop_bridge_preserves_explicit_deny_permissions() -> None:
