@@ -20,77 +20,75 @@ Le terminal intégré est un nouveau shell interactif du projet. Il ne prend pas
 
 ## Installer ZeroCode Desktop
 
-L’installateur officiel présente un menu avec trois choix :
+L’installateur officiel propose trois choix : TUI, Desktop ou les deux. Il sélectionne par défaut la dernière release stable.
 
-1. **TUI** : installe uniquement le moteur Python et l’interface terminale.
-2. **Desktop** : installe le moteur requis par l’application, prépare l’environnement de compilation, construit l’application native puis lance ou installe le paquet.
-3. **Les deux** : installe les deux interfaces.
+Une release stable contient le moteur Python et les paquets Desktop natifs. Avant installation, l’installateur télécharge `SHA256SUMS` et vérifie chaque fichier. Dans ce parcours, les toolchains Node.js, Rust et C/C++ ne sont pas installées.
 
-Le moteur Python est installé avec \`pipx\`, dans un environnement isolé. Le choix Desktop inclut donc aussi la commande \`zerocode\` et le pont local \`zerocode desktop-bridge\`.
+Si aucune release stable n’est encore publiée, le mode `latest` revient sur la branche source `feature/zerocode-desktop`. Le parcours de compilation source prépare alors les outils nécessaires au système. Une erreur d’intégrité ou un paquet manquant dans une release ne déclenche jamais silencieusement ce repli : l’installation s’arrête.
 
 ### Linux et macOS
 
 Depuis le terminal :
 
-\`\`\`bash
+```bash
 curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.sh | bash
-\`\`\`
+```
 
-Choisis Desktop dans le menu. L’installateur vérifie Python, Git, Node.js et Rust, installe les bibliothèques natives nécessaires et compile Tauri. Node.js 24 est téléchargé dans le dossier utilisateur si la version du système n’est pas compatible ; son checksum officiel SHA-256 est vérifié avant extraction.
+Choisis Desktop ou Les deux. Pour sélectionner le mode ou une version précise sans ouvrir le menu :
 
-Pour lancer un mode directement depuis une copie locale du dépôt :
-
-\`\`\`bash
+```bash
 bash install.sh --mode tui
 bash install.sh --mode desktop
 bash install.sh --mode both
-\`\`\`
+bash install.sh --version latest --mode desktop
+bash install.sh --version v1.0.0 --mode both
+```
 
-Sur Debian/Ubuntu, le paquet \`.deb\` est installé avec apt et nécessite une confirmation administrateur. Fedora utilise le paquet RPM. Les distributions Arch utilisent l’AppImage dans le dossier utilisateur. macOS installe l’application dans \`~/Applications/ZeroCode Desktop.app\`.
+Pour forcer le parcours depuis une branche source :
 
-Sur macOS, Xcode Command Line Tools doit être installé. L’installateur déclenche son installation si nécessaire ; termine-la puis relance le script.
+```bash
+ZEROCODE_INSTALL_REF=feature/zerocode-desktop bash install.sh --mode desktop
+```
+
+Sur Debian/Ubuntu, le paquet `.deb` est installé avec apt et nécessite les droits administrateur. Fedora utilise le RPM. Les distributions Linux sans apt ni dnf utilisent l’AppImage dans le dossier utilisateur. macOS télécharge un DMG, le monte et copie `ZeroCode Desktop.app` dans `~/Applications`.
+
+En mode source, Linux installe les bibliothèques GTK/WebKit, Node.js et Rust stable ; macOS exige Xcode Command Line Tools. Le build est réalisé localement par Tauri.
 
 ### Windows
 
 Dans PowerShell :
 
-\`\`\`powershell
+```powershell
 irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
-\`\`\`
+```
 
-Le parcours Desktop utilise \`winget\` pour préparer Node.js, Rustup, Visual Studio C++ Build Tools, WebView2 et NSIS. Il compile ensuite l’application et ouvre l’installateur NSIS natif. App Installer / winget doit être disponible sur la machine.
+Une release stable installe le moteur depuis le wheel Python vérifié puis lance l’installateur NSIS natif. Pour sélectionner une version précise :
 
-### Prérequis de compilation
+```powershell
+$env:ZEROCODE_INSTALL_REF = "v1.0.0"
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
+```
 
-Pour un développement manuel, les versions prises en charge sont :
+En mode source, `winget` prépare Node.js, Rustup, Visual Studio C++ Build Tools, WebView2 et NSIS avant la compilation Tauri. App Installer / winget doit être disponible.
 
-- Python 3.10+.
-- Node.js 20.19+ ou 22.12+ et npm.
-- Rust stable et Cargo.
-- Git.
-- Les outils C++ natifs et bibliothèques WebKit propres au système.
+### Mise à jour et désinstallation
 
-#### Linux (Ubuntu / Debian)
+Le moteur TUI se met à jour depuis la dernière release stable :
 
-\`\`\`bash
-sudo apt update
-sudo apt install -y build-essential curl wget file libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
-\`\`\`
+```bash
+zerocode update --check
+zerocode update
+```
 
-#### macOS
+Pour mettre à jour Desktop, relance le même installateur ; il récupère la release la plus récente et remplace le paquet natif. Les paquets `.deb` et `.rpm` restent gérés par le gestionnaire système.
 
-Installe Xcode Command Line Tools :
+Le moteur Python peut être désinstallé avec `zerocode uninstall`. Les configurations, clés API et sessions sont conservées par défaut. `zerocode uninstall --remove-data` les supprime aussi, après confirmation.
 
-\`\`\`bash
-xcode-select --install
-\`\`\`
+Pour retirer Desktop, passe par les paramètres d’applications du système, ou utilise le gestionnaire de paquets Linux. L’AppImage utilisateur se retire en supprimant `~/.local/opt/zerocode`, son lanceur `~/.local/bin/zerocode-desktop` et le raccourci `.desktop`.
 
-Git et les outils Apple doivent être accessibles dans le terminal.
+### Vérification des téléchargements
 
-#### Windows
-
-Installe Visual Studio 2022 Build Tools avec le workload **Desktop development with C++**, WebView2 Runtime, Node.js LTS, Rustup et NSIS. Le parcours automatique utilise winget pour ces composants.
-
+Le manifeste `SHA256SUMS` est publié dans chaque release. Il permet de détecter un téléchargement corrompu ou incomplet. Il n’apporte pas à lui seul une preuve d’identité de l’éditeur : les binaires ne sont pas encore signés avec un certificat éditeur Windows ou Apple.
 ## Développement
 
 Depuis la racine du dépôt :
