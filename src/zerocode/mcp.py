@@ -299,8 +299,9 @@ def register_mcp_tools(
             client.close()
             continue
         manager.clients.append(client)
+        trusted = config.get("trusted") is True
         for item in tools:
-            _register_tool(registry, client, str(server_name), item)
+            _register_tool(registry, client, str(server_name), item, trusted=trusted)
         for item in client.list_resources()[:100]:
             _register_resource_tool(registry, client, str(server_name), item)
         for item in client.list_prompts()[:100]:
@@ -319,6 +320,8 @@ def _register_tool(
     client: MCPClient,
     server_name: str,
     item: dict[str, Any],
+    *,
+    trusted: bool = False,
 ) -> None:
     remote_name = str(item.get("name") or "").strip()
     if not remote_name:
@@ -348,7 +351,9 @@ def _register_tool(
                 description=description[:1_000],
                 parameters=schema,
                 handler=handler,
-                approval="ask" if read_only_hint else "confirm",
+                # A configured trusted server can participate in autonomous workflows.
+                # Otherwise, only explicitly read-only annotated tools are non-destructive.
+                approval="ask" if trusted or read_only_hint else "confirm",
             )
         )
     except ValueError:
