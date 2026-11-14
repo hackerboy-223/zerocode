@@ -7,7 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Activity, ArrowDown, ArrowUp, Bot, ChevronDown, Command, FileCode2, Folder, FolderOpen, GitBranch, History, PanelLeftClose, Plus, Send, Settings2, ShieldCheck, Sparkles, SquareTerminal, X, Zap } from "lucide-react";
 
-type EventPayload = { type?: string; delta?: string; name?: string; message?: string };
+type EventPayload = { type?: string; delta?: string; name?: string; message?: string; arguments?: Record<string, unknown>; command?: string };\ntype Approval = { kind: "tool" | "sudo-confirm" | "sudo-password"; name: string; details: string };
 type Message = { role: "assistant" | "user"; text: string };
 type ProjectEntry = { path: string; is_dir: boolean };
 
@@ -44,7 +44,7 @@ export default function App() {
   const [terminalOpen, setTerminalOpen] = useState(true); const [auto, setAuto] = useState(false);
   const [busy, setBusy] = useState(false); const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]); const [tab, setTab] = useState<"files" | "changes">("files"); const [files, setFiles] = useState<ProjectEntry[]>([]);
-  const [status, setStatus] = useState("Prêt à travailler"); const [modal, setModal] = useState(false);
+  const [status, setStatus] = useState("Prêt à travailler"); const [modal, setModal] = useState(false); const [approval, setApproval] = useState<Approval | null>(null); const [sudoPassword, setSudoPassword] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   const onTerminalReady = useCallback(() => setStatus("Terminal local prêt"), []);
 
@@ -54,7 +54,7 @@ export default function App() {
     void listen<string>("agent-event", event => {
       let data: EventPayload; try { data = JSON.parse(event.payload) as EventPayload; } catch { return; }
       if (data.type === "text_delta" && data.delta) setMessages(old => { const next = [...old]; const last = next[next.length - 1]; if (last?.role === "assistant") next[next.length - 1] = { ...last, text: last.text + data.delta }; else next.push({ role: "assistant", text: data.delta ?? "" }); return next; });
-      else if (data.type === "tool_start") setStatus("Exécution : " + (data.name ?? "outil"));
+      else if (data.type === "approval_required") { setApproval({ kind: "tool", name: data.name ?? "Action", details: JSON.stringify(data.arguments ?? {}, null, 2) }); setStatus("Autorisation requise"); }\n      else if (data.type === "sudo_confirmation_required") { setApproval({ kind: "sudo-confirm", name: "Commande privilégiée", details: data.command ?? "" }); setStatus("Confirmation administrateur requise"); }\n      else if (data.type === "sudo_password_required") { setApproval({ kind: "sudo-password", name: "Mot de passe sudo requis", details: data.command ?? "" }); setStatus("Authentification administrateur requise"); }\n      else if (data.type === "tool_start") setStatus("Exécution : " + (data.name ?? "outil"));
       else if (data.type === "result" || data.type === "process_finished") { setBusy(false); setStatus("Tâche terminée"); }
       else if (data.type === "error" || data.type === "warning") setStatus(data.message ?? "Action à vérifier");
     }).then(fn => stop = fn);
@@ -69,7 +69,7 @@ export default function App() {
     try { await invoke("terminal_stop"); setCwd(path.trim()); setModal(false); }
     catch (error) { setStatus(String(error)); }
   }
-  async function send() {
+  async function respondApproval(approved: boolean) { if (!approval) return; try { await invoke("agent_respond", { approved, password: approval.kind === "sudo-password" ? sudoPassword : null }); setApproval(null); setSudoPassword(""); setStatus(approved ? "Action autorisée" : "Action refusée"); } catch (error) { setStatus(String(error)); } }\n  async function send() {
     const task = prompt.trim(); if (!task || busy || !cwd) return;
     setPrompt(""); setMessages(old => [...old, { role: "user", text: task }, { role: "assistant", text: "" }]);
     setBusy(true); setStatus(auto ? "Agent autonome en cours" : "Analyse en cours");
@@ -109,6 +109,7 @@ export default function App() {
       </div>
       <section className={"terminal " + (!terminalOpen ? "closed" : "")}><div className="terminal-head"><div><SquareTerminal size={14}/><b>Terminal</b><span className="local-tag"><i/> LOCAL</span></div><div className="terminal-controls"><span>{cwd}</span><button onClick={() => setTerminalOpen(false)} title="Réduire"><ArrowDown size={14}/></button><button onClick={() => setTerminalOpen(false)} title="Fermer"><X size={14}/></button></div></div>{cwd && <LocalTerminal cwd={cwd} onReady={onTerminalReady}/>}</section>
     </main>
+    <AnimatePresence>{approval && <motion.div className="backdrop approval-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="modal approval-modal" initial={{ opacity: 0, y: 12, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}><div className="modal-head"><div><small>AUTORISATION ZEROCode</small><h2>{approval.name}</h2></div><ShieldCheck size={20}/></div><p>Le moteur demande ton accord avant de poursuivre cette opération sur ta machine.</p><pre>{approval.details}</pre>{approval.kind === "sudo-password" && <input className="sudo-input" type="password" autoComplete="current-password" value={sudoPassword} onChange={event => setSudoPassword(event.target.value)} placeholder="Mot de passe sudo"/>}<div className="modal-actions"><button onClick={() => void respondApproval(false)}>Refuser</button><button className="primary" disabled={approval.kind === "sudo-password" && !sudoPassword} onClick={() => void respondApproval(true)}>Autoriser <ArrowUp size={14}/></button></div></motion.div></motion.div>}</AnimatePresence>
     <AnimatePresence>{modal && <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={event => { if (event.target === event.currentTarget) setModal(false); }}><motion.div className="modal" initial={{ opacity: 0, y: 12, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}>
       <div className="modal-head"><div><small>ESPACE DE TRAVAIL</small><h2>Ouvrir un projet</h2></div><button className="ghost" onClick={() => setModal(false)}><X size={17}/></button></div>
       <p>Indique le chemin d'un dossier sur cet ordinateur. Le terminal et l'agent travailleront dans ce répertoire.</p><label>CHEMIN LOCAL</label><div className="path-row"><input value={path} onChange={event => setPath(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void openProject(); }} placeholder="/home/ton-nom/Projects/mon-app"/><button className="browse" onClick={() => void browseProject()}>Parcourir…</button></div>
