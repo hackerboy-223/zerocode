@@ -64,6 +64,7 @@ class ToolContext:
     checkpoint: Callable[[Path, str | None, str], None] | None = None
     stream_output: Callable[[str, str], None] | None = None
     run_subagent: Callable[[str, str], str] | None = None
+    run_hook: Callable[[str, str, dict[str, Any], str | None], str | None] | None = None
     _active_process: Any = field(default=None, repr=False, compare=False)
     _process_interrupted: bool = field(default=False, repr=False, compare=False)
 
@@ -265,6 +266,13 @@ class ToolRegistry:
                 return f"Action refusee (securite): {blocked_reason}"
         if not self.permissions.allow(tool, call.arguments, self.ui, self.context):
             return "Action refusee par l'utilisateur."
+        if self.context.run_hook is not None:
+            try:
+                reason = self.context.run_hook("PreToolUse", tool.name, call.arguments, None)
+            except Exception as exc:  # noqa: BLE001 - un hook de sécurité doit échouer fermé
+                return f"Action bloquee : hook PreToolUse indisponible ({exc.__class__.__name__}: {exc})."
+            if reason:
+                return f"Action bloquee par le hook PreToolUse : {reason}"
         try:
             result = tool.handler(call.arguments, self.context)
         except PermissionDenied as exc:
@@ -279,6 +287,13 @@ class ToolRegistry:
             return f"ERREUR: l'outil {tool.name} a renvoye un type invalide."
         if self.context.protect_secrets and not self.context.allow_secrets:
             result = redact_secrets(result)
+        if self.context.run_hook is not None:
+            try:
+                warning = self.context.run_hook("PostToolUse", tool.name, call.arguments, result)
+            except Exception as exc:  # noqa: BLE001 - le hook post ne doit pas annuler l'action
+                warning = f"{exc.__class__.__name__}: {exc}"
+            if warning:
+                result += "\\n[Hook PostToolUse] " + warning
         return result
 
 
