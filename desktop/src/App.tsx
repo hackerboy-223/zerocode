@@ -282,14 +282,15 @@ export default function App() {
         (entry) => entry.agentId === id && entry.status === "stopped"
       );
       pendingAgentStatusesRef.current = pendingAgentStatusesRef.current.filter((entry) => entry.agentId !== id);
-      if (stoppedBeforeRegistration) {
-        setAgentReady(false);
-        setBusy(false);
-        setNotice("Le processus ZeroCode s’est arrêté avant d’être prêt. Vérifiez le diagnostic de l’agent.");
-      }
       const queued = pendingAgentEventsRef.current.filter((entry) => entry.agentId === id);
       pendingAgentEventsRef.current = [];
       queued.forEach((entry) => handleAgentEvent(entry.event));
+      if (stoppedBeforeRegistration) {
+        setAgentReady(false);
+        setBusy(false);
+        setPending(null);
+        setNotice("Le processus ZeroCode s’est arrêté avant d’être prêt. Vérifiez le diagnostic de l’agent.");
+      }
     }).catch((error) => {
       if (!cancelled) setNotice("Agent indisponible : " + String(error));
     });
