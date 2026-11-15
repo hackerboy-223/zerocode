@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..catalog import PROVIDERS
+from ..security import redact_secrets
 from .base import Tool, ToolContext, ToolRegistry
 
 PROVIDER_KEY_ENVS = frozenset(
@@ -283,9 +284,6 @@ def _communicate_streaming(
                     kept = chunk[:remaining]
                     buffers[name].append(kept)
                     stored[name] += len(kept)
-                if stream is not None:
-                    with contextlib.suppress(Exception):
-                        stream("bash", chunk)
         finally:
             with contextlib.suppress(Exception):
                 pipe.close()
@@ -323,6 +321,18 @@ def _communicate_streaming(
 
     stdout = render("stdout")
     stderr = render("stderr")
+
+    # Never stream raw process output: a credential can be split across pipe chunks.
+    # Redact the complete bounded buffers first, then emit the sanitized text.
+    if stream is not None:
+        for value in (stdout, stderr):
+            safe_value = redact_secrets(value)
+            for offset in range(0, len(safe_value), 4_096):
+                chunk = safe_value[offset : offset + 4_096]
+                if chunk:
+                    with contextlib.suppress(Exception):
+                        stream("bash", chunk)
+
     if timed_out:
         stdout += f"\n[commande interrompue apres {timeout} secondes]"
         return stdout, stderr, 124

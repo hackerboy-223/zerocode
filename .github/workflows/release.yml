@@ -1,0 +1,209 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-version:
+    name: Verify release version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure the tag matches every package version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["TAG_NAME"]
+          if not re.fullmatch(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", tag):
+              raise SystemExit(f"Invalid release tag: {tag}")
+          expected = tag.removeprefix("v")
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+          cargo = Path("desktop/src-tauri/Cargo.toml").read_text()
+          versions = {
+              "Python package": pyproject["project"]["version"],
+              "Tauri config": json.loads(Path("desktop/src-tauri/tauri.conf.json").read_text())["version"],
+              "npm package": json.loads(Path("desktop/package.json").read_text())["version"],
+              "Cargo package": re.search(r'(?m)^version\s*=\s*"([^"]+)"', cargo).group(1),
+          }
+          mismatches = {name: version for name, version in versions.items() if version != expected}
+          if mismatches:
+              raise SystemExit(f"Release tag {expected} does not match: {mismatches}")
+          print(f"All package versions match {expected}.")
+          PY
+
+  prepare-release:
+    name: Prepare draft release
+    needs: verify-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.prepare.outputs.release_id }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Create or reuse a draft release
+        id: prepare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          PRERELEASE: ${{ contains(github.ref_name, '-') }}
+        run: |
+          if release_json="$(gh release view "$TAG_NAME" --json databaseId,isDraft 2>/dev/null)"; then
+            is_draft="$(printf '%s' "$release_json" | jq -r '.isDraft')"
+            if [[ "$is_draft" != "true" ]]; then
+              echo "Release $TAG_NAME is already public. Publish a new version tag instead of overwriting it." >&2
+              exit 1
+            fi
+            release_id="$(printf '%s' "$release_json" | jq -r '.databaseId')"
+          else
+            notes_file="$(mktemp)"
+            printf '%s\n\n%s\n' "ZeroCode $TAG_NAME" "Paquets natifs et moteur Python. Les empreintes SHA-256 seront ajoutées avant publication." > "$notes_file"
+            release_args=(gh release create "$TAG_NAME" --draft --verify-tag --title "ZeroCode $TAG_NAME" --notes-file "$notes_file")
+            if [[ "$PRERELEASE" == "true" ]]; then release_args+=(--prerelease); fi
+            "${release_args[@]}"
+            rm -f "$notes_file"
+            release_id="$(gh release view "$TAG_NAME" --json databaseId --jq .databaseId)"
+          fi
+          [[ "$release_id" =~ ^[0-9]+$ ]] || { echo "Invalid GitHub release ID." >&2; exit 1; }
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop · ${{ matrix.label }}
+    needs: [verify-version, prepare-release]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x64
+            os: ubuntu-22.04
+            rust-target: ""
+            bundles: "deb,rpm,appimage"
+            target-args: ""
+          - label: Windows x64
+            os: windows-latest
+            rust-target: ""
+            bundles: "nsis,msi"
+            target-args: ""
+          - label: macOS Apple Silicon
+            os: macos-latest
+            rust-target: "aarch64-apple-darwin"
+            bundles: "app,dmg"
+            target-args: "--target aarch64-apple-darwin"
+          - label: macOS Intel
+            os: macos-latest
+            rust-target: "x86_64-apple-darwin"
+            bundles: "app,dmg"
+            target-args: "--target x86_64-apple-darwin"
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file \
+            libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev patchelf rpm libfuse2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Cache Rust build outputs
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          key: ${{ matrix.os }}-${{ matrix.rust-target }}
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build and publish Desktop bundles
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ./desktop
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
+          releaseName: "ZeroCode ${{ github.ref_name }}"
+          releaseBody: |
+            ZeroCode ${{ github.ref_name }}
+
+            Installeur interactif et paquets natifs pour Linux, Windows et macOS.
+            Les empreintes SHA-256 des fichiers publiés sont disponibles dans SHA256SUMS.
+          releaseDraft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: ${{ matrix.target-args }} --bundles ${{ matrix.bundles }}
+          releaseAssetNamePattern: "[mainBinaryName]-[version]-[platform]-[arch][setup][ext]"
+          retryAttempts: 3
+
+  python:
+    name: Python package and checksums
+    runs-on: ubuntu-latest
+    needs: desktop
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build source and wheel distributions
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+
+      - name: Add Python packages and SHA-256 manifest to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          PRERELEASE: ${{ contains(github.ref_name, '-') }}
+        run: |
+          mkdir -p release-assets
+          gh release download "$TAG_NAME" --dir release-assets
+          cp dist/* release-assets/
+          cd release-assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
+          gh release upload "$TAG_NAME" * --clobber
+          gh release edit "$TAG_NAME" --draft=false --prerelease="$PRERELEASE"

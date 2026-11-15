@@ -12,7 +12,8 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Modèle automatique gratuit sans clé personnelle via Kilo Gateway ; fournisseurs supplémentaires disponibles en configuration explicite.
 - Outils intégrés (18 outils) : lecture (`read`), écriture (`write`), édition (`edit`), édition multi-blocs atomique (`multi_edit`), liste (`list`), recherche regex (`grep` / `ripgrep`), cartographie AST de symboles (`symbols`), inspection Git sécurisée (`git_status`, `git_diff`), audit statique de cybersécurité SAST (`security_audit`), diagnostic système/technicien (`sys_diag`), cartographie de projet (`project_map`), vérification multi-stack (`project_verify`), shell (`bash`), web (`fetch`, `web_search`), sous-agents spécialisés isolés (`subagent`: explorer, architect, reviewer, security, performance, tester, researcher), plan de tâches (`todo_write`) et checkpoints atomiques (`/undo`). Les outils des serveurs MCP configurés sont ajoutés dynamiquement.
 - Système de **Skills d'expertise** intégrés et extensibles (`/skills`, `/skill <nom>`, `--skill`) : `ultra-dev` (Ingénierie Senior), `cyber-sec` (Expert Cybersécurité, Audit OWASP/CWE & DevSecOps), `sys-tech` (Technicien Système, Réseau & Infra), `review` (Revue de code), `perf` (Haute Performance) et `sec-hardening` (Durcissement actif), plus découverte automatique de `.zerocode/skills/*.md` et `~/.config/zerocode/skills/*.md`.
-- Hooks de cycle de vie `PreToolUse` / `PostToolUse` configurables pour bloquer ou auditer les actions. Les hooks sont lus uniquement dans la configuration globale utilisateur et exécutés sans shell. Guide : [`docs/HOOKS.md`](docs/HOOKS.md).\n- Intégration Fabric native : `zerocode skills --sync-fabric` télécharge les Patterns (développement, sécurité, recherche, rédaction, apprentissage, etc.) dans le catalogue local et les stratégies de raisonnement dans un répertoire séparé. `--force` actualise les ressources déjà installées. Guide : [`docs/FABRIC_INTEGRATION.md`](docs/FABRIC_INTEGRATION.md). Connecteurs navigateur/fichiers (Playwright, filesystem) : [`docs/MCP_SERVERS.md`](docs/MCP_SERVERS.md).
+- Hooks de cycle de vie `PreToolUse` / `PostToolUse` configurables pour bloquer ou auditer les actions. Les hooks sont lus uniquement dans la configuration globale utilisateur et exécutés sans shell. Guide : [`docs/HOOKS.md`](docs/HOOKS.md).
+- Intégration Fabric native : `zerocode skills --sync-fabric` télécharge les Patterns (développement, sécurité, recherche, rédaction, apprentissage, etc.) dans le catalogue local et les stratégies de raisonnement dans un répertoire séparé. `--force` actualise les ressources déjà installées. Guide : [`docs/FABRIC_INTEGRATION.md`](docs/FABRIC_INTEGRATION.md). Connecteurs navigateur/fichiers (Playwright, filesystem) : [`docs/MCP_SERVERS.md`](docs/MCP_SERVERS.md).
 - Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`), pré-injection directe des fichiers mentionnés avec `@chemin` (0 tour réseau) et cache TTL Git.
 - Diagnostics syntaxiques instantanés (Python AST, JSON, TOML, Shell `bash -n` et JavaScript `node --check`) après chaque écriture ou édition pour auto-correction immédiate.
 - Sessions reprenables, mémoire projet persistante (`/remember`), copie rapide (`/copy`, `Ctrl+Y`), compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
@@ -25,27 +26,50 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 ## Installation automatique
 
-ZeroCode installe ses dépendances Python dans un environnement isolé via **pipx**. Aucune clé API, aucun compte OpenRouter et aucune carte bancaire ne sont nécessaires pour démarrer.
+L'installateur interactif propose trois choix : **TUI**, **Desktop** ou **les deux**. Par défaut, il cherche la dernière release stable. Quand elle existe, il télécharge les paquets précompilés et vérifie leur empreinte SHA-256 avant installation. Node.js, Rust et les outils C/C++ ne sont donc pas nécessaires pour installer une release.
+
+Si aucune release stable n'est publiée, l'installateur utilise la branche source `feature/zerocode-desktop`. Dans ce mode de secours, Desktop doit être compilé localement et les outils de développement correspondants sont installés.
 
 ### Linux et macOS
 
-Une seule commande :
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.sh | bash
 ```
 
-Ou télécharge le dépôt et lance `bash install.sh`.
+Choisis TUI, Desktop ou les deux dans le menu. Les paquets Desktop sont installés selon le système : `.deb`, `.rpm`, AppImage ou `.dmg`/`.app`.
+
+Pour choisir le mode ou une version sans passer par le menu :
+
+```bash
+bash install.sh --mode tui
+bash install.sh --mode desktop
+bash install.sh --mode both
+bash install.sh --version latest --mode both
+bash install.sh --version v1.0.0 --mode desktop
+```
+
+Pour forcer le parcours depuis une branche source :
+
+```bash
+ZEROCODE_INSTALL_REF=feature/zerocode-desktop bash install.sh --mode desktop
+```
 
 ### Windows · PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
 ```
 
-Le script vérifie Python 3.10+, installe pipx si nécessaire, installe ZeroCode avec toutes ses dépendances déclarées, puis vérifie la commande. Ferme et rouvre le terminal si Windows ou ton shell ne trouve pas encore `zerocode`.
+Le menu propose les mêmes trois choix. Une release stable installe le moteur depuis le wheel Python vérifié puis lance l'installateur Desktop Windows. `winget`, Node.js, Rust et Visual Studio Build Tools ne sont nécessaires que pour le parcours de compilation source.
 
-### Installation manuelle
+Pour choisir une version précise :
+
+```powershell
+$env:ZEROCODE_INSTALL_REF = "v1.0.0"
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
+```
+
+### Installation manuelle du moteur
 
 ```bash
 python -m pip install --user pipx
@@ -65,7 +89,52 @@ python -m pip install -e ".[dev]"
 pytest
 ruff check src tests
 ```
+## Versions, mises à jour et désinstallation
 
+Les releases sont déclenchées par un tag Git `vX.Y.Z`. Le workflow vérifie que les versions du package Python, de npm, de Cargo et de Tauri correspondent au tag, puis construit les paquets natifs Windows, macOS et Linux et les distributions Python. Les fichiers publiés reçoivent un manifeste `SHA256SUMS`.
+
+Pour publier une nouvelle version, aligne les versions dans `pyproject.toml`, `desktop/package.json`, `desktop/src-tauri/Cargo.toml` et `desktop/src-tauri/tauri.conf.json`, puis pousse le tag correspondant. Le workflow refusera les versions incohérentes.
+
+Mettre à jour le moteur Python/TUI depuis la dernière release stable :
+
+```bash
+zerocode update --check
+zerocode update
+```
+
+Pour réparer le moteur avec une réinstallation vérifiée de la release actuelle :
+
+```bash
+zerocode repair
+```
+
+Pour revenir à une version stable connue :
+
+```bash
+zerocode rollback v1.0.0
+```
+
+Sous Windows, les commandes de maintenance du moteur évitent de remplacer les fichiers Python d'un processus encore actif. Ferme ZeroCode puis relance l'installateur PowerShell pour mettre à jour, réparer ou revenir à une version précise ; configure `$env:ZEROCODE_INSTALL_REF = "v1.0.0"` avant de lancer l'installateur pour un rollback.
+
+Pour mettre à jour Desktop, relance l'installateur officiel. Il récupère la dernière release et installe le paquet natif adapté au système.
+
+Désinstaller le moteur tout en conservant la configuration, les clés API et les sessions :
+
+```bash
+zerocode uninstall
+```
+
+Sous Windows, ferme toutes les fenêtres ZeroCode puis désinstalle le moteur depuis une nouvelle fenêtre PowerShell avec `pipx uninstall zerocode`. Les données utilisateur ne sont pas supprimées par cette commande.
+
+Supprimer aussi ces données utilisateur (opération irréversible, commande prise en charge sur Linux et macOS) :
+
+```bash
+zerocode uninstall --remove-data
+```
+
+Desktop reste géré par le système d'exploitation : utilise les paramètres d'applications de Windows/macOS, `sudo apt remove zerocode-desktop` sur Debian/Ubuntu ou `sudo dnf remove zerocode-desktop` sur Fedora. Sur une installation AppImage utilisateur, retire `~/.local/opt/zerocode`, `~/.local/bin/zerocode-desktop` et `~/.local/share/applications/zerocode-desktop.desktop`.
+
+Les releases possèdent des sommes SHA-256 pour vérifier l'intégrité des téléchargements. Elles ne sont pas encore signées par un certificat éditeur Windows ou Apple ; une somme hébergée avec le paquet ne remplace pas une signature du fournisseur.
 ## Démarrage rapide
 
 Sans aucune clé :
@@ -290,3 +359,10 @@ Les tests n'effectuent aucun appel réseau. Les fournisseurs sont simulés avec 
 ## Licence
 
 MIT. Voir [LICENSE](LICENSE).
+
+
+## ZeroCode Desktop
+
+Une interface graphique locale accompagne maintenant l’agent Python : navigation par projets, conversations, activités de l’agent, autorisations explicites et terminal PTY intégré. Les commandes et les fichiers sont exécutés sur la machine qui lance l’application ; le fournisseur de modèle peut toutefois être distant selon la configuration. La version desktop est en développement sur la branche [feature/zerocode-desktop](https://github.com/hackerboy-223/zerocode/tree/feature/zerocode-desktop).
+
+Guide d’installation, dépendances Linux et commandes de lancement : [docs/DESKTOP.md](docs/DESKTOP.md).

@@ -15,3 +15,9 @@ build/
 htmlcov/
 .DS_Store
 .zerocode/sessions/
+
+# ZeroCode Desktop
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/

@@ -26,6 +26,7 @@ from .checkpoints import CheckpointStore
 from .config import (
     Config,
     config_dir,
+    data_dir,
     default_config_path,
     keys_path,
     load_config,
@@ -36,6 +37,13 @@ from .config import (
 )
 from .errors import ConfigError, ToolError, ZeroCodeError
 from .hooks import HookManager
+from .maintenance import (
+    latest_release_tag,
+    repair_from_release,
+    rollback_to_release,
+    uninstall_from_pipx,
+    update_from_release,
+)
 from .mcp import MCPManager, register_mcp_tools
 from .prompts import remember_project_instruction
 from .providers import (
@@ -70,7 +78,12 @@ COMMANDS = {
     "run",
     "chat",
     "tui",
+    "desktop-bridge",
     "completion",
+    "update",
+    "repair",
+    "rollback",
+    "uninstall",
 }
 
 
@@ -117,8 +130,20 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return config_command(argv[1:], console)
     if first == "completion":
         return completion_command(argv[1:], console)
+    if first == "update":
+        return update_command(argv[1:], console)
+    if first == "repair":
+        return repair_command(argv[1:], console)
+    if first == "rollback":
+        return rollback_command(argv[1:], console)
+    if first == "uninstall":
+        return uninstall_command(argv[1:], console)
     if first == "tui":
         return run_agent(argv[1:], console, force_tui=True)
+    if first == "desktop-bridge":
+        from .desktop_bridge import main as desktop_bridge_main
+
+        return desktop_bridge_main(argv[1:])
     if first in {"run", "chat"}:
         return run_agent(argv[1:], console)
     return run_agent(argv, console)
@@ -321,6 +346,9 @@ def run_agent(
     agent.checkpoints = checkpoints
     context.checkpoint = lambda path, before, tool: checkpoints.record(
         agent.session.id, path, before, tool
+    )
+    context.checkpoint_applied = lambda path: checkpoints.mark_applied(
+        agent.session.id, path
     )
     mcp_manager = MCPManager()
     if config.mcp_servers:
@@ -783,7 +811,7 @@ def _slash_command(
         if checkpoints is None:
             ui.warn("Undo indisponible.")
             return False
-        ok, message = checkpoints.undo(agent.session.id)
+        ok, message = checkpoints.undo(agent.session.id, agent.tools.context.cwd)
         if ok:
             ui.success(message)
         else:
@@ -817,6 +845,7 @@ def print_global_help(console: Console | None = None) -> None:
     text.append("Usage\n", style="bold cyan")
     text.append("  zerocode [options] [prompt...]\n")
     text.append("  zerocode setup | doctor | audit | skills | strategies | models | providers | sessions | config\n")
+    text.append("  zerocode update [--check] | repair | rollback VERSION | uninstall [--remove-data]\n")
     text.append("  zerocode tui [-m modele]\n\n")
     text.append("Démarrage\n", style="bold cyan")
     text.append("  zerocode                 interface TUI interactive\n")
@@ -1055,6 +1084,91 @@ def completion_command(args_list: list[str], console: Console) -> int:
         )
     sys.stdout.write(script)
     return 0
+
+
+def update_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode update")
+    parser.add_argument("--check", action="store_true", help="Vérifier la dernière version sans installer.")
+    args = parser.parse_args(args_list)
+
+    if args.check:
+        try:
+            tag = latest_release_tag()
+        except Exception as exc:  # Le réseau et l'API GitHub peuvent être indisponibles.
+            console.print(Text(f"Impossible de vérifier les releases : {exc}", style="red"))
+            return 1
+        latest = tag.removeprefix("v")
+        if latest == __version__:
+            console.print(Text(f"ZeroCode {__version__} est à jour.", style="green"))
+        else:
+            console.print(Text(f"Une nouvelle version est disponible : {latest} (installée : {__version__}).", style="yellow"))
+            console.print(Text("Lance zerocode update pour l'installer.", style="dim"))
+        return 0
+
+    console.print(Text("Recherche de la dernière version stable…", style="cyan"))
+    ok, message = update_from_release()
+    console.print(Text(message, style="green" if ok else "red"))
+    return 0 if ok else 1
+
+
+def repair_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode repair")
+    parser.add_argument("--yes", action="store_true", help="Ne pas demander de confirmation.")
+    args = parser.parse_args(args_list)
+
+    console.print(Text("Réinstaller la dernière release stable sans toucher aux données utilisateur.", style="bold"))
+    if not args.yes and not Confirm.ask("Continuer ?", default=False, console=console):
+        console.print(Text("Réparation annulée.", style="yellow"))
+        return 0
+
+    ok, message = repair_from_release()
+    console.print(Text(message, style="green" if ok else "red"))
+    return 0 if ok else 1
+
+
+def rollback_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode rollback")
+    parser.add_argument("version", help="Tag stable à réinstaller, par exemple v1.0.0.")
+    parser.add_argument("--yes", action="store_true", help="Ne pas demander de confirmation.")
+    args = parser.parse_args(args_list)
+
+    console.print(Text(f"Revenir à ZeroCode {args.version}.", style="bold yellow"))
+    console.print(Text("Cette opération remplace le moteur, mais conserve les sessions et la configuration.", style="dim"))
+    if not args.yes and not Confirm.ask("Continuer ?", default=False, console=console):
+        console.print(Text("Retour arrière annulé.", style="yellow"))
+        return 0
+
+    ok, message = rollback_to_release(args.version)
+    console.print(Text(message, style="green" if ok else "red"))
+    return 0 if ok else 1
+
+
+def uninstall_command(args_list: list[str], console: Console) -> int:
+    parser = argparse.ArgumentParser(prog="zerocode uninstall")
+    parser.add_argument("--remove-data", action="store_true", help="Supprimer aussi la configuration, les clés et les sessions.")
+    parser.add_argument("--yes", action="store_true", help="Ne pas demander de confirmation.")
+    args = parser.parse_args(args_list)
+
+    console.print(Text("Cette opération désinstalle le moteur ZeroCode géré par pipx.", style="bold"))
+    if args.remove_data:
+        console.print(Text("Les données suivantes seront également supprimées :", style="yellow"))
+        console.print(Text(f"  Configuration et clés : {config_dir()}", style="dim"))
+        console.print(Text(f"  Sessions et données : {data_dir()}", style="dim"))
+    else:
+        console.print(Text("La configuration, les clés API et les sessions seront conservées.", style="dim"))
+
+    if not args.yes:
+        try:
+            confirmed = Confirm.ask("Continuer ?", default=False, console=console)
+        except (EOFError, KeyboardInterrupt):
+            return 130
+        if not confirmed:
+            console.print(Text("Désinstallation annulée.", style="yellow"))
+            return 0
+
+    ok, message = uninstall_from_pipx(remove_data=args.remove_data)
+    console.print(Text(message, style="green" if ok else "red"))
+    return 0 if ok else 1
 
 
 def setup_command(args_list: list[str], console: Console) -> int:

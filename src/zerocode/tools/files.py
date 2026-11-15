@@ -12,7 +12,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 from ..errors import ToolError
 from ..tokens import truncate_text
@@ -164,6 +167,16 @@ def _record_checkpoint(
         return
 
 
+def _mark_checkpoint_applied(ctx: ToolContext, path: Path) -> None:
+    marker = ctx.checkpoint_applied
+    if marker is None:
+        return
+    try:
+        marker(path)
+    except (OSError, ValueError):
+        return
+
+
 def _atomic_text_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing_mode = 0o644
@@ -275,6 +288,7 @@ def write_file(args: dict[str, Any], ctx: ToolContext) -> str:
     if can_diff:
         _record_checkpoint(ctx, path, before if existed else None, "write")
     _atomic_text_write(path, content)
+    _mark_checkpoint_applied(ctx, path)
     if not existed:
         _GIT_VISIBLE_CACHE.clear()
     if can_diff:
@@ -308,6 +322,7 @@ def edit_file(args: dict[str, Any], ctx: ToolContext) -> str:
     updated = text.replace(old, new, -1 if replace_all else 1)
     _record_checkpoint(ctx, path, text, "edit")
     _atomic_text_write(path, updated)
+    _mark_checkpoint_applied(ctx, path)
     _emit_diff(ctx, path, text, updated, existed=True)
     replacements = count if replace_all else 1
     diag = _syntax_diagnostic(path, updated)
@@ -353,6 +368,7 @@ def multi_edit_file(args: dict[str, Any], ctx: ToolContext) -> str:
 
     _record_checkpoint(ctx, path, original, "multi_edit")
     _atomic_text_write(path, updated)
+    _mark_checkpoint_applied(ctx, path)
     _emit_diff(ctx, path, original, updated, existed=True)
     diag = _syntax_diagnostic(path, updated)
     return (

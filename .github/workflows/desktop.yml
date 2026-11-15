@@ -1,0 +1,150 @@
+name: Desktop
+
+on:
+  push:
+    branches: [feature/zerocode-desktop]
+    paths:
+      - "desktop/**"
+      - "src/zerocode/**"
+      - "tests/test_desktop_bridge.py"
+      - "tests/test_maintenance.py"
+      - "tests/test_cli.py"
+      - "src/zerocode/cli.py"
+      - "src/zerocode/maintenance.py"
+      - ".github/workflows/release.yml"
+      - "install.sh"
+      - "install.ps1"
+      - "README.md"
+      - "docs/DESKTOP.md"
+      - ".github/workflows/desktop.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "src/zerocode/**"
+      - "tests/test_desktop_bridge.py"
+      - "tests/test_maintenance.py"
+      - "src/zerocode/cli.py"
+      - "src/zerocode/maintenance.py"
+      - ".github/workflows/release.yml"
+      - "install.sh"
+      - "install.ps1"
+      - "README.md"
+      - "docs/DESKTOP.md"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: TypeScript and Vite
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+
+  native:
+    name: Tauri and PTY compile check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file \
+            libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path desktop/src-tauri/Cargo.toml -- --check
+      - name: Check native application
+        run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml
+
+  python:
+    name: Desktop bridge · Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check src/zerocode/cli.py src/zerocode/maintenance.py src/zerocode/desktop_bridge.py src/zerocode/checkpoints.py src/zerocode/tools/base.py src/zerocode/tools/files.py src/zerocode/tools/shell.py src/zerocode/security.py tests/test_maintenance.py tests/test_cli.py tests/test_desktop_bridge.py tests/test_checkpoints.py tests/test_tools.py
+      - run: pytest -q tests/test_maintenance.py tests/test_cli.py tests/test_desktop_bridge.py tests/test_checkpoints.py tests/test_tools.py
+
+  installer-linux:
+    name: Linux installer syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell installer
+        run: |
+          bash -n install.sh
+          bash install.sh --help
+
+  installer-windows:
+    name: Windows installer syntax
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell installer
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "install.ps1"), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+          Write-Host "install.ps1 syntax is valid."
+
+  release-workflow:
+    name: Release workflow syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shared package versions
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          import tomllib
+          from pathlib import Path
+
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+          cargo = Path("desktop/src-tauri/Cargo.toml").read_text()
+          versions = {
+              "Python": pyproject["project"]["version"],
+              "npm": json.loads(Path("desktop/package.json").read_text())["version"],
+              "Tauri": json.loads(Path("desktop/src-tauri/tauri.conf.json").read_text())["version"],
+              "Cargo": re.search(r'(?m)^version\s*=\s*"([^"]+)"', cargo).group(1),
+          }
+          if len(set(versions.values())) != 1:
+              raise SystemExit(f"Package versions are out of sync: {versions}")
+          print(f"All package versions match {next(iter(versions.values()))}.")
+          PY
+      - name: Parse release workflow YAML
+        run: ruby -e 'require "yaml"; YAML.load_file(".github/workflows/release.yml"); puts "Release workflow YAML is valid."'

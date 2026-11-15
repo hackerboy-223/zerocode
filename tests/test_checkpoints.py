@@ -65,3 +65,47 @@ def test_checkpoint_undo_refuses_secret_or_git_paths(tmp_path):
     assert "sensible" in message
     assert env_file.read_text(encoding="utf-8") == "SECRET=keep\n"
 
+
+
+def test_checkpoint_undo_refuses_to_overwrite_changes_made_after_agent(tmp_path):
+    target = tmp_path / "file.txt"
+    target.write_text("agent version", encoding="utf-8")
+    store = CheckpointStore(tmp_path / "checkpoints")
+    assert store.record("s1", target, "before agent", "edit")
+    assert store.mark_applied("s1", target)
+
+    target.write_text("user's newer work", encoding="utf-8")
+    ok, message = store.undo("s1", tmp_path)
+
+    assert not ok
+    assert "change depuis le checkpoint" in message
+    assert target.read_text(encoding="utf-8") == "user's newer work"
+
+
+def test_checkpoint_undo_refuses_paths_outside_workspace(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("agent version", encoding="utf-8")
+    store = CheckpointStore(tmp_path / "checkpoints")
+    assert store.record("s1", outside, "before", "edit")
+    assert store.mark_applied("s1", outside)
+
+    ok, message = store.undo("s1", workspace)
+
+    assert not ok
+    assert "hors du dossier de travail" in message
+    assert outside.read_text(encoding="utf-8") == "agent version"
+
+
+def test_checkpoint_undo_restores_when_file_is_unchanged(tmp_path):
+    target = tmp_path / "file.txt"
+    target.write_text("agent version", encoding="utf-8")
+    store = CheckpointStore(tmp_path / "checkpoints")
+    assert store.record("s1", target, "before agent", "edit")
+    assert store.mark_applied("s1", target)
+
+    ok, _ = store.undo("s1", tmp_path)
+
+    assert ok
+    assert target.read_text(encoding="utf-8") == "before agent"
