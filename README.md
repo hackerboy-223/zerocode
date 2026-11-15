@@ -28,12 +28,12 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 L'installateur interactif propose trois choix : **TUI**, **Desktop** ou **les deux**. Par défaut, il cherche la dernière release stable. Quand elle existe, il télécharge les paquets précompilés et vérifie leur empreinte SHA-256 avant installation. Node.js, Rust et les outils C/C++ ne sont donc pas nécessaires pour installer une release.
 
-Si aucune release stable n'est publiée, l'installateur utilise la branche source `feature/zerocode-desktop`. Dans ce mode de secours, Desktop doit être compilé localement et les outils de développement correspondants sont installés.
+Si aucune release stable n'est publiée, l'installateur utilise le code source de la branche `main`. Dans ce mode de secours, Desktop doit être compilé localement et les outils de développement correspondants sont installés.
 
 ### Linux et macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.sh | bash
 ```
 
 Choisis TUI, Desktop ou les deux dans le menu. Les paquets Desktop sont installés selon le système : `.deb`, `.rpm`, AppImage ou `.dmg`/`.app`.
@@ -51,13 +51,13 @@ bash install.sh --version v1.0.0 --mode desktop
 Pour forcer le parcours depuis une branche source :
 
 ```bash
-ZEROCODE_INSTALL_REF=feature/zerocode-desktop bash install.sh --mode desktop
+ZEROCODE_INSTALL_REF=main bash install.sh --mode desktop
 ```
 
 ### Windows · PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
 ```
 
 Le menu propose les mêmes trois choix. Une release stable installe le moteur depuis le wheel Python vérifié puis lance l'installateur Desktop Windows. `winget`, Node.js, Rust et Visual Studio Build Tools ne sont nécessaires que pour le parcours de compilation source.
@@ -66,7 +66,7 @@ Pour choisir une version précise :
 
 ```powershell
 $env:ZEROCODE_INSTALL_REF = "v1.0.0"
-irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
 ```
 
 ### Installation manuelle du moteur
@@ -89,6 +89,12 @@ python -m pip install -e ".[dev]"
 pytest
 ruff check src tests
 ```
+## État de publication
+
+Le code de la version **1.0.0** est intégré à `main`. La publication de la release GitHub et de ses installateurs précompilés reste une étape distincte : tant que le tag `v1.0.0` n'est pas publié, le parcours `latest` de l'installateur utilise la compilation depuis les sources. Les paquets natifs précompilés ne sont donc pas encore annoncés comme disponibles.
+
+Les workflows CI, qualité et Desktop ont réussi sur la branche de développement avant la fusion. Cela valide les contrôles automatisés, mais ne remplace pas les essais d'installation sur des machines propres.
+
 ## Versions, mises à jour et désinstallation
 
 Les releases sont déclenchées par un tag Git `vX.Y.Z`. Le workflow vérifie que les versions du package Python, de npm, de Cargo et de Tauri correspondent au tag, puis construit les paquets natifs Windows, macOS et Linux et les distributions Python. Les fichiers publiés reçoivent un manifeste `SHA256SUMS`.
@@ -363,6 +369,19 @@ MIT. Voir [LICENSE](LICENSE).
 
 ## ZeroCode Desktop
 
-Une interface graphique locale accompagne maintenant l’agent Python : navigation par projets, conversations, activités de l’agent, autorisations explicites et terminal PTY intégré. Les commandes et les fichiers sont exécutés sur la machine qui lance l’application ; le fournisseur de modèle peut toutefois être distant selon la configuration. La version desktop est en développement sur la branche [feature/zerocode-desktop](https://github.com/hackerboy-223/zerocode/tree/feature/zerocode-desktop).
+ZeroCode existe aussi sous forme d’application graphique native, construite avec **Tauri 2, React et TypeScript**. Elle réutilise le moteur Python installé localement : pas de deuxième agent ni de service d'exécution hébergé.
 
-Guide d’installation, dépendances Linux et commandes de lancement : [docs/DESKTOP.md](docs/DESKTOP.md).
+Fonctionnalités principales :
+
+- Conversations avec réponses en streaming et blocs de code formatés.
+- Modes **Build**, **Plan** et **Full-stack**, avec sélection du modèle et des permissions.
+- Gestion des projets et des sessions, reprise d'une conversation et création d'une nouvelle session.
+- Inspecteur latéral : état Git, tâches, historique des outils, explorateur de fichiers et diffs.
+- Terminal local intégré basé sur un pseudo-terminal (PTY).
+- Demandes d'autorisation explicites pour les opérations sensibles et restauration prudente des checkpoints.
+- Mascotte animée LUPUS, sans dépendance à une ressource distante.
+
+L'application et son terminal exécutent les commandes sur l'ordinateur de l'utilisateur. Les prompts, extraits de fichiers et réponses peuvent être transmis au fournisseur de modèle sélectionné. Pour garder l'inférence sur la machine, configure un fournisseur local compatible comme Ollama.
+
+Guide complet : [docs/DESKTOP.md](docs/DESKTOP.md).
+
