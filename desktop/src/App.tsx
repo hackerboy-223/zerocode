@@ -278,7 +278,7 @@ export default function App() {
     const defaultPath = currentDir ? `${currentDir}/` : "";
     const raw = window.prompt("Chemin du nouveau fichier (dans le workspace) :", defaultPath);
     if (!raw?.trim()) return;
-    const relativePath = raw.trim().replaceAll("\\\\", "/").replace(/^\\/+/, "");
+    const relativePath = raw.trim().split("\\").join("/");
     try {
       await desktopInvoke("create_workspace_file", { cwd: workspace, relativePath });
       await loadDirectory(currentDir);
