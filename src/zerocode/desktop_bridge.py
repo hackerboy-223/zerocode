@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import re
 import secrets
 import sys
 import threading
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .checkpoints import CheckpointStore
-from .config import load_config
+from .config import load_config, save_mcp_servers
 from .errors import ConfigError, ZeroCodeError
 from .hooks import HookManager
 from .mcp import MCPManager, register_mcp_tools
@@ -318,6 +319,25 @@ def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
     return config, store, ui, router, agent, permissions, context, mcp_manager
 
 
+def _public_mcp_servers(servers: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expose MCP metadata without returning environment variable values."""
+    visible: list[dict[str, Any]] = []
+    for name, server in servers.items():
+        if not isinstance(server, dict):
+            continue
+        visible.append({
+            "name": str(name),
+            "command": str(server.get("command") or ""),
+            "args": [str(value) for value in server.get("args", []) if isinstance(value, str)],
+            "cwd": str(server.get("cwd") or ""),
+            "enabled": bool(server.get("enabled", True)),
+            "trusted": bool(server.get("trusted", False)),
+            "timeout": int(server.get("timeout", 30)),
+            "env_keys": sorted(str(key) for key in server.get("env", {}) if isinstance(key, str)),
+        })
+    return visible
+
+
 def _available_models(router: Router) -> list[str]:
     models: list[str] = ["auto"]
     for item in router.preview("auto"):
@@ -389,6 +409,7 @@ def main(argv: list[str] | None = None) -> int:
         _emit_session_state(
             ui, "ready", cwd, config, store, router, agent, permissions, context
         )
+        ui.emit("mcp_servers", servers=_public_mcp_servers(config.mcp_servers))
         turn_lock = threading.Lock()
         active = {"value": False}
 
@@ -438,6 +459,50 @@ def main(argv: list[str] | None = None) -> int:
                 continue
 
             kind = message.get("type")
+            if kind == "mcp_list":
+                ui.emit("mcp_servers", servers=_public_mcp_servers(config.mcp_servers))
+                continue
+            if kind == "mcp_save":
+                name = str(message.get("name") or "").strip()
+                server = message.get("server")
+                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", name):
+                    ui.error("Identifiant MCP invalide.")
+                    continue
+                if not isinstance(server, dict):
+                    ui.error("Configuration MCP invalide.")
+                    continue
+                previous = config.mcp_servers
+                candidate = dict(previous)
+                next_server = dict(server)
+                if "env" not in next_server and name in previous:
+                    next_server["env"] = previous[name].get("env", {})
+                candidate[name] = next_server
+                config.mcp_servers = candidate
+                try:
+                    save_mcp_servers(candidate, cwd=cwd)
+                except Exception as exc:
+                    config.mcp_servers = previous
+                    ui.error(f"Configuration MCP refusée : {exc}")
+                    continue
+                ui.emit("mcp_saved", servers=_public_mcp_servers(config.mcp_servers))
+                continue
+            if kind == "mcp_remove":
+                name = str(message.get("name") or "").strip()
+                if name not in config.mcp_servers:
+                    ui.error("Serveur MCP introuvable.")
+                    continue
+                previous = config.mcp_servers
+                candidate = dict(previous)
+                candidate.pop(name, None)
+                config.mcp_servers = candidate
+                try:
+                    save_mcp_servers(candidate, cwd=cwd)
+                except Exception as exc:
+                    config.mcp_servers = previous
+                    ui.error(f"Suppression MCP refusée : {exc}")
+                    continue
+                ui.emit("mcp_removed", servers=_public_mcp_servers(config.mcp_servers))
+                continue
             if kind in {"permission_response", "sudo_confirmation_response", "sudo_password_response"}:
                 ui.receive(message)
                 continue
