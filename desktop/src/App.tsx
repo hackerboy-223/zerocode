@@ -1312,6 +1312,11 @@ export default function App() {
                       <span>DIFFS DE SESSION</span>
                       <span>{diffs.length}</span>
                     </div>
+                    {checkpoints > 0 && (
+                      <button type="button" className="checkpoint-undo-btn" onClick={() => void undoCheckpoint()} disabled={busy}>
+                        <RotateCcw size={13} /> Annuler la dernière modification ({checkpoints})
+                      </button>
+                    )}
                     {diffs.length === 0 ? (
                       <p className="context-empty">Les modifications appliquées par ZeroCode s’afficheront ici avec leur diff complet.</p>
                     ) : (
