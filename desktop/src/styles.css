@@ -1339,3 +1339,47 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+
+/* Dark theme precision overrides */
+.app-shell.theme-dark .sidebar { background: #0b0f15; border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .brand-copy strong,
+.app-shell.theme-dark .breadcrumb strong,
+.app-shell.theme-dark .greeting-row h1,
+.app-shell.theme-dark .message-text,
+.app-shell.theme-dark .formatted-body { color: #edf3fb; }
+.app-shell.theme-dark .new-task-button,
+.app-shell.theme-dark .local-card,
+.app-shell.theme-dark .suggestion-card {
+  color: #edf3fb;
+  background: linear-gradient(145deg, rgba(255,255,255,.035), rgba(255,255,255,.012));
+  border-color: rgba(185,203,228,.10);
+  box-shadow: none;
+}
+.app-shell.theme-dark .new-task-button { background: linear-gradient(135deg, rgba(69,126,208,.17), rgba(34,53,79,.16)); border-color: rgba(120,173,255,.2); }
+.app-shell.theme-dark .suggestion-card:hover { background: rgba(75,127,196,.08); border-color: rgba(120,173,255,.32); }
+.app-shell.theme-dark .main-column,
+.app-shell.theme-dark .workspace-layout,
+.app-shell.theme-dark .chat-column { background: #080b10; }
+.app-shell.theme-dark .topbar { background: rgba(8,11,16,.9); border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .composer { background: #111823; border-color: rgba(153,177,209,.17); box-shadow: 0 14px 38px rgba(0,0,0,.2), inset 0 1px rgba(255,255,255,.025); }
+.app-shell.theme-dark .composer textarea { color: #edf3fb; }
+.app-shell.theme-dark .composer-bottom { border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .context-panel { background: #0c1118; border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .context-head,
+.app-shell.theme-dark .context-section,
+.app-shell.theme-dark .context-bottom { border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .statusbar { background: #090d12; border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .terminal-panel,
+.app-shell.theme-dark .terminal-body { background: #090e14; border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .terminal-header { background: #0d131c; border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .message-user .message-content { background: rgba(71,117,177,.10); border-color: rgba(120,173,255,.12); }
+.app-shell.theme-dark .settings-dialog,
+.app-shell.theme-dark .search-dialog,
+.app-shell.theme-dark .file-preview-dialog { background: #101720; color: #edf3fb; border-color: rgba(185,203,228,.15); }
+.app-shell.theme-dark .settings-group select,
+.app-shell.theme-dark .settings-inline-input input { background: #0b1119; color: #edf3fb; border-color: rgba(185,203,228,.15); }
+.app-shell.theme-dark .settings-choice { background: rgba(255,255,255,.025); border-color: rgba(185,203,228,.09); }
+.app-shell.theme-dark .settings-choice strong { color: #edf3fb; }
+.app-shell.theme-dark .settings-choice span { color: #77869a; }
+.app-shell.theme-dark .settings-warning { background: #211b13; border-color: #5b4727; color: #d8bd8e; }
