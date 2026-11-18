@@ -448,6 +448,23 @@ def load_config(
     return config
 
 
+def save_mcp_servers(
+    servers: dict[str, dict[str, Any]],
+    *,
+    cwd: Path | None = None,
+) -> Path:
+    """Persist only MCP server settings, preserving unrelated global preferences."""
+    config = load_config(cwd=cwd)
+    config.mcp_servers = servers
+    validate_config(config)
+
+    target = default_config_path()
+    payload = _read_json(target, label="la configuration globale") if target.is_file() else {}
+    payload["mcp_servers"] = servers
+    _atomic_write(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n", mode=0o600)
+    return target
+
+
 def save_config(config: Config, path: Path | None = None) -> Path:
     target = path or default_config_path()
     target.parent.mkdir(parents=True, exist_ok=True)

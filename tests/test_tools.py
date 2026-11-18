@@ -10,10 +10,16 @@ from zerocode.tools import PermissionManager, ToolContext, build_registry
 from zerocode.types import ToolCall
 
 
-def make_registry(tmp_path, *, mode="allow", allow_outside=False):
+def make_registry(tmp_path, *, mode="allow", allow_outside=False, approve=False):
     context = ToolContext(cwd=tmp_path, allow_outside=allow_outside)
-    permissions = PermissionManager(mode=mode, interactive=False)
-    return build_registry(context, permissions), context
+
+    class ApprovingUI:
+        def confirm_tool(self, name, args):
+            return True
+
+    permissions = PermissionManager(mode=mode, interactive=approve)
+    ui = ApprovingUI() if approve else None
+    return build_registry(context, permissions, ui=ui), context
 
 
 def call(registry, name, **arguments):
@@ -555,6 +561,16 @@ def test_confirm_approval_cannot_be_bypassed_by_allow_or_yolo(tmp_path):
         action, {}, ui=RejectingUI(), context=ToolContext(cwd=tmp_path)
     )
 
+def test_git_inspection_requires_explicit_approval_even_in_allow_mode(tmp_path):
+    registry, _ = make_registry(tmp_path)
+    approvals = {tool.name: tool.approval for tool in registry.tools()}
+
+    assert approvals["git_status"] == "confirm"
+    assert approvals["git_diff"] == "confirm"
+    assert call(registry, "git_status") == "Action refusee par l'utilisateur."
+    assert call(registry, "git_diff", scope="working") == "Action refusee par l'utilisateur."
+
+
 def test_git_status_and_diff_exclude_secret_contents(tmp_path):
     import subprocess
 
@@ -568,7 +584,7 @@ def test_git_status_and_diff_exclude_secret_contents(tmp_path):
 
     (tmp_path / "README.md").write_text("after\n", encoding="utf-8")
     (tmp_path / ".env").write_text("API_KEY=changed-secret\n", encoding="utf-8")
-    registry, _ = make_registry(tmp_path)
+    registry, _ = make_registry(tmp_path, approve=True)
 
     status = call(registry, "git_status")
     assert "README.md" in status
@@ -594,7 +610,7 @@ def test_git_diff_refuses_explicit_secret_path(tmp_path):
     subprocess.run(["git", "commit", "-m", "initial"], cwd=tmp_path, check=True)
     secret.write_text("TOKEN=still-hidden\n", encoding="utf-8")
 
-    registry, _ = make_registry(tmp_path)
+    registry, _ = make_registry(tmp_path, approve=True)
     result = call(registry, "git_diff", path=".env")
     assert result.startswith("ERREUR:")
     assert "protege" in result

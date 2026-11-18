@@ -16,6 +16,7 @@ from zerocode.config import (
     load_key_store,
     mask_key,
     save_config,
+    save_mcp_servers,
     store_key,
     validate_config,
 )
@@ -315,3 +316,35 @@ def test_mcp_trust_flag_must_be_boolean(tmp_path, monkeypatch):
 
     with pytest.raises(ConfigError, match="trusted"):
         load_config(tmp_path)
+
+
+
+def test_save_mcp_servers_preserves_unrelated_global_settings(tmp_path, monkeypatch):
+    import zerocode.config as config_module
+
+    global_config = tmp_path / "config.json"
+    original = {
+        "model": "my-provider/my-model",
+        "permissions": "allow",
+        "max_tokens": 4096,
+        "providers": {"my-provider": {"enabled": True}},
+    }
+    global_config.write_text(json.dumps(original), encoding="utf-8")
+    monkeypatch.setattr(config_module, "default_config_path", lambda: global_config)
+    monkeypatch.setattr(
+        config_module,
+        "load_config",
+        lambda cwd=None: Config(model="auto", base_dir=tmp_path),
+    )
+
+    save_mcp_servers(
+        {"local-tools": {"command": "python", "args": ["server.py"], "enabled": False}},
+        cwd=tmp_path,
+    )
+
+    saved = json.loads(global_config.read_text(encoding="utf-8"))
+    assert saved["model"] == original["model"]
+    assert saved["permissions"] == original["permissions"]
+    assert saved["max_tokens"] == original["max_tokens"]
+    assert saved["providers"] == original["providers"]
+    assert saved["mcp_servers"]["local-tools"]["command"] == "python"

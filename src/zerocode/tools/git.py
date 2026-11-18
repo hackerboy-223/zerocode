@@ -122,7 +122,7 @@ def register_git_tools(registry: ToolRegistry) -> None:
             ),
             parameters={"type": "object", "properties": {}},
             handler=git_status,
-            approval="never",
+            approval="confirm",
         )
     )
     registry.register(
@@ -151,6 +151,6 @@ def register_git_tools(registry: ToolRegistry) -> None:
                 },
             },
             handler=git_diff,
-            approval="never",
+            approval="confirm",
         )
     )

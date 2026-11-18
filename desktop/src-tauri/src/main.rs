@@ -2,7 +2,8 @@
 
 use std::{
     collections::HashMap,
-    env, fs,
+    env,
+    fs::{self, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child as ProcessChild, ChildStdin, Command as ProcessCommand, Stdio},
@@ -13,7 +14,7 @@ use std::{
 use portable_pty::{native_pty_system, Child as PtyChild, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 struct TerminalSession {
@@ -410,9 +411,23 @@ fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
 fn start_agent(
     app: AppHandle,
     state: State<'_, DesktopState>,
-    cwd: String,
+    cwd: Option<String>,
 ) -> Result<String, String> {
-    let workspace = resolve_workspace(&cwd)?;
+    // Sans projet ouvert, l’agent démarre dans un espace isolé propre à l’application.
+    // Cela permet la conversation libre sans lui donner accès au dossier personnel entier.
+    let workspace = match cwd {
+        Some(path) if !path.trim().is_empty() => resolve_workspace(&path)?,
+        _ => {
+            let scratch = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| format!("Dossier de données ZeroCode indisponible : {error}"))?
+                .join("scratch");
+            fs::create_dir_all(&scratch)
+                .map_err(|error| format!("Espace de conversation impossible à créer : {error}"))?;
+            resolve_workspace(&scratch.to_string_lossy())?
+        }
+    };
     let mut child = spawn_agent_process(&workspace)?;
     let input = child
         .stdin
@@ -668,6 +683,30 @@ fn list_workspace_files(
 
 #[tauri::command]
 fn read_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFilePreview, String> {
+    let raw_path = Path::new(&relative_path);
+    if raw_path.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err("Chemin de sauvegarde invalide.".to_string());
+    }
+    let workspace_root = resolve_workspace(&cwd)?;
+    let mut cursor = PathBuf::from(&workspace_root);
+    for component in raw_path.components() {
+        if let std::path::Component::Normal(part) = component {
+            cursor.push(part);
+            if fs::symlink_metadata(&cursor)
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false)
+            {
+                return Err("La sauvegarde à travers un lien symbolique est refusée.".to_string());
+            }
+        }
+    }
     let (root, target) = resolve_inside_workspace(&cwd, &relative_path)?;
     if !target.is_file() {
         return Err("Ce chemin n’est pas un fichier.".to_string());
@@ -690,7 +729,10 @@ fn read_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFi
     if buffer.iter().take(4096).any(|&byte| byte == 0) {
         return Err("Aperçu indisponible pour un fichier binaire.".to_string());
     }
-    let content = String::from_utf8_lossy(&buffer).into_owned();
+    let content = String::from_utf8(buffer).map_err(|_| {
+        "Fichier non UTF-8 : aperçu et édition refusés pour préserver les octets originaux."
+            .to_string()
+    })?;
     let lines = content.lines().count().max(1);
     let rel_path = target
         .strip_prefix(&root)
@@ -702,6 +744,144 @@ fn read_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFi
         content,
         lines,
         truncated,
+    })
+}
+
+#[tauri::command]
+fn write_workspace_file(
+    cwd: String,
+    relative_path: String,
+    content: String,
+) -> Result<WorkspaceFilePreview, String> {
+    const MAX_WRITE_BYTES: usize = 2_000_000;
+    if content.len() > MAX_WRITE_BYTES {
+        return Err("Le fichier dépasse la limite de sauvegarde de 2 Mo.".to_string());
+    }
+    if content.as_bytes().contains(&0) {
+        return Err("Le contenu contient un octet nul : sauvegarde refusée.".to_string());
+    }
+    let (root, target) = resolve_inside_workspace(&cwd, &relative_path)?;
+    if !target.is_file() {
+        return Err("La sauvegarde ne peut viser qu’un fichier existant.".to_string());
+    }
+    if is_sensitive_path(&target) {
+        return Err("Fichier de secrets protégé par ZeroCode.".to_string());
+    }
+    let metadata = fs::symlink_metadata(&target)
+        .map_err(|error| format!("Métadonnées du fichier indisponibles : {error}"))?;
+    if metadata.file_type().is_symlink() {
+        return Err("La sauvegarde d’un lien symbolique est refusée.".to_string());
+    }
+    let parent = target
+        .parent()
+        .ok_or_else(|| "Dossier parent introuvable.".to_string())?
+        .canonicalize()
+        .map_err(|error| format!("Dossier parent inaccessible : {error}"))?;
+    if !parent.starts_with(&root) {
+        return Err("Écriture hors du workspace refusée.".to_string());
+    }
+    let temp_path = parent.join(format!(".zerocode-save-{}.tmp", Uuid::new_v4()));
+    let write_result = (|| -> Result<(), String> {
+        let mut temp_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|error| format!("Fichier temporaire impossible à créer : {error}"))?;
+        temp_file
+            .write_all(content.as_bytes())
+            .map_err(|error| format!("Écriture temporaire impossible : {error}"))?;
+        temp_file
+            .sync_all()
+            .map_err(|error| format!("Synchronisation du fichier impossible : {error}"))?;
+        fs::set_permissions(&temp_path, metadata.permissions())
+            .map_err(|error| format!("Conservation des permissions impossible : {error}"))?;
+        fs::rename(&temp_path, &target)
+            .map_err(|error| format!("Remplacement atomique du fichier impossible : {error}"))?;
+        Ok(())
+    })();
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(error);
+    }
+    let saved = fs::read(&target)
+        .map_err(|error| format!("Vérification après sauvegarde impossible : {error}"))?;
+    let rendered = String::from_utf8(saved)
+        .map_err(|_| "Le fichier sauvegardé n’est pas un texte UTF-8 valide.".to_string())?;
+    let path = target
+        .strip_prefix(&root)
+        .unwrap_or(&target)
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(WorkspaceFilePreview {
+        path,
+        lines: rendered.lines().count().max(1),
+        truncated: false,
+        content: rendered,
+    })
+}
+
+#[tauri::command]
+fn create_workspace_file(
+    cwd: String,
+    relative_path: String,
+) -> Result<WorkspaceFilePreview, String> {
+    let raw_path = Path::new(&relative_path);
+    if raw_path.as_os_str().is_empty()
+        || raw_path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err("Chemin de création invalide.".to_string());
+    }
+    let root = PathBuf::from(resolve_workspace(&cwd)?);
+    let file_name = raw_path
+        .file_name()
+        .ok_or_else(|| "Nom de fichier manquant.".to_string())?;
+    let parent_relative = raw_path.parent().unwrap_or_else(|| Path::new(""));
+    let mut parent_candidate = root.clone();
+    for component in parent_relative.components() {
+        if let std::path::Component::Normal(part) = component {
+            parent_candidate.push(part);
+            if fs::symlink_metadata(&parent_candidate)
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false)
+            {
+                return Err("Création à travers un lien symbolique refusée.".to_string());
+            }
+        }
+    }
+    let parent = parent_candidate
+        .canonicalize()
+        .map_err(|error| format!("Dossier parent inaccessible : {error}"))?;
+    if !parent.starts_with(&root) || !parent.is_dir() {
+        return Err("Le dossier parent doit rester dans le workspace.".to_string());
+    }
+    let target = parent.join(file_name);
+    if is_sensitive_path(&target) {
+        return Err("La création d’un fichier de secrets est refusée.".to_string());
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)
+        .map_err(|error| format!("Création du fichier impossible : {error}"))?;
+    file.flush()
+        .map_err(|error| format!("Finalisation du fichier impossible : {error}"))?;
+    let path = target
+        .strip_prefix(&root)
+        .unwrap_or(&target)
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(WorkspaceFilePreview {
+        path,
+        content: String::new(),
+        lines: 1,
+        truncated: false,
     })
 }
 
@@ -731,36 +911,11 @@ fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
     let branch = String::from_utf8_lossy(&branch_res.stdout)
         .trim()
         .to_string();
-    let status_out = ProcessCommand::new("git")
-        .args(["status", "--porcelain", "-uall"])
-        .current_dir(&workspace)
-        .output();
-    let mut changed_files: Vec<GitChangedFile> = Vec::new();
-    if let Ok(status_res) = status_out {
-        if status_res.status.success() {
-            for line in String::from_utf8_lossy(&status_res.stdout).lines() {
-                if line.len() < 4 {
-                    continue;
-                }
-                let status = line[..2].trim().to_string();
-                let path = line[3..].trim().to_string();
-                if !path.is_empty() {
-                    changed_files.push(GitChangedFile {
-                        status: if status.is_empty() {
-                            "M".to_string()
-                        } else {
-                            status
-                        },
-                        path,
-                    });
-                }
-            }
-        }
-    }
-    let dirty_count = changed_files.len();
-    if changed_files.len() > 60 {
-        changed_files.truncate(60);
-    }
+    // Git status can invoke repository-configured fsmonitor helpers and clean filters.
+    // Workspace opening must never execute those helpers implicitly. Keep the
+    // automatic overview read-only until Git inspection is explicitly approved.
+    let changed_files: Vec<GitChangedFile> = Vec::new();
+    let dirty_count = 0;
     Ok(GitWorkspaceInfo {
         is_repo: true,
         branch: if branch.is_empty() {
@@ -787,6 +942,8 @@ fn main() {
             stop_agent,
             list_workspace_files,
             read_workspace_file,
+            write_workspace_file,
+            create_workspace_file,
             workspace_git_info
         ])
         .run(tauri::generate_context!())
