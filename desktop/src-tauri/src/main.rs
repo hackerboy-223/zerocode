@@ -731,36 +731,11 @@ fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
     let branch = String::from_utf8_lossy(&branch_res.stdout)
         .trim()
         .to_string();
-    let status_out = ProcessCommand::new("git")
-        .args(["status", "--porcelain", "-uall"])
-        .current_dir(&workspace)
-        .output();
-    let mut changed_files: Vec<GitChangedFile> = Vec::new();
-    if let Ok(status_res) = status_out {
-        if status_res.status.success() {
-            for line in String::from_utf8_lossy(&status_res.stdout).lines() {
-                if line.len() < 4 {
-                    continue;
-                }
-                let status = line[..2].trim().to_string();
-                let path = line[3..].trim().to_string();
-                if !path.is_empty() {
-                    changed_files.push(GitChangedFile {
-                        status: if status.is_empty() {
-                            "M".to_string()
-                        } else {
-                            status
-                        },
-                        path,
-                    });
-                }
-            }
-        }
-    }
-    let dirty_count = changed_files.len();
-    if changed_files.len() > 60 {
-        changed_files.truncate(60);
-    }
+    // Git status can invoke repository-configured fsmonitor helpers and clean filters.
+    // Workspace opening must never execute those helpers implicitly. Keep the
+    // automatic overview read-only until Git inspection is explicitly approved.
+    let changed_files: Vec<GitChangedFile> = Vec::new();
+    let dirty_count = 0;
     Ok(GitWorkspaceInfo {
         is_repo: true,
         branch: if branch.is_empty() {
