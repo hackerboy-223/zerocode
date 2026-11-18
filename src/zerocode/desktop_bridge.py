@@ -496,8 +496,7 @@ def main(argv: list[str] | None = None) -> int:
                 candidate.pop(name, None)
                 config.mcp_servers = candidate
                 try:
-                    validate_config(config)
-                    save_config(config)
+                    save_mcp_servers(candidate, cwd=cwd)
                 except Exception as exc:
                     config.mcp_servers = previous
                     ui.error(f"Suppression MCP refusée : {exc}")
