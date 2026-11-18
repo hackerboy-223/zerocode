@@ -561,6 +561,16 @@ def test_confirm_approval_cannot_be_bypassed_by_allow_or_yolo(tmp_path):
         action, {}, ui=RejectingUI(), context=ToolContext(cwd=tmp_path)
     )
 
+def test_git_inspection_requires_explicit_approval_even_in_allow_mode(tmp_path):
+    registry, _ = make_registry(tmp_path)
+    approvals = {tool.name: tool.approval for tool in registry.tools()}
+
+    assert approvals["git_status"] == "confirm"
+    assert approvals["git_diff"] == "confirm"
+    assert call(registry, "git_status") == "Action refusee par l'utilisateur."
+    assert call(registry, "git_diff", scope="working") == "Action refusee par l'utilisateur."
+
+
 def test_git_status_and_diff_exclude_secret_contents(tmp_path):
     import subprocess
 
