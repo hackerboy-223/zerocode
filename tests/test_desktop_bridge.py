@@ -10,6 +10,7 @@ from zerocode.desktop_bridge import (
     DesktopBridgeUI,
     _desktop_permission_manager,
     _session_summaries,
+    _public_mcp_servers,
     _think_value,
     _visible_history,
 )
@@ -193,3 +194,33 @@ def test_desktop_bridge_preserves_explicit_deny_permissions() -> None:
     permissions = _desktop_permission_manager(Config())
 
     assert permissions.mode == "deny"
+
+
+
+def test_public_mcp_server_metadata_never_exposes_environment_values() -> None:
+    servers = {
+        "local-search": {
+            "command": "npx",
+            "args": ["-y", "example-server"],
+            "enabled": True,
+            "trusted": False,
+            "timeout": 45,
+            "env": {"API_TOKEN": "super-secret-value", "MODE": "safe"},
+        }
+    }
+
+    public = _public_mcp_servers(servers)
+
+    assert public == [
+        {
+            "name": "local-search",
+            "command": "npx",
+            "args": ["-y", "example-server"],
+            "cwd": "",
+            "enabled": True,
+            "trusted": False,
+            "timeout": 45,
+            "env_keys": ["API_TOKEN", "MODE"],
+        }
+    ]
+    assert "super-secret-value" not in json.dumps(public)
