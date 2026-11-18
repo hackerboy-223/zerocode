@@ -11,7 +11,7 @@ const isSafe = (entry: WorkspaceEntry) => {
   const ext = name.includes(".") ? name.split(".").pop() || "" : "";
   return !parts.some((part) => [".git",".ssh",".aws",".gnupg","node_modules",".venv","target","dist"].includes(part))
     && !ignoredNames.has(name) && !name.startsWith(".env.") && ![".pem",".key",".p12",".pfx",".jks"].some((suffix) => name.endsWith(suffix))
-    && !ignoredExtensions.has(ext) && entry.size <= 256_000;
+    && !ignoredExtensions.has(ext) && entry.size <= 128_000;
 };
 export default function WorkspaceSearch({ workspace, onOpen, onMention }: { workspace: string; onOpen: (path: string) => void; onMention: (path: string) => void }) {
   const [documents, setDocuments] = useState<Document[]>([]); const [query, setQuery] = useState("");
@@ -21,13 +21,13 @@ export default function WorkspaceSearch({ workspace, onOpen, onMention }: { work
     setIndexing(true); setError(""); setDocuments([]); setProgress({ done: 0, total: 0 });
     try {
       const queue = [""]; const seen = new Set<string>(); const files: WorkspaceEntry[] = [];
-      while (queue.length && files.length < 600) {
+      while (queue.length && files.length < 350) {
         const dir = queue.shift()!; if (seen.has(dir)) continue; seen.add(dir);
         const entries = await desktopInvoke<WorkspaceEntry[]>("list_workspace_files", { cwd: workspace, relativeDir: dir });
         for (const entry of entries) {
           if (entry.kind === "dir") { if (dir.split("/").length < 8) queue.push(entry.path); }
           else if (isSafe(entry)) files.push(entry);
-          if (files.length >= 600) break;
+          if (files.length >= 350) break;
         }
       }
       setProgress({ done: 0, total: files.length }); const docs: Document[] = []; let cursor = 0;
@@ -75,6 +75,6 @@ export default function WorkspaceSearch({ workspace, onOpen, onMention }: { work
         </article>)}
         {!query.trim() && <p className="context-empty">Saisissez un terme pour explorer les {documents.length} fichiers indexés.</p>}
       </div>}
-    <p className="index-footnote">Limites : 600 fichiers, 256 Ko par fichier. Les secrets, binaires et dépendances sont exclus. Réindexez après des changements importants.</p>
+    <p className="index-footnote">Limites : 350 fichiers, 128 Ko par fichier. Les secrets, binaires et dépendances sont exclus. Réindexez après des changements importants.</p>
   </div>;
 }
