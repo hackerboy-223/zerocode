@@ -681,7 +681,7 @@ fn read_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFi
         return Err("Chemin de sauvegarde invalide.".to_string());
     }
     let workspace_root = resolve_workspace(&cwd)?;
-    let mut cursor = workspace_root.clone();
+    let mut cursor = PathBuf::from(&workspace_root);
     for component in raw_path.components() {
         if let std::path::Component::Normal(part) = component {
             cursor.push(part);
@@ -821,7 +821,7 @@ fn create_workspace_file(
     {
         return Err("Chemin de création invalide.".to_string());
     }
-    let root = resolve_workspace(&cwd)?;
+    let root = PathBuf::from(resolve_workspace(&cwd)?);
     let file_name = raw_path
         .file_name()
         .ok_or_else(|| "Nom de fichier manquant.".to_string())?;
