@@ -731,36 +731,13 @@ fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
     let branch = String::from_utf8_lossy(&branch_res.stdout)
         .trim()
         .to_string();
-    let status_out = ProcessCommand::new("git")
-        .args(["status", "--porcelain", "-uall"])
-        .current_dir(&workspace)
-        .output();
-    let mut changed_files: Vec<GitChangedFile> = Vec::new();
-    if let Ok(status_res) = status_out {
-        if status_res.status.success() {
-            for line in String::from_utf8_lossy(&status_res.stdout).lines() {
-                if line.len() < 4 {
-                    continue;
-                }
-                let status = line[..2].trim().to_string();
-                let path = line[3..].trim().to_string();
-                if !path.is_empty() {
-                    changed_files.push(GitChangedFile {
-                        status: if status.is_empty() {
-                            "M".to_string()
-                        } else {
-                            status
-                        },
-                        path,
-                    });
-                }
-            }
-        }
-    }
-    let dirty_count = changed_files.len();
-    if changed_files.len() > 60 {
-        changed_files.truncate(60);
-    }
+    // Do not run `git status` automatically while opening a workspace.
+    // Status may invoke clean filters or fsmonitor commands configured by the
+    // repository, before the user has approved any tool execution. Keep this
+    // automatic overview limited to the read-only branch lookup above until
+    // Git inspection can be performed without honoring repository commands.
+    let changed_files: Vec<GitChangedFile> = Vec::new();
+    let dirty_count = 0;
     Ok(GitWorkspaceInfo {
         is_repo: true,
         branch: if branch.is_empty() {
