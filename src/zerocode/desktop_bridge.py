@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .checkpoints import CheckpointStore
-from .config import load_config, save_config, validate_config
+from .config import load_config, save_mcp_servers
 from .errors import ConfigError, ZeroCodeError
 from .hooks import HookManager
 from .mcp import MCPManager, register_mcp_tools
@@ -479,8 +479,7 @@ def main(argv: list[str] | None = None) -> int:
                 candidate[name] = next_server
                 config.mcp_servers = candidate
                 try:
-                    validate_config(config)
-                    save_config(config)
+                    save_mcp_servers(candidate, cwd=cwd)
                 except Exception as exc:
                     config.mcp_servers = previous
                     ui.error(f"Configuration MCP refusée : {exc}")
