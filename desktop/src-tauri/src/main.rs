@@ -706,6 +706,54 @@ fn read_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFi
 }
 
 #[tauri::command]
+fn write_workspace_file(
+    cwd: String,
+    relative_path: String,
+    content: String,
+) -> Result<WorkspaceFilePreview, String> {
+    const MAX_WRITE_BYTES: usize = 2_000_000;
+    if content.len() > MAX_WRITE_BYTES {
+        return Err("Le fichier dépasse la limite de sauvegarde de 2 Mo.".to_string());
+    }
+    if content.as_bytes().contains(&0) {
+        return Err("Le contenu contient un octet nul : sauvegarde refusée.".to_string());
+    }
+    let (root, target) = resolve_inside_workspace(&cwd, &relative_path)?;
+    if !target.is_file() {
+        return Err("La sauvegarde ne peut viser qu’un fichier existant.".to_string());
+    }
+    if is_sensitive_path(&target) {
+        return Err("Fichier de secrets protégé par ZeroCode.".to_string());
+    }
+    let metadata = fs::symlink_metadata(&target)
+        .map_err(|error| format!("Métadonnées du fichier indisponibles : {error}"))?;
+    if metadata.file_type().is_symlink() {
+        return Err("La sauvegarde d’un lien symbolique est refusée.".to_string());
+    }
+    let parent = target.parent()
+        .ok_or_else(|| "Dossier parent introuvable.".to_string())?
+        .canonicalize()
+        .map_err(|error| format!("Dossier parent inaccessible : {error}"))?;
+    if !parent.starts_with(&root) {
+        return Err("Écriture hors du workspace refusée.".to_string());
+    }
+    fs::write(&target, content.as_bytes())
+        .map_err(|error| format!("Écriture du fichier impossible : {error}"))?;
+    let saved = fs::read(&target)
+        .map_err(|error| format!("Vérification après sauvegarde impossible : {error}"))?;
+    let rendered = String::from_utf8(saved)
+        .map_err(|_| "Le fichier sauvegardé n’est pas un texte UTF-8 valide.".to_string())?;
+    let path = target.strip_prefix(&root).unwrap_or(&target)
+        .to_string_lossy().replace('\\', "/");
+    Ok(WorkspaceFilePreview {
+        path,
+        lines: rendered.lines().count().max(1),
+        truncated: false,
+        content: rendered,
+    })
+}
+
+#[tauri::command]
 fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
     let workspace = resolve_workspace(&cwd)?;
     let branch_out = ProcessCommand::new("git")
@@ -762,6 +810,7 @@ fn main() {
             stop_agent,
             list_workspace_files,
             read_workspace_file,
+            write_workspace_file,
             workspace_git_info
         ])
         .run(tauri::generate_context!())
