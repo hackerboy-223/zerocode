@@ -14,7 +14,7 @@ use std::{
 use portable_pty::{native_pty_system, Child as PtyChild, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 struct TerminalSession {
@@ -411,9 +411,23 @@ fn spawn_agent_process(workspace: &str) -> Result<ProcessChild, String> {
 fn start_agent(
     app: AppHandle,
     state: State<'_, DesktopState>,
-    cwd: String,
+    cwd: Option<String>,
 ) -> Result<String, String> {
-    let workspace = resolve_workspace(&cwd)?;
+    // Sans projet ouvert, l’agent démarre dans un espace temporaire privé à l’application.
+    // Cela permet la conversation libre sans lui donner accès au dossier personnel entier.
+    let workspace = match cwd {
+        Some(path) if !path.trim().is_empty() => resolve_workspace(&path)?,
+        _ => {
+            let scratch = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| format!("Dossier de données ZeroCode indisponible : {error}"))?
+                .join("scratch");
+            fs::create_dir_all(&scratch)
+                .map_err(|error| format!("Espace de conversation impossible à créer : {error}"))?;
+            resolve_workspace(&scratch.to_string_lossy())?
+        }
+    };
     let mut child = spawn_agent_process(&workspace)?;
     let input = child
         .stdin
