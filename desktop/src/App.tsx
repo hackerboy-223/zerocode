@@ -273,6 +273,20 @@ export default function App() {
     setNotice(`Fichier enregistré : ${relativePath}`);
   }, [workspace, currentDir, loadDirectory]);
 
+  const createWorkspaceFile = useCallback(async () => {
+    if (!workspace || !isTauri()) return;
+    const defaultPath = currentDir ? `${currentDir}/` : "";
+    const raw = window.prompt("Chemin du nouveau fichier (dans le workspace) :", defaultPath);
+    if (!raw?.trim()) return;
+    const relativePath = raw.trim().replace(/\\\\/g, "/").replace(/^\\/+/, "");
+    try {
+      await desktopInvoke("create_workspace_file", { cwd: workspace, relativePath });
+      await loadDirectory(currentDir);
+      await openFilePreview(relativePath);
+      setNotice(`Fichier créé : ${relativePath}`);
+    } catch (error) { setNotice(String(error)); }
+  }, [workspace, currentDir, loadDirectory, openFilePreview]);
+
   const requestMcpList = useCallback(async () => {
     if (!agentId) return;
     await desktopInvoke("send_agent_message", { agentId, message: { type: "mcp_list" } });
@@ -1227,6 +1241,9 @@ export default function App() {
                         title="Actualiser"
                       >
                         <RefreshCw size={13} />
+                      </button>
+                      <button type="button" className="tiny-icon files-new-btn" onClick={() => void createWorkspaceFile()} title="Nouveau fichier">
+                        <Plus size={13} />
                       </button>
                     </div>
                     <input
