@@ -472,7 +472,10 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 previous = config.mcp_servers
                 candidate = dict(previous)
-                candidate[name] = server
+                next_server = dict(server)
+                if "env" not in next_server and name in previous:
+                    next_server["env"] = previous[name].get("env", {})
+                candidate[name] = next_server
                 config.mcp_servers = candidate
                 try:
                     validate_config(config)
