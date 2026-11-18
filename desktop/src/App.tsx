@@ -621,7 +621,7 @@ export default function App() {
     if (composerRef.current) composerRef.current.style.height = "auto";
     setBusy(true);
     try {
-      const references = [...new Set([...text.matchAll(/@([^\\s]+)/g)]
+      const references = [...new Set([...text.matchAll(/@([^\s]+)/g)]
         .map((match) => match[1].replace(/[),.;]+$/, ""))
         .filter((path) => path && !path.startsWith("/") && !path.split(/[\\\\/]/).includes("..")))].slice(0, 4);
       const contextParts: string[] = [];
@@ -632,14 +632,14 @@ export default function App() {
           const file = await desktopInvoke<WorkspaceFilePreview>("read_workspace_file", { cwd: workspace, relativePath: path });
           if (file.truncated || !file.content.trim()) continue;
           const content = file.content.slice(0, Math.min(8_000, remaining));
-          contextParts.push(`### ${file.path}\\n\`\`\`\\n${content}\\n\`\`\``);
+          contextParts.push(`### ${file.path}\n\`\`\`\n${content}\n\`\`\``);
           remaining -= content.length;
         } catch {
           // Sensitive, binary and inaccessible paths are never injected.
         }
       }
       const agentText = contextParts.length
-        ? `${text}\\n\\nCONTEXTE EXPLICITE DU WORKSPACE (fichiers sélectionnés par l’utilisateur) :\\n\\n${contextParts.join("\\n\\n")}\\n\\nUtilise ce contexte comme référence, puis vérifie les fichiers sur disque avant toute modification.`
+        ? `${text}\n\nCONTEXTE EXPLICITE DU WORKSPACE (fichiers sélectionnés par l’utilisateur) :\n\n${contextParts.join("\n\n")}\n\nUtilise ce contexte comme référence, puis vérifie les fichiers sur disque avant toute modification.`
         : text;
       await desktopInvoke("send_agent_message", { agentId, message: { type: "prompt", text: agentText } });
     } catch (error) {
