@@ -755,7 +755,8 @@ fn write_workspace_file(
     if metadata.file_type().is_symlink() {
         return Err("La sauvegarde d’un lien symbolique est refusée.".to_string());
     }
-    let parent = target.parent()
+    let parent = target
+        .parent()
         .ok_or_else(|| "Dossier parent introuvable.".to_string())?
         .canonicalize()
         .map_err(|error| format!("Dossier parent inaccessible : {error}"))?;
@@ -779,7 +780,10 @@ fn write_workspace_file(
 }
 
 #[tauri::command]
-fn create_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFilePreview, String> {
+fn create_workspace_file(
+    cwd: String,
+    relative_path: String,
+) -> Result<WorkspaceFilePreview, String> {
     let raw_path = Path::new(&relative_path);
     if raw_path.as_os_str().is_empty()
         || raw_path.components().any(|component| {
