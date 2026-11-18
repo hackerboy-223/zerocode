@@ -627,6 +627,23 @@ export default function App() {
     if (typeof selected === "string") activateWorkspace(selected);
   }, [activateWorkspace]);
 
+  const returnToFreeChat = useCallback(() => {
+    localStorage.removeItem("zerocode.workspace");
+    setWorkspace(null);
+    setMessages([]);
+    setActivities([]);
+    setTodos([]);
+    setDiffs([]);
+    setCheckpoints(0);
+    setPreviewFile(null);
+    setCurrentDir("");
+    setWorkspaceFiles([]);
+    setSessionId("");
+    setGitInfo({ is_repo: false, branch: "local", dirty_count: 0, changed_files: [] });
+    setNotice("");
+    setSidebarOpen(false);
+  }, []);
+
   const sendPrompt = useCallback(async (value?: string) => {
     const text = (value ?? draft).trim();
     if (!text || !agentId || !agentReady || busy || pending) return;
@@ -855,6 +872,11 @@ export default function App() {
           <button className="nav-item" onClick={chooseWorkspace}>
             <FolderOpen size={16} /><span>Ouvrir un dossier</span>
           </button>
+          {workspace && (
+            <button className="nav-item" onClick={returnToFreeChat}>
+              <MessageSquare size={16} /><span>Conversation libre</span>
+            </button>
+          )}
         </nav>
 
         <div className="sidebar-section">
