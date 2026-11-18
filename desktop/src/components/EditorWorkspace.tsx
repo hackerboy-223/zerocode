@@ -53,9 +53,13 @@ export default function EditorWorkspace({ file, onSave, onMention, onClose }: {
   const saveActive = async () => {
     if (!active || active.truncated || active.content === active.savedContent || saving) return;
     setSaving(true);
+    const snapshot = active.content;
     try {
-      await onSave(active.path, active.content);
-      setTabs((current) => current.map((tab) => tab.path === active.path ? { ...tab, savedContent: tab.content } : tab));
+      await onSave(active.path, snapshot);
+      // Keep edits made while the save request was pending marked as dirty.
+      setTabs((current) => current.map((tab) => tab.path === active.path
+        ? { ...tab, savedContent: snapshot }
+        : tab));
     } finally { setSaving(false); }
   };
   const closeTab = (path: string) => {
