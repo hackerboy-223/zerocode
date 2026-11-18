@@ -668,6 +668,30 @@ fn list_workspace_files(
 
 #[tauri::command]
 fn read_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFilePreview, String> {
+    let raw_path = Path::new(&relative_path);
+    if raw_path.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err("Chemin de sauvegarde invalide.".to_string());
+    }
+    let workspace_root = resolve_workspace(&cwd)?;
+    let mut cursor = workspace_root.clone();
+    for component in raw_path.components() {
+        if let std::path::Component::Normal(part) = component {
+            cursor.push(part);
+            if fs::symlink_metadata(&cursor)
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false)
+            {
+                return Err("La sauvegarde à travers un lien symbolique est refusée.".to_string());
+            }
+        }
+    }
     let (root, target) = resolve_inside_workspace(&cwd, &relative_path)?;
     if !target.is_file() {
         return Err("Ce chemin n’est pas un fichier.".to_string());
