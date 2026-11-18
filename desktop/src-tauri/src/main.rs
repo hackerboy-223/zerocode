@@ -2,7 +2,8 @@
 
 use std::{
     collections::HashMap,
-    env, fs,
+    env,
+    fs::{self, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child as ProcessChild, ChildStdin, Command as ProcessCommand, Stdio},
@@ -778,6 +779,68 @@ fn write_workspace_file(
 }
 
 #[tauri::command]
+fn create_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFilePreview, String> {
+    let raw_path = Path::new(&relative_path);
+    if raw_path.as_os_str().is_empty()
+        || raw_path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err("Chemin de création invalide.".to_string());
+    }
+    let root = resolve_workspace(&cwd)?;
+    let file_name = raw_path
+        .file_name()
+        .ok_or_else(|| "Nom de fichier manquant.".to_string())?;
+    let parent_relative = raw_path.parent().unwrap_or_else(|| Path::new(""));
+    let mut parent_candidate = root.clone();
+    for component in parent_relative.components() {
+        if let std::path::Component::Normal(part) = component {
+            parent_candidate.push(part);
+            if fs::symlink_metadata(&parent_candidate)
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false)
+            {
+                return Err("Création à travers un lien symbolique refusée.".to_string());
+            }
+        }
+    }
+    let parent = parent_candidate
+        .canonicalize()
+        .map_err(|error| format!("Dossier parent inaccessible : {error}"))?;
+    if !parent.starts_with(&root) || !parent.is_dir() {
+        return Err("Le dossier parent doit rester dans le workspace.".to_string());
+    }
+    let target = parent.join(file_name);
+    if is_sensitive_path(&target) {
+        return Err("La création d’un fichier de secrets est refusée.".to_string());
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)
+        .map_err(|error| format!("Création du fichier impossible : {error}"))?;
+    file.flush()
+        .map_err(|error| format!("Finalisation du fichier impossible : {error}"))?;
+    let path = target
+        .strip_prefix(&root)
+        .unwrap_or(&target)
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(WorkspaceFilePreview {
+        path,
+        content: String::new(),
+        lines: 1,
+        truncated: false,
+    })
+}
+
+#[tauri::command]
 fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
     let workspace = resolve_workspace(&cwd)?;
     let branch_out = ProcessCommand::new("git")
@@ -835,6 +898,7 @@ fn main() {
             list_workspace_files,
             read_workspace_file,
             write_workspace_file,
+            create_workspace_file,
             workspace_git_info
         ])
         .run(tauri::generate_context!())
