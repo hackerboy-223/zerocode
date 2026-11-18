@@ -9,8 +9,8 @@ from zerocode.checkpoints import CheckpointStore
 from zerocode.desktop_bridge import (
     DesktopBridgeUI,
     _desktop_permission_manager,
-    _session_summaries,
     _public_mcp_servers,
+    _session_summaries,
     _think_value,
     _visible_history,
 )
