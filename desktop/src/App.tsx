@@ -174,7 +174,7 @@ export default function App() {
   const [checkpoints, setCheckpoints] = useState(0);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [terminalOpen, setTerminalOpen] = useState(true);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(true);
   const [contextTab, setContextTab] = useState<"overview" | "files" | "diffs" | "editor" | "search" | "mcp">("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -968,10 +968,10 @@ export default function App() {
             <div className="chat-scroll" ref={scrollRef}>
               {messages.length === 0 ? (
                 <motion.div className="empty-chat" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-                  <div className="greeting-row"><Lupus size="large" /><div><span className="eyebrow">LUPUS · LE VEILLEUR</span><h1>Prêt à construire.</h1><p>{workspace ? <>Le projet <strong>{shortPath(workspace)}</strong> est ouvert sur votre machine.</> : <>Aucun projet requis. Pose une question, explore une idée ou demande-moi de coder.</>}</p></div></div>
+                  <div className="greeting-row"><Lupus size="large" /><div><span className="eyebrow">LUPUS · LE VEILLEUR</span><h1>{agentReady ? (workspace ? "Prêt à construire." : "Qu’est-ce qu’on construit ?") : "Connexion à ZeroCode…"}</h1><p>{workspace ? <>Le projet <strong>{shortPath(workspace)}</strong> est ouvert sur votre machine.</> : <>Aucun projet requis. Pose une question, explore une idée ou demande-moi de coder.</>}</p></div></div>
                   <div className="suggestion-grid">
                     {starterIdeas.map((idea, index) => (
-                      <motion.button key={idea.title} className="suggestion-card" onClick={() => void sendPrompt(idea.prompt)} whileHover={{ y: -3 }} whileTap={{ scale: 0.985 }} transition={{ duration: 0.18 }}>
+                      <motion.button key={idea.title} className="suggestion-card" onClick={() => void sendPrompt(idea.prompt)} disabled={!agentId || !agentReady || busy} whileHover={{ y: -3 }} whileTap={{ scale: 0.985 }} transition={{ duration: 0.18 }}>
                         <span className="suggestion-icon">{index === 0 ? <FileCode2 size={17} /> : index === 1 ? <Activity size={17} /> : <Sparkles size={17} />}</span>
                         <strong>{idea.title}</strong><p>{idea.prompt}</p><ArrowUpRight />
                       </motion.button>
