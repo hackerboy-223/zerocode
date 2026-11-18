@@ -769,8 +769,11 @@ fn write_workspace_file(
         .map_err(|error| format!("Vérification après sauvegarde impossible : {error}"))?;
     let rendered = String::from_utf8(saved)
         .map_err(|_| "Le fichier sauvegardé n’est pas un texte UTF-8 valide.".to_string())?;
-    let path = target.strip_prefix(&root).unwrap_or(&target)
-        .to_string_lossy().replace('\\', "/");
+    let path = target
+        .strip_prefix(&root)
+        .unwrap_or(&target)
+        .to_string_lossy()
+        .replace('\\', "/");
     Ok(WorkspaceFilePreview {
         path,
         lines: rendered.lines().count().max(1),
