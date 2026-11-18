@@ -155,7 +155,7 @@ function FormattedMessage({ content, onCopy }: { content: string; onCopy: (text:
 }
 
 export default function App() {
-  const [workspace, setWorkspace] = useState<string | null>(() => localStorage.getItem("zerocode.workspace"));
+  const [workspace, setWorkspace] = useState<string | null>(null);
   const [recentProjects, setRecentProjects] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("zerocode.recents") || "[]") as string[]; }
     catch { return []; }
@@ -191,7 +191,7 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">(() => localStorage.getItem("zerocode.theme") === "dark" ? "dark" : "light");
+  const [theme, setTheme] = useState<"light" | "dark">(() => localStorage.getItem("zerocode.theme") === "light" ? "light" : "dark");
 
   useEffect(() => { localStorage.setItem("zerocode.theme", theme); }, [theme]);
   const [customModelInput, setCustomModelInput] = useState("");
@@ -293,7 +293,7 @@ export default function App() {
   }, [agentId]);
 
   const saveMcpServer = useCallback(async (name: string, server: Record<string, unknown>) => {
-    if (!agentId) throw new Error("Agent indisponible. Ouvrez un workspace.");
+    if (!agentId) throw new Error("Agent indisponible.");
     await desktopInvoke("send_agent_message", { agentId, message: { type: "mcp_save", name, server } });
   }, [agentId]);
 
@@ -319,7 +319,7 @@ export default function App() {
   }, [workspace, refreshGitInfo, loadDirectory]);
 
   useEffect(() => {
-    if (!workspace || !isTauri() || !eventsReady) return;
+    if (!isTauri() || !eventsReady) return;
     let cancelled = false;
     setNotice("");
     setAgentReady(false);
@@ -871,8 +871,7 @@ export default function App() {
           ))}
         </div>
 
-        {workspace && (
-          <div className="sidebar-section conversation-section">
+        <div className="sidebar-section conversation-section">
             <div className="section-label"><span>CONVERSATIONS</span><span className="session-count">{sessions.length}</span></div>
             {sessions.length === 0 ? (
               <div className="sidebar-empty">Vos conversations apparaîtront ici</div>
@@ -905,8 +904,7 @@ export default function App() {
                 ))}
               </div>
             )}
-          </div>
-        )}
+        </div>
 
         <div className="sidebar-spacer" />
         <div className="sidebar-footer">
@@ -923,7 +921,7 @@ export default function App() {
           <div className="topbar-left">
             <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Ouvrir le menu"><Menu size={18} /></button>
             <button className="breadcrumb breadcrumb-button" onClick={chooseWorkspace} title={workspace || "Choisir un dossier de projet"}>
-              <span>Projet</span><span className="slash">/</span><strong>{workspace ? shortPath(workspace) : "Aucun dossier"}</strong><ChevronDown size={14} />
+              <span>Espace</span><span className="slash">/</span><strong>{workspace ? shortPath(workspace) : "Conversation libre"}</strong><ChevronDown size={14} />
             </button>
             <div className="local-pill"><span /> LOCAL</div>
             {gitInfo.is_repo && (
@@ -968,7 +966,7 @@ export default function App() {
         <div className="workspace-layout">
           <main className="chat-column">
             <div className="chat-scroll" ref={scrollRef}>
-              {!workspace ? (
+              {messages.length === 0 ? (
                 <motion.div className="welcome-screen" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
                   <Lupus size="large" />
                   <p className="eyebrow">VOTRE ENVIRONNEMENT DE DÉVELOPPEMENT</p>
@@ -979,7 +977,7 @@ export default function App() {
                 </motion.div>
               ) : messages.length === 0 ? (
                 <motion.div className="empty-chat" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-                  <div className="greeting-row"><Lupus size="large" /><div><span className="eyebrow">LUPUS · LE VEILLEUR</span><h1>Prêt à construire.</h1><p>Le projet <strong>{shortPath(workspace)}</strong> est ouvert sur votre machine.</p></div></div>
+                  <div className="greeting-row"><Lupus size="large" /><div><span className="eyebrow">LUPUS · LE VEILLEUR</span><h1>Prêt à construire.</h1><p>{workspace ? <>Le projet <strong>{shortPath(workspace)}</strong> est ouvert sur votre machine.</> : <>Aucun projet requis. Pose une question, explore une idée ou demande-moi de coder.</>}</p></div></div>
                   <div className="suggestion-grid">
                     {starterIdeas.map((idea, index) => (
                       <motion.button key={idea.title} className="suggestion-card" onClick={() => void sendPrompt(idea.prompt)} whileHover={{ y: -3 }} whileTap={{ scale: 0.985 }} transition={{ duration: 0.18 }}>
@@ -1060,13 +1058,13 @@ export default function App() {
                     event.target.style.height = Math.min(event.target.scrollHeight, 160) + "px";
                   }}
                   onKeyDown={onComposerKeyDown}
-                  placeholder={workspace ? "Décrivez ce que vous souhaitez construire (utilisez @fichier pour cibler un fichier)…" : "Ouvrez un dossier pour commencer…"}
+                  placeholder={workspace ? "Décrivez ce que vous souhaitez construire (utilisez @fichier pour cibler un fichier)…" : "Demande-moi quelque chose…"}
                   rows={1}
-                  disabled={!workspace || !agentId || !agentReady || busy || Boolean(pending)}
+                  disabled={!agentId || !agentReady || busy || Boolean(pending)}
                 />
                 <div className="composer-bottom">
                   <div className="composer-tools">
-                    <span className="composer-context"><Folder size={13} /> {workspace ? shortPath(workspace) : "Aucun contexte"}</span>
+                    <span className="composer-context"><Folder size={13} /> {workspace ? shortPath(workspace) : "Conversation libre"}</span>
                     <button
                       type="button"
                       className="model-indicator model-indicator-btn"
@@ -1353,7 +1351,7 @@ export default function App() {
           </AnimatePresence>
         </div>
         <footer className="statusbar">
-          <div><span className="status-live" /> {agentId ? "Connecté à ZeroCode" : workspace ? "Connexion à l’agent…" : "Aucun dossier ouvert"}</div>
+          <div><span className="status-live" /> {agentId ? "Connecté à ZeroCode" : "Connexion à l’agent…"}</div>
           <div>
             <GitBranch size={12} /> {gitInfo.is_repo ? gitInfo.branch : "local"}
             {gitInfo.dirty_count > 0 ? ` (${gitInfo.dirty_count} mod.)` : ""}
