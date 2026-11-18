@@ -1081,3 +1081,6 @@ h4.markdown-heading, h5.markdown-heading, h6.markdown-heading { font-size: 1em; 
 .mcp-card-actions { display:flex; align-items:center; gap:12px; margin-left:39px; }
 .mcp-edit-btn { padding:3px 0; border:0; background:transparent; color:var(--blue); font-size:10px; }
 .mcp-card-actions .mcp-remove-btn { margin-left:0; }
+
+.checkpoint-undo-btn { display:flex; align-items:center; justify-content:center; gap:7px; width:100%; margin:10px 0 13px; padding:9px; border:1px solid rgba(208,107,107,.25); border-radius:8px; background:rgba(208,107,107,.07); color:#d06b6b; font-size:11px; font-weight:600; }
+.checkpoint-undo-btn:disabled { opacity:.45; cursor:not-allowed; }
