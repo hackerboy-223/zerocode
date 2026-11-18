@@ -413,7 +413,7 @@ fn start_agent(
     state: State<'_, DesktopState>,
     cwd: Option<String>,
 ) -> Result<String, String> {
-    // Sans projet ouvert, l’agent démarre dans un espace temporaire privé à l’application.
+    // Sans projet ouvert, l’agent démarre dans un espace isolé propre à l’application.
     // Cela permet la conversation libre sans lui donner accès au dossier personnel entier.
     let workspace = match cwd {
         Some(path) if !path.trim().is_empty() => resolve_workspace(&path)?,
