@@ -729,7 +729,8 @@ fn read_workspace_file(cwd: String, relative_path: String) -> Result<WorkspaceFi
     if buffer.iter().take(4096).any(|&byte| byte == 0) {
         return Err("Aperçu indisponible pour un fichier binaire.".to_string());
     }
-    let content = String::from_utf8_lossy(&buffer).into_owned();
+    let content = String::from_utf8(buffer)
+        .map_err(|_| "Fichier non UTF-8 : aperçu et édition refusés pour préserver les octets originaux.".to_string())?;
     let lines = content.lines().count().max(1);
     let rel_path = target
         .strip_prefix(&root)
