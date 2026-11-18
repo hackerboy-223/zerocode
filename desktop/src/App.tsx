@@ -1119,7 +1119,7 @@ export default function App() {
                 </div>
 
                 {contextTab === "editor" && (
-                  <EditorWorkspace file={previewFile} onSave={saveWorkspaceFile} onMention={mentionFileInDraft}
+                  <EditorWorkspace key={workspace || "free-chat"} file={previewFile} onSave={saveWorkspaceFile} onMention={mentionFileInDraft}
                     onClose={() => { setPreviewFile(null); setContextTab("files"); }} />
                 )}
                 {contextTab === "search" && workspace && (
