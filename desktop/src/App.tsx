@@ -29,9 +29,9 @@ import type {
 } from "./types";
 
 const starterIdeas = [
-  { title: "Comprendre le projet", prompt: "Cartographie ce projet, explique son architecture et repère les priorités." },
-  { title: "Corriger un bug", prompt: "Analyse le projet, identifie le bug le plus probable, corrige-le et vérifie le résultat." },
-  { title: "Construire une fonctionnalité", prompt: "Étudie les conventions du projet puis implémente une fonctionnalité complète et testée." }
+  { title: "Explorer une idée", prompt: "Aide-moi à transformer cette idée en un plan concret et réalisable." },
+  { title: "Écrire du code", prompt: "Aide-moi à concevoir et écrire une fonctionnalité. Commence par clarifier les besoins." },
+  { title: "Comprendre un concept", prompt: "Explique-moi un concept technique avec un exemple clair et progressif." }
 ];
 
 const shortPath = (path: string) => path.replace(/\/+$/, "").split(/[\\/]/).filter(Boolean).pop() || path;
@@ -967,15 +967,6 @@ export default function App() {
           <main className="chat-column">
             <div className="chat-scroll" ref={scrollRef}>
               {messages.length === 0 ? (
-                <motion.div className="welcome-screen" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
-                  <Lupus size="large" />
-                  <p className="eyebrow">VOTRE ENVIRONNEMENT DE DÉVELOPPEMENT</p>
-                  <h1>Un agent. Votre machine.<br /><em>Vos règles.</em></h1>
-                  <p className="welcome-copy">ZeroCode travaille directement dans vos dossiers et votre terminal. Rien n’est exécuté sur un serveur distant.</p>
-                  <button className="primary-button" onClick={chooseWorkspace}><FolderOpen size={17} /> Ouvrir un dossier local</button>
-                  <div className="welcome-foot"><ShieldCheck size={14} /> Les commandes restent sur votre ordinateur. Les requêtes au modèle peuvent utiliser un fournisseur distant.</div>
-                </motion.div>
-              ) : messages.length === 0 ? (
                 <motion.div className="empty-chat" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
                   <div className="greeting-row"><Lupus size="large" /><div><span className="eyebrow">LUPUS · LE VEILLEUR</span><h1>Prêt à construire.</h1><p>{workspace ? <>Le projet <strong>{shortPath(workspace)}</strong> est ouvert sur votre machine.</> : <>Aucun projet requis. Pose une question, explore une idée ou demande-moi de coder.</>}</p></div></div>
                   <div className="suggestion-grid">
