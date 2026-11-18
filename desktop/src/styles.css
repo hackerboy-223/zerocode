@@ -1076,3 +1076,8 @@ h4.markdown-heading, h5.markdown-heading, h6.markdown-heading { font-size: 1em; 
 :root[data-theme="dark"] .mcp-restart-banner { background:rgba(52,127,218,.1); }
 @media (max-width: 1180px) { .context-panel:has(.ide-editor) { width: min(58vw,620px) !important; } }
 @media (max-width: 760px) { .ide-editor-footer span:first-child { display:none; } .ide-editor-toolbar { flex-wrap:wrap; padding-block:6px; } }
+
+.files-new-btn { color:var(--blue); }
+.mcp-card-actions { display:flex; align-items:center; gap:12px; margin-left:39px; }
+.mcp-edit-btn { padding:3px 0; border:0; background:transparent; color:var(--blue); font-size:10px; }
+.mcp-card-actions .mcp-remove-btn { margin-left:0; }
