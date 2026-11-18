@@ -763,8 +763,29 @@ fn write_workspace_file(
     if !parent.starts_with(&root) {
         return Err("Écriture hors du workspace refusée.".to_string());
     }
-    fs::write(&target, content.as_bytes())
-        .map_err(|error| format!("Écriture du fichier impossible : {error}"))?;
+    let temp_path = parent.join(format!(".zerocode-save-{}.tmp", Uuid::new_v4()));
+    let write_result = (|| -> Result<(), String> {
+        let mut temp_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|error| format!("Fichier temporaire impossible à créer : {error}"))?;
+        temp_file
+            .write_all(content.as_bytes())
+            .map_err(|error| format!("Écriture temporaire impossible : {error}"))?;
+        temp_file
+            .sync_all()
+            .map_err(|error| format!("Synchronisation du fichier impossible : {error}"))?;
+        fs::set_permissions(&temp_path, metadata.permissions())
+            .map_err(|error| format!("Conservation des permissions impossible : {error}"))?;
+        fs::rename(&temp_path, &target)
+            .map_err(|error| format!("Remplacement atomique du fichier impossible : {error}"))?;
+        Ok(())
+    })();
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(error);
+    }
     let saved = fs::read(&target)
         .map_err(|error| format!("Vérification après sauvegarde impossible : {error}"))?;
     let rendered = String::from_utf8(saved)
