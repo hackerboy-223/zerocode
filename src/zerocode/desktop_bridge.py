@@ -458,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
                 ui.error("Message desktop invalide : objet attendu.")
                 continue
 
+            kind = message.get("type")
             if kind == "mcp_list":
                 ui.emit("mcp_servers", servers=_public_mcp_servers(config.mcp_servers))
                 continue
@@ -504,7 +505,6 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 ui.emit("mcp_removed", servers=_public_mcp_servers(config.mcp_servers))
                 continue
-            kind = message.get("type")
             if kind in {"permission_response", "sudo_confirmation_response", "sudo_password_response"}:
                 ui.receive(message)
                 continue
