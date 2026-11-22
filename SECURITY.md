@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are applied to the latest version on the `main` branch. ZeroCode is currently pre-1.0; users should expect breaking changes and review release notes before upgrading.
+ZeroCode is a stable product: **v1.0.0** was published on 22 November 2026. Security fixes are developed on `main` and included in subsequent stable releases. Only the latest published stable release is supported; users should upgrade before requesting support for a vulnerability.
 
 ## Reporting a vulnerability
 
@@ -20,6 +20,8 @@ Do not include real API keys, passwords, private keys, or personal data in a rep
 
 ZeroCode can execute shell commands with the permissions of the operating-system account running it. Its file-tool restrictions do not sandbox shell processes, MCP servers, or code launched by those processes. Approval mode reduces accidental execution but is not an operating-system security boundary.
 
+The optional `ZEROCODE_SANDBOX=1` mode uses Bubblewrap on POSIX systems when `bwrap` is installed. It makes the host filesystem read-only except for the active workspace, creates a private PID namespace and a temporary `/tmp`. A sandbox request now fails closed when Bubblewrap is missing or the command asks for `sudo`. This is **not** a complete security boundary: networking remains available, and it does not replace a dedicated VM/container with explicit network and resource restrictions.
+
 Use a disposable virtual machine or container for untrusted repositories. Avoid `--yolo` and `/full-stack` when working with untrusted code. Never expose production credentials to an agent session.
 
 ## Built-in defense-in-depth controls
@@ -30,7 +32,7 @@ ZeroCode enforces several layers of protection by default:
 - **Subprocess environment isolation**: Provider API keys (`PROVIDER_KEY_ENVS`) are stripped from `bash` subprocesses and MCP server processes so untrusted scripts or tests cannot exfiltrate them from `os.environ`.
 - **Desktop permission default**: Desktop sessions downgrade an inherited CLI `allow` policy to `ask` at startup, force file access to remain inside the active workspace, and re-enable secret-file protection even if the global CLI config disabled it. Autonomous permissions are only enabled after the user explicitly confirms Full-stack or autonomous mode in the desktop interface.
 - **Workspace & secret boundary**: `read`, `write`, `edit`, `list`, `grep` (including `ripgrep --no-follow`), and `/undo` checkpoints block access to secret files (`.env`, `.ssh`, `.aws`, `.gnupg`, `*.pem`, `*.key`, etc.) and reject symlinks or paths escaping the workspace. New checkpoints record the resulting file hash; undo refuses to overwrite a file changed after the agent edit and refuses paths outside the active workspace.
-- **SSRF protection**: `fetch` and `web_search` validate every URL and redirect hop, blocking loopback, private, link-local, unspecified (`0.0.0.0`/`::`), IPv4-mapped IPv6 addresses, and cloud metadata hostnames (`169.254.169.254`, `metadata.google.internal`).
+- **SSRF checks**: `fetch` and `web_search` validate URL hosts and every redirect destination against loopback, private, link-local, unspecified (`0.0.0.0`/`::`), IPv4-mapped IPv6 addresses and cloud metadata hostnames. This client-side check is defense in depth; it is not a replacement for network egress controls against hostile DNS rebinding.
 
 ## Provider endpoint protection
 

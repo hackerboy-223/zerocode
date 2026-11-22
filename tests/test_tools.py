@@ -700,3 +700,39 @@ def test_shell_stream_redacts_tokens_split_across_pipe_chunks(tmp_path):
     assert "exit_code: 0" in result
     assert token not in output
     assert "[SECRET MASQUE: JETON API]" in output
+
+
+def test_requested_sandbox_fails_closed_without_bubblewrap(tmp_path, monkeypatch):
+    import shutil
+
+    from zerocode.tools import shell
+
+    monkeypatch.setenv("ZEROCODE_SANDBOX", "1")
+    real_which = shutil.which
+
+    def which(name):
+        if name == "bwrap":
+            return None
+        return real_which(name)
+
+    monkeypatch.setattr(shell.shutil, "which", which)
+    registry, _ = make_registry(tmp_path)
+    target = tmp_path / "must-not-run.txt"
+
+    result = call(registry, "bash", command=f"touch {target.name}")
+
+    assert result.startswith("ERREUR:")
+    assert "bubblewrap" in result
+    assert not target.exists()
+
+
+def test_requested_sandbox_refuses_sudo_instead_of_bypassing_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZEROCODE_SANDBOX", "1")
+    registry, _ = make_registry(tmp_path)
+    target = tmp_path / "must-not-run.txt"
+
+    result = call(registry, "bash", command=f"sudo touch {target.name}")
+
+    assert result.startswith("ERREUR:")
+    assert "sudo" in result
+    assert not target.exists()
