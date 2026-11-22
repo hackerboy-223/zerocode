@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -29,70 +28,8 @@ SUDO_COMMAND_RE = re.compile(
 )
 
 
-def _safe_workspace_arguments(
-    arguments: list[str], ctx: ToolContext, *, check_bare_paths: bool = False
-) -> bool:
-    for argument in arguments:
-        candidate = argument
-        if argument.startswith("-"):
-            if "=" not in argument:
-                continue
-            candidate = argument.split("=", 1)[1]
-        if not candidate:
-            continue
-        if (
-            candidate.startswith(("/", "~"))
-            or candidate == ".."
-            or candidate.startswith("../")
-            or "/../" in candidate
-            or "\\..\\" in candidate
-            or re.match(r"^[A-Za-z]:", candidate)
-        ):
-            return False
-        if check_bare_paths or "/" in candidate or "\\" in candidate:
-            try:
-                path = ctx.resolve_path(candidate)
-                ctx.check_secret(path)
-            except Exception:
-                return False
-    return True
-
-
 def is_safe_auto_command(command: str, ctx: ToolContext) -> bool:
-    """Allow only basic inspection that cannot execute project-controlled code."""
-    raw = command.strip()
-    if not raw or any(char in raw for char in (";", "&", "|", "<", ">", "`", "$", "\n", "\r")):
-        return False
-    try:
-        parts = shlex.split(raw)
-    except ValueError:
-        return False
-    if not parts:
-        return False
-
-    executable = os.path.basename(parts[0]).lower()
-    arguments = parts[1:]
-
-    if executable == "pwd":
-        return not arguments
-    if executable == "ls":
-        return _safe_workspace_arguments(arguments, ctx, check_bare_paths=True)
-
-    # Git commands that can invoke repository-configured filters, fsmonitor
-    # helpers, pagers, or external diff drivers require explicit approval.
-    # Only branch/root metadata lookups and bounded log output are auto-approved.
-    if executable == "git" and arguments:
-        subcommand = arguments[0]
-        options = arguments[1:]
-        if subcommand == "log":
-            return bool(options) and all(
-                option == "--oneline" or option.startswith(("-n", "--max-count="))
-                for option in options
-            )
-        if subcommand == "branch":
-            return options == ["--show-current"]
-        if subcommand == "rev-parse":
-            return options == ["--show-toplevel"]
+    """Never auto-approve shell commands; project-controlled executables need confirmation."""
     return False
 
 
