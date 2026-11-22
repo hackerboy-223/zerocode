@@ -259,28 +259,46 @@ Relance le même installateur officiel et choisis `Desktop` ou `Les deux`. Il r�
 
 Les scripts d'installation officiels téléchargent `SHA256SUMS` et vérifient automatiquement les paquets avant installation.
 
-Pour un téléchargement manuel, place le manifeste et le ou les fichiers concernés dans le même dossier, puis exécute :
+Le manifeste contient une ligne pour **chaque fichier** de la release. Si tu n'as téléchargé qu'un seul paquet, vérifie uniquement sa ligne : lancer `sha256sum -c SHA256SUMS` sur le manifeste complet signalerait aussi les autres fichiers comme absents.
 
-Linux :
+Télécharge le paquet choisi et `SHA256SUMS` dans le même dossier, puis adapte le nom du fichier dans les exemples.
 
-```bash
-sha256sum -c SHA256SUMS
-```
+Linux (exemple Debian/Ubuntu) :
 
-macOS :
+§§§bash
+ASSET="zerocode-desktop-1.0.0-linux-amd64.deb"
+grep -F "  $ASSET" SHA256SUMS > selected-checksum.txt &&
+sha256sum -c selected-checksum.txt
+§§§
 
-```bash
-shasum -a 256 -c SHA256SUMS
-```
+macOS (exemple Apple Silicon) :
+
+§§§bash
+ASSET="zerocode-desktop-1.0.0-darwin-aarch64.dmg"
+grep -F "  $ASSET" SHA256SUMS > selected-checksum.txt &&
+shasum -a 256 -c selected-checksum.txt
+§§§
 
 Windows PowerShell :
 
-```powershell
-Get-FileHash .\zerocode-desktop-1.0.0-windows-x64-setup.exe -Algorithm SHA256
-Get-Content .\SHA256SUMS
-```
+§§§powershell
+$asset = "zerocode-desktop-1.0.0-windows-x64-setup.exe"
+$entry = Get-Content .\SHA256SUMS | Where-Object {
+    $_ -match "  $([regex]::Escape($asset))$"
+} | Select-Object -First 1
 
-Compare l'empreinte affichée par `Get-FileHash` à la ligne du même fichier dans `SHA256SUMS`. Les empreintes détectent une corruption ou une modification du fichier, mais ne prouvent pas à elles seules l'identité de l'éditeur.
+if (-not $entry) { throw "Aucune empreinte trouvée pour $asset dans SHA256SUMS." }
+
+$expected = ($entry -split '\s+')[0]
+$actual = (Get-FileHash ".\$asset" -Algorithm SHA256).Hash
+if ($actual -ne $expected) { throw "Échec de vérification SHA-256 pour $asset." }
+
+Write-Host "SHA-256 vérifié : $asset" -ForegroundColor Green
+§§§
+
+Pour contrôler **tous** les fichiers de la release, télécharge l'ensemble des assets dans le même dossier que le manifeste, puis exécute `sha256sum -c SHA256SUMS` sous Linux ou `shasum -a 256 -c SHA256SUMS` sous macOS.
+
+Les empreintes détectent une corruption ou une modification des fichiers, mais ne prouvent pas à elles seules l'identité de l'éditeur.
 
 **En cas d'échec de vérification, n'installe pas le fichier.** Télécharge à nouveau l'asset et le manifeste depuis la [release officielle](https://github.com/hackerboy-223/zerocode/releases/tag/v1.0.0).
 
