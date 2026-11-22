@@ -18,7 +18,7 @@ Do not include real API keys, passwords, private keys, or personal data in a rep
 
 ## Important execution boundary
 
-ZeroCode can execute shell commands with the permissions of the operating-system account running it. Its file-tool restrictions do not sandbox shell processes, MCP servers, or code launched by those processes. Approval mode reduces accidental execution but is not an operating-system security boundary.
+ZeroCode can execute shell commands with the permissions of the operating-system account running it. Its file-tool restrictions do not sandbox shell processes, MCP servers, or code launched by those processes. In `permissions=ask`, **every shell command requires explicit confirmation**; even commands that look read-only can resolve to user- or project-controlled executables. Use ZeroCode's dedicated file, search and Git tools for inspection without a shell. `permissions=allow`, `--yolo` and Full-stack are explicit higher-autonomy choices, not sandbox boundaries.
 
 The optional `ZEROCODE_SANDBOX=1` mode uses Bubblewrap on POSIX systems when `bwrap` is installed. It makes the host filesystem read-only except for the active workspace, creates a private PID namespace and a temporary `/tmp`. A sandbox request now fails closed when Bubblewrap is missing or the command asks for `sudo`. This is **not** a complete security boundary: networking remains available, and it does not replace a dedicated VM/container with explicit network and resource restrictions.
 
