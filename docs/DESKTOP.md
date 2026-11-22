@@ -24,14 +24,14 @@ L’installateur officiel propose trois choix : TUI, Desktop ou les deux. Il sé
 
 Une release stable contient le moteur Python et les paquets Desktop natifs. Avant installation, l’installateur télécharge `SHA256SUMS` et vérifie chaque fichier. Dans ce parcours, les toolchains Node.js, Rust et C/C++ ne sont pas installées.
 
-Si aucune release stable n’est encore publiée, le mode `latest` revient sur la branche source `feature/zerocode-desktop`. Le parcours de compilation source prépare alors les outils nécessaires au système. Une erreur d’intégrité ou un paquet manquant dans une release ne déclenche jamais silencieusement ce repli : l’installation s’arrête.
+Si aucune release stable n’est encore publiée, le mode `latest` revient sur la branche source `main`. Le parcours de compilation source prépare alors les outils nécessaires au système. Une erreur d’intégrité ou un paquet manquant dans une release ne déclenche jamais silencieusement ce repli : l’installation s’arrête.
 
 ### Linux et macOS
 
 Depuis le terminal :
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.sh | bash
 ```
 
 Choisis Desktop ou Les deux. Pour sélectionner le mode ou une version précise sans ouvrir le menu :
@@ -47,7 +47,7 @@ bash install.sh --version v1.0.0 --mode both
 Pour forcer le parcours depuis une branche source :
 
 ```bash
-ZEROCODE_INSTALL_REF=feature/zerocode-desktop bash install.sh --mode desktop
+ZEROCODE_INSTALL_REF=main bash install.sh --mode desktop
 ```
 
 Sur Debian/Ubuntu, le paquet `.deb` est installé avec apt et nécessite les droits administrateur. Fedora utilise le RPM. Les distributions Linux sans apt ni dnf utilisent l’AppImage dans le dossier utilisateur. macOS télécharge un DMG, le monte et copie `ZeroCode Desktop.app` dans `~/Applications`.
@@ -59,14 +59,14 @@ En mode source, Linux installe les bibliothèques GTK/WebKit, Node.js et Rust st
 Dans PowerShell :
 
 ```powershell
-irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
 ```
 
 Une release stable installe le moteur depuis le wheel Python vérifié puis lance l’installateur NSIS natif. Pour sélectionner une version précise :
 
 ```powershell
 $env:ZEROCODE_INSTALL_REF = "v1.0.0"
-irm https://raw.githubusercontent.com/hackerboy-223/zerocode/feature/zerocode-desktop/install.ps1 | iex
+irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
 ```
 
 En mode source, `winget` prépare Node.js, Rustup, Visual Studio C++ Build Tools, WebView2 et NSIS avant la compilation Tauri. App Installer / winget doit être disponible.
