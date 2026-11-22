@@ -336,14 +336,29 @@ def test_auto_permissions_do_not_overwrite_existing_files(tmp_path):
     assert target.read_text(encoding="utf-8") == "keep = True\n"
 
 
-def test_auto_shell_allows_safe_commands_and_blocks_arbitrary_commands(tmp_path):
+def test_auto_shell_allows_only_passive_inspection_and_requires_approval_for_code(tmp_path):
     context = ToolContext(cwd=tmp_path)
     permissions = PermissionManager(mode="ask", interactive=False)
     registry = build_registry(context, permissions)
 
-    safe = call(registry, "bash", command="python -m pytest --version")
-    assert "exit_code: 0" in safe
-    assert "Action refusee" not in safe
+    safe_pwd = call(registry, "bash", command="pwd")
+    assert "exit_code: 0" in safe_pwd
+    safe_ls = call(registry, "bash", command="ls")
+    assert "exit_code: 0" in safe_ls
+
+    project_commands = (
+        "python -m pytest --version",
+        "pytest",
+        "ruff check",
+        "npm test",
+        "npm run build",
+        "cargo test",
+        "git status --short",
+        "git diff --stat",
+    )
+    for command in project_commands:
+        result = call(registry, "bash", command=command)
+        assert "Action refusee" in result, command
 
     unsafe = call(registry, "bash", command="rm -rf build")
     assert "Action refusee" in unsafe
