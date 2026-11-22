@@ -2,13 +2,15 @@ name: Desktop
 
 on:
   push:
-    branches: [feature/zerocode-desktop]
+    branches: [main]
     paths:
       - "desktop/**"
       - "src/zerocode/**"
       - "tests/test_desktop_bridge.py"
       - "tests/test_maintenance.py"
       - "tests/test_cli.py"
+      - "tests/test_checkpoints.py"
+      - "tests/test_tools.py"
       - "src/zerocode/cli.py"
       - "src/zerocode/maintenance.py"
       - ".github/workflows/release.yml"
