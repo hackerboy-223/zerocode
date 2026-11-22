@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..catalog import PROVIDERS
+from ..errors import ToolError
 from ..security import redact_secrets
 from .base import Tool, ToolContext, ToolRegistry
 
@@ -168,13 +169,15 @@ def _clean_environment() -> dict[str, str]:
 
 
 def _build_bwrap_args(command: str, cwd: Path) -> list[str] | None:
-    if os.environ.get("ZEROCODE_SANDBOX") != "1" or os.name != "posix":
+    if os.environ.get("ZEROCODE_SANDBOX") != "1":
         return None
+    if os.name != "posix":
+        raise ToolError("ZEROCODE_SANDBOX=1 exige un systeme POSIX avec bubblewrap.")
     if SUDO_COMMAND_RE.search(command):
-        return None
+        raise ToolError("La commande sudo est incompatible avec ZEROCODE_SANDBOX=1; aucune execution hors sandbox ne sera tentee.")
     bwrap = shutil.which("bwrap")
     if not bwrap:
-        return None
+        raise ToolError("ZEROCODE_SANDBOX=1 est active, mais bubblewrap (bwrap) est introuvable. Installe bubblewrap ou retire explicitement cette variable.")
     resolved_cwd = str(cwd.resolve())
     return [
         bwrap,
@@ -207,6 +210,10 @@ def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
     timeout = min(max(1, int(args.get("timeout", ctx.command_timeout))), MAX_COMMAND_TIMEOUT)
     env = _clean_environment()
 
+    # Resolve an explicitly requested sandbox before any sudo prompt or process launch.
+    # A missing sandbox must fail closed, never silently run the command on the host.
+    bwrap_args = _build_bwrap_args(command, ctx.cwd)
+
     sudo_binary = shutil.which("sudo")
     if sudo_binary and SUDO_COMMAND_RE.search(command):
         # A cached sudo ticket or --yolo must never silently authorize root access.
@@ -223,7 +230,6 @@ def run_bash(args: dict[str, Any], ctx: ToolContext) -> str:
             if not _prime_sudo(sudo_binary, password, env, ctx.cwd):
                 return "Action refusee: authentification sudo refusee."
 
-    bwrap_args = _build_bwrap_args(command, ctx.cwd)
     try:
         process = subprocess.Popen(
             bwrap_args if bwrap_args is not None else command,
