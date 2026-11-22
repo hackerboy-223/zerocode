@@ -10,10 +10,11 @@ import httpx
 
 from ..errors import ToolError
 from ..tokens import truncate_text
+from ..version import __version__
 from .base import Tool, ToolContext, ToolRegistry
 
 MAX_BYTES = 2_000_000
-USER_AGENT = "zerocode/0.1 (+https://github.com/hackerboy-223/zerocode)"
+USER_AGENT = f"zerocode/{__version__} (+https://github.com/hackerboy-223/zerocode)"
 BLOCK_TAGS = {
     "article",
     "blockquote",
