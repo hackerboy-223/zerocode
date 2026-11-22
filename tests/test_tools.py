@@ -727,8 +727,6 @@ def test_requested_sandbox_fails_closed_without_bubblewrap(tmp_path, monkeypatch
 
 
 def test_requested_sandbox_refuses_sudo_instead_of_bypassing_it(tmp_path, monkeypatch):
-    from zerocode.tools import shell
-
     monkeypatch.setenv("ZEROCODE_SANDBOX", "1")
     registry, _ = make_registry(tmp_path)
     target = tmp_path / "must-not-run.txt"
