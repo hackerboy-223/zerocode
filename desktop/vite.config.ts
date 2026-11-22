@@ -14,12 +14,26 @@ export default defineConfig({
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
     minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          react: ["react", "react-dom"],
-          motion: ["framer-motion"],
-          xterm: ["@xterm/xterm", "@xterm/addon-fit", "@xterm/addon-web-links"]
+        codeSplitting: {
+          groups: [
+            {
+              name: "react",
+              test: /node_modules[\\/](react|react-dom)[\\/]/,
+              priority: 30
+            },
+            {
+              name: "motion",
+              test: /node_modules[\\/]framer-motion[\\/]/,
+              priority: 20
+            },
+            {
+              name: "xterm",
+              test: /node_modules[\\/]@xterm[\\/]/,
+              priority: 10
+            }
+          ]
         }
       }
     }
