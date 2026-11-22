@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 REPO_URL="https://github.com/hackerboy-223/zerocode.git"
 INSTALL_REF="${ZEROCODE_INSTALL_REF:-latest}"
-SOURCE_REF="${ZEROCODE_SOURCE_REF:-feature/zerocode-desktop}"
+SOURCE_REF="${ZEROCODE_SOURCE_REF:-main}"
 INSTALL_MODE="${ZEROCODE_INSTALL_MODE:-}"
 RELEASE_MODE="0"
 RELEASE_JSON=""
