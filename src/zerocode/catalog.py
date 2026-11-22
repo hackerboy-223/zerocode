@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .types import ModelSpec, ProviderSpec
+from .version import __version__
 
 KILO_FREE = (
     ModelSpec(
@@ -129,17 +130,6 @@ KILO_FREE = (
 
 OPENCODE_FREE = (
     ModelSpec(
-        "glm-5.3-flash-free",
-        "GLM 5.3 Flash Free",
-        context=1_000_000,
-        max_output=128_000,
-        tier="free",
-        tools=True,
-        reasoning=True,
-        vision=True,
-        notes="Zero retention, pas d'entrainement. Quota gratuit via OpenCode Zen.",
-    ),
-    ModelSpec(
         "big-pickle",
         "Big Pickle",
         context=200_000,
@@ -197,14 +187,6 @@ OPENCODE_FREE = (
         notes="Donnees utilisables pendant la periode gratuite.",
     ),
     ModelSpec(
-        "jev-1.13-free",
-        "Jev 1.13 Free",
-        context=200_000,
-        max_output=32_000,
-        tier="free",
-        notes="Gratuit pour une duree limitee.",
-    ),
-    ModelSpec(
         "glm-5.3",
         "GLM 5.3",
         context=1_000_000,
@@ -259,7 +241,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
                 notes="Payant via Kilo.",
             ),
         ),
-        headers=(("X-KiloCode-Version", "zerocode/0.1.0"),),
+        headers=(("X-KiloCode-Version", f"zerocode/{__version__}"),),
         notes="Acces anonyme aux modeles gratuits, 200 requetes/heure par IP.",
     ),
     "nvidia": ProviderSpec(
@@ -270,16 +252,6 @@ PROVIDERS: dict[str, ProviderSpec] = {
         signup_url="https://build.nvidia.com/settings/api-keys",
         docs_url="https://build.nvidia.com/z-ai/glm-5-3",
         models=(
-            ModelSpec(
-                "z-ai/glm-5.3",
-                "GLM 5.3",
-                context=1_000_000,
-                max_output=128_000,
-                tier="trial",
-                tools=True,
-                reasoning=True,
-                notes="Essai gratuit. L'endpoint est annonce en fin de vie le 27/10/2026.",
-            ),
             ModelSpec(
                 "z-ai/glm-5.3-flash",
                 "GLM 5.3 Flash",
@@ -292,7 +264,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
                 notes="Essai gratuit NVIDIA, multilingue et multimodal.",
             ),
         ),
-        notes="Cles gratuites sans carte bancaire pour prototyper.",
+        notes="GLM 5.3 Flash reste disponible dans le catalogue NVIDIA; vérifier les offres et limites en direct.",
     ),
     "opencode-zen": ProviderSpec(
         name="opencode-zen",
@@ -749,7 +721,6 @@ PROVIDERS: dict[str, ProviderSpec] = {
 }
 
 GLM53_CHAIN: tuple[tuple[str, str], ...] = (
-    ("nvidia", "z-ai/glm-5.3"),
     ("together", "zai-org/GLM-5.3-FP8"),
     ("zai", "glm-5.3"),
     ("openrouter", "z-ai/glm-5.3"),
@@ -758,7 +729,6 @@ GLM53_CHAIN: tuple[tuple[str, str], ...] = (
 
 GLM53_FLASH_CHAIN: tuple[tuple[str, str], ...] = (
     ("nvidia", "z-ai/glm-5.3-flash"),
-    ("opencode-zen", "glm-5.3-flash-free"),
     ("kilo", "kilo-auto/free"),
 )
 
