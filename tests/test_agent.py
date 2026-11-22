@@ -492,3 +492,21 @@ def test_agent_skills_builtin_and_custom_discovery(tmp_path):
 
 
 
+
+
+def test_run_subagent_reports_start_and_end_events(tmp_path) -> None:
+    events: list[dict] = []
+
+    class RecordingUI(NullUI):
+        def subagent_event(self, payload: dict) -> None:
+            events.append(payload)
+
+    agent, *_ = build_agent(
+        tmp_path,
+        [Completion(content="Synthèse OK", tool_calls=[], usage=Usage(), model="m", provider="p")],
+    )
+    agent.ui = RecordingUI()
+
+    assert agent._run_subagent("Explore le dépôt", "reviewer") == "Synthèse OK"
+    assert [event["phase"] for event in events] == ["start", "end"]
+    assert events[1]["ok"] is True and events[1]["role"] == "reviewer"

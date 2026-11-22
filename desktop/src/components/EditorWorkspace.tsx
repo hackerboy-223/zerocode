@@ -22,8 +22,9 @@ function languageForPath(path: string) {
   return languages[ext || ""] || "plaintext";
 }
 
-export default function EditorWorkspace({ file, onSave, onMention, onClose }: {
+export default function EditorWorkspace({ file, dark = true, onSave, onMention, onClose }: {
   file: WorkspaceFilePreview | null;
+  dark?: boolean;
   onSave: (path: string, content: string) => Promise<void>;
   onMention: (path: string) => void;
   onClose: () => void;
@@ -94,8 +95,8 @@ export default function EditorWorkspace({ file, onSave, onMention, onClose }: {
     {active ? <>
       {active.truncated && <div className="editor-warning">Fichier tronqué à la lecture : l’édition est désactivée pour éviter d’écraser son contenu.</div>}
       <div className="ide-monaco-wrap"><Editor height="100%" path={active.path} language={language} value={active.content}
-        onChange={updateContent} theme="vs-dark" loading={<div className="editor-loading">Chargement de Monaco…</div>}
-        options={{ automaticLayout: true, minimap: { enabled: true }, fontSize: 13,
+        onChange={updateContent} theme={dark ? "vs-dark" : "vs"} loading={<div className="editor-loading">Chargement de Monaco…</div>}
+        options={{ automaticLayout: true, minimap: { enabled: false }, fontSize: 13,
           fontFamily: "'JetBrains Mono', 'Fira Code', monospace", fontLigatures: true,
           lineNumbers: "on", renderLineHighlight: "all", scrollBeyondLastLine: false,
           smoothScrolling: true, cursorSmoothCaretAnimation: "on", padding: { top: 14, bottom: 14 },

@@ -5,6 +5,7 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   reasoning?: string;
+  seq: number;
 }
 
 export interface AgentEvent {
@@ -19,6 +20,7 @@ export interface ToolActivity {
   result?: string;
   output?: string;
   status: "running" | "success" | "error";
+  seq: number;
 }
 
 export interface PermissionRequest {
@@ -71,3 +73,36 @@ export interface GitWorkspaceInfo {
   dirty_count: number;
   changed_files: GitChangedFile[];
 }
+
+export interface SubagentRole {
+  id: string;
+  description: string;
+}
+
+export interface SubagentRun {
+  id: string;
+  role: string;
+  task: string;
+  status: "running" | "done" | "error" | "stopped";
+  tools: string[];
+  result?: string;
+  error?: string;
+  durationMs?: number;
+  startedAt: number;
+  seq: number;
+}
+
+export interface RuntimeSettings {
+  max_steps: number;
+  command_timeout: number;
+  max_tokens: number;
+  temperature: number;
+  compact_threshold: number;
+  auto_compact: boolean;
+  task_routing: boolean;
+  fallback: boolean;
+  free_only: boolean;
+  diff_view: boolean;
+}
+
+export type InspectorTab = "overview" | "agents" | "files" | "changes" | "editor" | "search" | "mcp";

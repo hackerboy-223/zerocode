@@ -130,10 +130,25 @@ Vérifie que le shell défini par `$SHELL` existe. Sur Linux, vérifie la prése
 
 Cette version fournit :
 - **Fenêtre desktop native** (Tauri 2 + React + TypeScript) avec icônes multi-plateformes configurées.
-- **Fil de conversation enrichi** : blocs de code formatés avec copie rapide, affichage repliable du raisonnement (`think`), et gestion complète des sessions (reprise, création, suppression).
-- **Modes d'agent & Préférences (`Ctrl + ,`)** : bascule Build / Plan / Full-stack, sélection du modèle (`auto` ou modèle spécifique), politique d'autorisation (`ask`, `auto`, `allow`), profondeur de raisonnement (`off`, `low`, `high`, `max`) et compactage de contexte.
-- **Inspecteur latéral à 3 onglets** :
-  - **Aperçu** : statut Git (branche et fichiers modifiés), plan de travail (`todos` en temps réel), restauration de checkpoints (`Annuler`), et historique détaillé des outils.
-  - **Fichiers** : explorateur de fichiers du projet avec filtrage, aperçu sécurisé en lecture seule et mention rapide `@fichier` dans le prompt.
-  - **Diffs** : visualisation colorée des diffs générés par l'agent et statut Git du dépôt.
-- **Palette de commandes (`Ctrl + K`)** et **Terminal PTY local** redimensionnable.
+- **Affichage minimal** : barre latérale (projets et conversations groupées par date), conversation centrée, inspecteur masqué par défaut. Le fil regroupe les appels d'outils en lignes repliables et affiche les sous-agents sous forme de cartes.
+- **Sous-agents** : sept spécialistes en lecture seule (`explorer`, `architect`, `reviewer`, `security`, `performance`, `tester`, `researcher`). Lancement depuis le panneau **Agents**, la commande `/agent [rôle] <tâche>` ou le sélecteur de la zone de saisie. Les exécutions (déclenchées par vous ou par l'agent principal) sont suivies en direct avec leurs outils, leur durée et leur synthèse. Des orchestrations prêtes à l'emploi (revue complète, audit sécurité, plan d'architecture, chasse aux lenteurs) demandent à l'agent principal de déléguer en parallèle.
+- **Commandes rapides** dans la zone de saisie : `/agent`, `/plan`, `/build`, `/fullstack`, `/model`, `/think`, `/new`, `/compact`, `/undo`, `/copy`, `/terminal`, `/settings`, `/help`. `@` propose les fichiers du projet.
+- **Préférences (`Ctrl + ,`)** en six sections :
+  - *Apparence* : thème Système/Clair/Sombre, couleur d'accent, densité, taille du texte.
+  - *Agent* : mode (Build / Plan / Full-stack), politique d'autorisation (`ask`, `auto`, `allow`), modèle, profondeur de raisonnement, mode/modèle/raisonnement par défaut au démarrage.
+  - *Exécution* : étapes maximum, délai des commandes, jetons de sortie, température, seuil et activation de la compaction, routage par tâche, repli automatique, modèles gratuits uniquement, affichage des diffs. Appliqués à chaud puis rappliqués à chaque démarrage.
+  - *Sous-agents* : délégation automatique (consigne d'orchestration ajoutée aux demandes) et spécialiste par défaut.
+  - *Interface* : touche d'envoi (Entrée ou Ctrl + Entrée), défilement automatique, raisonnement et détails d'outils, confirmation des modes à risque, notification de fin de tâche.
+  - *Données & raccourcis* : compaction, copie de la conversation en Markdown, projets récents, réinitialisation.
+- **Frontières de sécurité inchangées** : l'accès hors du projet, la protection des secrets et la politique d'autorisation ne sont jamais restaurés ni modifiés par les réglages d'exécution ; le démarrage reste en mode `ask`, et Full-stack n'est jamais réactivé automatiquement.
+- **Inspecteur latéral** (`Ctrl + I`) à sept onglets : Aperçu (état, plan de travail, annulation), Agents, Fichiers, Changements (statut Git, diffs de session, annulation), Code (Monaco), Recherche (index lexical local) et MCP.
+- **Palette de commandes (`Ctrl + K`)**, **Terminal PTY local** redimensionnable (`Ctrl` + accent grave), barre latérale (`Ctrl + B`).
+
+### Protocole du pont (nouveautés)
+
+| Message UI → agent | Effet |
+| --- | --- |
+| `run_subagent {role, task}` | Exécute un sous-agent directement ; événements `subagent` (`start`, `tool`, `end`) |
+| `set_runtime {values}` | Applique une liste blanche de réglages d'exécution validés ; émet `runtime_changed` |
+
+Les événements `ready` et `session_changed` incluent désormais `runtime` et `subagent_roles`.

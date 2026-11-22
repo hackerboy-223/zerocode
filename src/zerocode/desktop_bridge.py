@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .checkpoints import CheckpointStore
-from .config import load_config, save_mcp_servers
+from .config import load_config, save_mcp_servers, validate_config
 from .errors import ConfigError, ZeroCodeError
 from .hooks import HookManager
 from .mcp import MCPManager, register_mcp_tools
@@ -19,6 +19,7 @@ from .router import Router
 from .security import redact_secrets
 from .session import SessionStore
 from .tools import PermissionManager, ToolContext, build_registry
+from .tools.subagent import SPECIALIST_ROLES, roles_catalog
 from .types import Completion, Usage
 
 
@@ -160,6 +161,10 @@ class DesktopBridgeUI:
 
     def show_diff(self, path: str, diff: str) -> None:
         self.emit("diff", path=path, diff=diff)
+
+    def subagent_event(self, payload: dict[str, Any]) -> None:
+        """Publie le cycle de vie d'un sous-agent (start, tool, end)."""
+        self.emit("subagent", **payload)
 
     def warn(self, message: str) -> None:
         self.emit("warning", message=message)
@@ -338,6 +343,66 @@ def _public_mcp_servers(servers: dict[str, dict[str, Any]]) -> list[dict[str, An
     return visible
 
 
+RUNTIME_LIMITS: dict[str, tuple[type, float, float]] = {
+    "max_steps": (int, 1, 500),
+    "command_timeout": (int, 1, 3_600),
+    "max_tokens": (int, 256, 128_000),
+    "temperature": (float, 0, 2),
+    "compact_threshold": (float, 0.2, 0.95),
+}
+RUNTIME_FLAGS = ("auto_compact", "task_routing", "fallback", "free_only", "diff_view")
+
+
+def _runtime_settings(config: Any) -> dict[str, Any]:
+    """Réglages d'exécution modifiables depuis les préférences desktop."""
+    data: dict[str, Any] = {key: getattr(config, key) for key in RUNTIME_LIMITS}
+    data.update({key: bool(getattr(config, key)) for key in RUNTIME_FLAGS})
+    return data
+
+
+def _apply_runtime_settings(
+    config: Any, context: ToolContext | None, values: Any
+) -> tuple[bool, str]:
+    """Valide puis applique une liste blanche de réglages.
+
+    Les frontières de sécurité (allow_outside_cwd, protect_secrets, permissions) ne
+    passent jamais par ce chemin : elles gardent leurs commandes dédiées.
+    """
+    if not isinstance(values, dict) or not values:
+        return False, "Réglages invalides."
+    updates: dict[str, Any] = {}
+    for key, value in values.items():
+        if key in RUNTIME_LIMITS:
+            kind, low, high = RUNTIME_LIMITS[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return False, f"{key} doit être numérique."
+            number = kind(value)
+            if not low <= number <= high:
+                return False, f"{key} doit être compris entre {low} et {high}."
+            updates[key] = number
+        elif key in RUNTIME_FLAGS:
+            if not isinstance(value, bool):
+                return False, f"{key} doit être un booléen."
+            updates[key] = value
+        else:
+            return False, f"Réglage non modifiable : {key}."
+    previous = {key: getattr(config, key) for key in updates}
+    for key, value in updates.items():
+        setattr(config, key, value)
+    try:
+        validate_config(config)
+    except ConfigError as exc:
+        for key, value in previous.items():
+            setattr(config, key, value)
+        return False, str(exc)
+    if context is not None:
+        if "command_timeout" in updates:
+            context.command_timeout = updates["command_timeout"]
+        if "diff_view" in updates:
+            context.diff_view = updates["diff_view"]
+    return True, ""
+
+
 def _available_models(router: Router) -> list[str]:
     models: list[str] = ["auto"]
     for item in router.preview("auto"):
@@ -384,6 +449,8 @@ def _emit_session_state(
         sessions=_session_summaries(store, cwd),
         todos=list(context.todos),
         checkpoints=checkpoints,
+        runtime=_runtime_settings(config),
+        subagent_roles=roles_catalog(),
     )
 
 
@@ -441,6 +508,22 @@ def main(argv: list[str] | None = None) -> int:
                         checkpoints=agent.checkpoints.pending(agent.session.id),
                     )
                 ui.emit("sessions_changed", sessions=_session_summaries(store, cwd))
+                ui.emit("turn_complete")
+                with turn_lock:
+                    active["value"] = False
+
+        def run_subagent_job(task: str, role: str) -> None:
+            try:
+                ui.emit("turn_started")
+                agent._run_subagent(task, role)
+            except KeyboardInterrupt:
+                ui.emit("warning", message="Sous-agent interrompu.")
+            except ZeroCodeError as exc:
+                ui.error(str(exc))
+            except Exception as exc:  # Le pont reste vivant après une erreur isolée.
+                ui.error(f"{exc.__class__.__name__}: {exc}")
+            finally:
+                ui.usage(agent.usage, router.last)
                 ui.emit("turn_complete")
                 with turn_lock:
                     active["value"] = False
@@ -505,6 +588,32 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             if kind in {"permission_response", "sudo_confirmation_response", "sudo_password_response"}:
                 ui.receive(message)
+                continue
+            if kind == "set_runtime":
+                ok, problem = _apply_runtime_settings(config, context, message.get("values"))
+                if not ok:
+                    ui.error(problem)
+                    continue
+                ui.emit("runtime_changed", runtime=_runtime_settings(config))
+                continue
+            if kind == "run_subagent":
+                role = str(message.get("role") or "explorer").strip().lower()
+                task = message.get("task")
+                if role not in SPECIALIST_ROLES:
+                    ui.error("Rôle de sous-agent inconnu.")
+                    continue
+                if not isinstance(task, str) or not task.strip():
+                    ui.error("La tâche du sous-agent est vide.")
+                    continue
+                with turn_lock:
+                    if active["value"]:
+                        ui.error("Une demande est déjà en cours.")
+                        continue
+                    active["value"] = True
+                ui.reset_interrupt()
+                threading.Thread(
+                    target=run_subagent_job, args=(task.strip(), role), daemon=True
+                ).start()
                 continue
             if kind == "interrupt":
                 ui.request_interrupt()

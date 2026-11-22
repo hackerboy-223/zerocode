@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -620,6 +622,48 @@ class Agent:
             return f"ERREUR: {exc.__class__.__name__}: {exc}"
 
     def _run_subagent(self, task: str, role: str = "explorer") -> str:
+        """Exécute un sous-agent et publie son cycle de vie vers l'interface."""
+        run_id = uuid.uuid4().hex[:10]
+        started = time.monotonic()
+        stats: dict[str, Any] = {"id": run_id, "tools": 0}
+        self._call_ui(
+            "subagent_event",
+            {"phase": "start", "id": run_id, "role": role, "task": truncate_text(task, 600)},
+        )
+        try:
+            result = self._run_subagent_inner(task, role, stats)
+        except BaseException as exc:
+            self._call_ui(
+                "subagent_event",
+                {
+                    "phase": "end",
+                    "id": run_id,
+                    "role": role,
+                    "ok": False,
+                    "interrupted": isinstance(exc, KeyboardInterrupt),
+                    "error": f"{exc.__class__.__name__}: {exc}"[:400],
+                    "duration_ms": int((time.monotonic() - started) * 1000),
+                    "tools": stats["tools"],
+                },
+            )
+            raise
+        self._call_ui(
+            "subagent_event",
+            {
+                "phase": "end",
+                "id": run_id,
+                "role": role,
+                "ok": True,
+                "result": truncate_text(result, 8_000),
+                "duration_ms": int((time.monotonic() - started) * 1000),
+                "tools": stats["tools"],
+            },
+        )
+        return result
+
+    def _run_subagent_inner(
+        self, task: str, role: str = "explorer", stats: dict[str, Any] | None = None
+    ) -> str:
         sub_ctx = ToolContext(
             cwd=self.tools.context.cwd,
             allow_outside=self.tools.context.allow_outside,
@@ -689,6 +733,12 @@ class Agent:
             for call in completion.tool_calls:
                 if self._interrupted():
                     raise KeyboardInterrupt
+                if stats is not None:
+                    stats["tools"] = int(stats.get("tools", 0)) + 1
+                    self._call_ui(
+                        "subagent_event",
+                        {"phase": "tool", "id": stats.get("id"), "role": role, "name": call.name},
+                    )
                 result = sub_registry.execute(call)
                 sub_messages.append(
                     {

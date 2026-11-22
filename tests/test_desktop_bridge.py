@@ -224,3 +224,55 @@ def test_public_mcp_server_metadata_never_exposes_environment_values() -> None:
         }
     ]
     assert "super-secret-value" not in json.dumps(public)
+
+
+def test_runtime_settings_are_validated_and_applied(tmp_path: Path) -> None:
+    from zerocode.config import Config
+    from zerocode.desktop_bridge import _apply_runtime_settings, _runtime_settings
+
+    config = Config()
+    context = ToolContext(cwd=tmp_path)
+
+    ok, problem = _apply_runtime_settings(
+        config, context, {"max_steps": 12, "command_timeout": 30, "auto_compact": False}
+    )
+
+    assert ok, problem
+    assert config.max_steps == 12
+    assert context.command_timeout == 30
+    assert _runtime_settings(config)["auto_compact"] is False
+
+
+def test_runtime_settings_reject_unsafe_or_invalid_values(tmp_path: Path) -> None:
+    from zerocode.config import Config
+    from zerocode.desktop_bridge import _apply_runtime_settings
+
+    config = Config()
+    context = ToolContext(cwd=tmp_path)
+
+    for values in (
+        {"allow_outside_cwd": True},
+        {"protect_secrets": False},
+        {"max_steps": 0},
+        {"max_steps": True},
+        {"temperature": 9},
+        {"auto_compact": "yes"},
+        {},
+    ):
+        ok, problem = _apply_runtime_settings(config, context, values)
+        assert not ok and problem
+    assert config.allow_outside_cwd is False
+    assert config.protect_secrets is True
+    assert config.max_steps == Config().max_steps
+
+
+def test_subagent_events_are_forwarded_to_the_desktop() -> None:
+    stream = io.StringIO()
+    ui = DesktopBridgeUI(stream=stream)
+
+    ui.subagent_event({"phase": "start", "id": "abc", "role": "reviewer", "task": "Lire"})
+
+    event = json.loads(stream.getvalue().strip())
+    assert event["type"] == "subagent"
+    assert event["role"] == "reviewer"
+    assert event["phase"] == "start"

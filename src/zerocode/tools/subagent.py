@@ -78,3 +78,8 @@ def register_subagent_tools(registry: ToolRegistry) -> None:
             approval="never",
         )
     )
+
+
+def roles_catalog() -> list[dict[str, str]]:
+    """Liste publique des profils de sous-agents, pour l'interface desktop."""
+    return [{"id": role, "description": ROLE_DESCRIPTIONS[role]} for role in SPECIALIST_ROLES]
