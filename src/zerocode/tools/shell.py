@@ -171,13 +171,19 @@ def _clean_environment() -> dict[str, str]:
 def _build_bwrap_args(command: str, cwd: Path) -> list[str] | None:
     if os.environ.get("ZEROCODE_SANDBOX") != "1":
         return None
+    if SUDO_COMMAND_RE.search(command):
+        raise ToolError(
+            "La commande sudo est incompatible avec ZEROCODE_SANDBOX=1; "
+            "aucune execution hors sandbox ne sera tentee."
+        )
     if os.name != "posix":
         raise ToolError("ZEROCODE_SANDBOX=1 exige un systeme POSIX avec bubblewrap.")
-    if SUDO_COMMAND_RE.search(command):
-        raise ToolError("La commande sudo est incompatible avec ZEROCODE_SANDBOX=1; aucune execution hors sandbox ne sera tentee.")
     bwrap = shutil.which("bwrap")
     if not bwrap:
-        raise ToolError("ZEROCODE_SANDBOX=1 est active, mais bubblewrap (bwrap) est introuvable. Installe bubblewrap ou retire explicitement cette variable.")
+        raise ToolError(
+            "ZEROCODE_SANDBOX=1 est active, mais bubblewrap (bwrap) est introuvable. "
+            "Installe bubblewrap ou retire explicitement cette variable."
+        )
     resolved_cwd = str(cwd.resolve())
     return [
         bwrap,
