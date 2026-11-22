@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -29,119 +28,8 @@ SUDO_COMMAND_RE = re.compile(
 )
 
 
-def _safe_workspace_arguments(
-    arguments: list[str], ctx: ToolContext, *, check_bare_paths: bool = False
-) -> bool:
-    for argument in arguments:
-        candidate = argument
-        if argument.startswith("-"):
-            if "=" not in argument:
-                continue
-            candidate = argument.split("=", 1)[1]
-        if not candidate:
-            continue
-        if (
-            candidate.startswith(("/", "~"))
-            or candidate == ".."
-            or candidate.startswith("../")
-            or "/../" in candidate
-            or "\\..\\" in candidate
-            or re.match(r"^[A-Za-z]:", candidate)
-        ):
-            return False
-        if check_bare_paths or "/" in candidate or "\\" in candidate:
-            try:
-                path = ctx.resolve_path(candidate)
-                ctx.check_secret(path)
-            except Exception:
-                return False
-    return True
-
-
 def is_safe_auto_command(command: str, ctx: ToolContext) -> bool:
-    """Return true only for simple, non-mutating inspection and dev-check commands."""
-    raw = command.strip()
-    if not raw or any(char in raw for char in (";", "&", "|", "<", ">", "`", "$", "\n", "\r")):
-        return False
-    try:
-        parts = shlex.split(raw)
-    except ValueError:
-        return False
-    if not parts:
-        return False
-
-    executable = os.path.basename(parts[0]).lower()
-    arguments = parts[1:]
-
-    if executable == "pwd":
-        return not arguments
-    if executable == "ls":
-        return _safe_workspace_arguments(arguments, ctx, check_bare_paths=True)
-    if not _safe_workspace_arguments(arguments, ctx):
-        return False
-    if executable == "git" and arguments:
-        subcommand = arguments[0]
-        options = arguments[1:]
-        if subcommand == "status":
-            return all(option in {"--short", "--porcelain", "--branch", "--ignored"} for option in options)
-        if subcommand == "diff":
-            return bool(options) and all(
-                option in {"--check", "--stat", "--name-only", "--no-ext-diff", "--"}
-                for option in options
-            )
-        if subcommand == "log":
-            return bool(options) and all(
-                option == "--oneline" or option.startswith(("-n", "--max-count="))
-                for option in options
-            )
-        if subcommand == "branch":
-            return options == ["--show-current"]
-        if subcommand == "rev-parse":
-            return options == ["--show-toplevel"]
-        return False
-
-    test_commands = {
-        ("pytest",),
-        ("ruff", "check"),
-        ("ruff", "format", "--check"),
-        ("mypy",),
-        ("flake8",),
-        ("python", "-m", "pytest"),
-        ("python3", "-m", "pytest"),
-        ("python", "-m", "unittest"),
-        ("python3", "-m", "unittest"),
-        ("python", "-m", "py_compile"),
-        ("python3", "-m", "py_compile"),
-        ("python", "-m", "ruff", "check"),
-        ("python3", "-m", "ruff", "check"),
-        ("python", "-m", "mypy"),
-        ("python3", "-m", "mypy"),
-        ("uv", "run", "pytest"),
-        ("uv", "run", "ruff", "check"),
-        ("npm", "test"),
-        ("pnpm", "test"),
-        ("yarn", "test"),
-        ("bun", "test"),
-        ("cargo", "test"),
-        ("cargo", "check"),
-        ("cargo", "clippy"),
-        ("go", "test"),
-        ("go", "vet"),
-        ("composer", "test"),
-        ("composer", "validate"),
-        ("php", "artisan", "test"),
-        ("php", "-l"),
-    }
-    if any(tuple(parts[: len(prefix)]) == prefix for prefix in test_commands):
-        return _safe_workspace_arguments(arguments, ctx, check_bare_paths=True)
-
-    script_runners = {"npm", "pnpm", "yarn", "bun"}
-    safe_scripts = {"test", "lint", "build", "typecheck", "check"}
-    if executable in script_runners and arguments:
-        if arguments[0] in safe_scripts:
-            return True
-        if len(arguments) >= 2 and arguments[0] == "run" and arguments[1] in safe_scripts:
-            return True
+    """Never auto-approve shell commands; project-controlled executables need confirmation."""
     return False
 
 
