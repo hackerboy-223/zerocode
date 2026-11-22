@@ -336,17 +336,14 @@ def test_auto_permissions_do_not_overwrite_existing_files(tmp_path):
     assert target.read_text(encoding="utf-8") == "keep = True\n"
 
 
-def test_auto_shell_allows_only_passive_inspection_and_requires_approval_for_code(tmp_path):
+def test_auto_shell_requires_explicit_confirmation_for_every_command_in_ask_mode(tmp_path):
     context = ToolContext(cwd=tmp_path)
     permissions = PermissionManager(mode="ask", interactive=False)
     registry = build_registry(context, permissions)
 
-    safe_pwd = call(registry, "bash", command="pwd")
-    assert "exit_code: 0" in safe_pwd
-    safe_ls = call(registry, "bash", command="ls")
-    assert "exit_code: 0" in safe_ls
-
-    project_commands = (
+    commands = (
+        "pwd",
+        "ls",
         "python -m pytest --version",
         "pytest",
         "ruff check",
@@ -355,24 +352,16 @@ def test_auto_shell_allows_only_passive_inspection_and_requires_approval_for_cod
         "cargo test",
         "git status --short",
         "git diff --stat",
+        "rm -rf build",
+        "pwd; touch unexpected.txt",
+        "cat .env",
+        "ls ../",
     )
-    for command in project_commands:
+    for command in commands:
         result = call(registry, "bash", command=command)
         assert "Action refusee" in result, command
 
-    unsafe = call(registry, "bash", command="rm -rf build")
-    assert "Action refusee" in unsafe
-
-    compound = call(registry, "bash", command="pwd; touch unexpected.txt")
-    assert "Action refusee" in compound
     assert not (tmp_path / "unexpected.txt").exists()
-
-    (tmp_path / ".env").write_text("TOKEN=secret\\n", encoding="utf-8")
-    secret = call(registry, "bash", command="cat .env")
-    assert "Action refusee" in secret
-
-    outside = call(registry, "bash", command="ls ../")
-    assert "Action refusee" in outside
 
 
 def test_web_ssrf_blocks_unspecified_and_ipv4_mapped_ipv6(tmp_path):
