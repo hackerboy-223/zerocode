@@ -55,7 +55,15 @@ def test_lookup_helpers():
     matches = find_model("glm-4.7")
     assert matches
     assert all("glm-4.7" in model.id for _, model in matches)
-    assert any(model.id == "glm-5.3-flash-free" for _, model in all_choices())
+    assert any(model.id == "deepseek-v4.1-flash-free" for _, model in all_choices())
+
+
+def test_retired_or_misclassified_models_are_not_offered():
+    assert PROVIDERS["nvidia"].model("z-ai/glm-5.3") is None
+    assert PROVIDERS["opencode-zen"].model("glm-5.3-flash-free") is None
+    assert PROVIDERS["opencode-zen"].model("jev-1.13-free") is None
+    assert ("nvidia", "z-ai/glm-5.3") not in GLM53_CHAIN
+    assert ("opencode-zen", "glm-5.3-flash-free") not in GLM53_FLASH_CHAIN
 
 
 def test_auto_chain_uses_only_anonymous_free_routes():
