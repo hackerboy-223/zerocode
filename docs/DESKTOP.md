@@ -16,6 +16,8 @@ ZeroCode Desktop est l’interface graphique native de l’agent Python existant
 
 Les commandes de l’agent et le shell s’exécutent sur l’ordinateur qui héberge l’application. Les prompts, extraits de fichiers et réponses peuvent toutefois être transmis au fournisseur de modèle sélectionné. Pour garder l’inférence locale, configure un fournisseur local compatible, par exemple Ollama. Vérifie toujours les paramètres de confidentialité du fournisseur distant avant d’envoyer du code privé.
 
+**Inspection Git automatique :** à l'ouverture d'un workspace, Desktop lit uniquement la branche avec `git rev-parse`. Il ne lance pas `git status`, car les filtres `clean` et les helpers `fsmonitor` configurés par le dépôt pourraient exécuter des programmes avant approbation. Le compteur et la liste des fichiers modifiés ne sont donc pas renseignés automatiquement. Les outils Git de l'agent restent soumis au flux normal d'approbation.
+
 Le terminal intégré est un nouveau shell interactif du projet. Il ne prend pas le contrôle d’une fenêtre de terminal externe déjà ouverte.
 
 ## Installer ZeroCode Desktop
@@ -141,7 +143,7 @@ Cette version fournit :
   - *Interface* : touche d'envoi (Entrée ou Ctrl + Entrée), défilement automatique, raisonnement et détails d'outils, confirmation des modes à risque, notification de fin de tâche.
   - *Données & raccourcis* : compaction, copie de la conversation en Markdown, projets récents, réinitialisation.
 - **Frontières de sécurité inchangées** : l'accès hors du projet, la protection des secrets et la politique d'autorisation ne sont jamais restaurés ni modifiés par les réglages d'exécution ; le démarrage reste en mode `ask`, et Full-stack n'est jamais réactivé automatiquement.
-- **Inspecteur latéral** (`Ctrl + I`) à sept onglets : Aperçu (état, plan de travail, annulation), Agents, Fichiers, Changements (statut Git, diffs de session, annulation), Code (Monaco), Recherche (index lexical local) et MCP.
+- **Inspecteur latéral** (`Ctrl + I`) à sept onglets : Aperçu (état, plan de travail, annulation), Agents, Fichiers, Changements (branche Git, diffs de session, annulation), Code (Monaco), Recherche (index lexical local) et MCP.
 - **Palette de commandes (`Ctrl + K`)**, **Terminal PTY local** redimensionnable (`Ctrl` + accent grave), barre latérale (`Ctrl + B`).
 
 ### Protocole du pont (nouveautés)

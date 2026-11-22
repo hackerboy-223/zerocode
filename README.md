@@ -378,7 +378,7 @@ Fonctionnalités principales :
 - Conversations avec réponses en streaming et blocs de code formatés.
 - Modes **Build**, **Plan** et **Full-stack**, avec sélection du modèle et des permissions.
 - Gestion des projets et des sessions, reprise d'une conversation et création d'une nouvelle session.
-- Inspecteur latéral : état Git, tâches, historique des outils, explorateur de fichiers et diffs.
+- Inspecteur latéral : branche Git, tâches, historique des outils, explorateur de fichiers et diffs de session. Pour éviter d'exécuter à l'ouverture des filtres ou helpers Git configurés par un dépôt, l'état automatique n'exécute pas `git status` : la liste des fichiers modifiés n'est pas préremplie.
 - Terminal local intégré basé sur un pseudo-terminal (PTY).
 - Demandes d'autorisation explicites pour les opérations sensibles et restauration prudente des checkpoints.
 - Mascotte animée LUPUS, sans dépendance à une ressource distante.
