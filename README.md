@@ -26,6 +26,8 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 
 ## Installation automatique
 
+Pour les étapes détaillées, les commandes par système, les mises à jour et le dépannage, consulte le [guide d'installation complet](INSTALL_GUIDE.md).
+
 L'installateur interactif propose trois choix : **TUI**, **Desktop** ou **les deux**. Par défaut, il cherche la dernière release stable. Quand elle existe, il télécharge les paquets précompilés et vérifie leur empreinte SHA-256 avant installation. Node.js, Rust et les outils C/C++ ne sont donc pas nécessaires pour installer une release.
 
 Si aucune release stable n'est publiée, l'installateur utilise le code source de la branche `main`. Dans ce mode de secours, Desktop doit être compilé localement et les outils de développement correspondants sont installés.
@@ -91,9 +93,9 @@ ruff check src tests
 ```
 ## État de publication
 
-Le code de la version **1.0.0** est intégré à `main`. La publication de la release GitHub et de ses installateurs précompilés reste une étape distincte : tant que le tag `v1.0.0` n'est pas publié, le parcours `latest` de l'installateur utilise la compilation depuis les sources. Les paquets natifs précompilés ne sont donc pas encore annoncés comme disponibles.
+La release stable **[ZeroCode v1.0.0](https://github.com/hackerboy-223/zerocode/releases/tag/v1.0.0)** a été publiée le 22 novembre 2026. Elle comprend le moteur Python, les paquets Desktop pour Linux x86_64, Windows x64 et macOS Intel/Apple Silicon, ainsi que le manifeste `SHA256SUMS`.
 
-Les workflows CI, qualité et Desktop ont réussi sur la branche de développement avant la fusion. Cela valide les contrôles automatisés, mais ne remplace pas les essais d'installation sur des machines propres.
+Le workflow de publication a terminé ses **7 jobs sur 7 avec succès**. Les workflows CI et Quality sur `main` sont également au vert. Les scripts d'installation téléchargent les paquets de la release stable et vérifient leur empreinte avant installation. Les binaires ne sont toutefois pas encore signés avec un certificat éditeur Windows ou Apple ; consulte le [guide d'installation](INSTALL_GUIDE.md) pour les avertissements et vérifications.
 
 ## Versions, mises à jour et désinstallation
 
