@@ -1474,9 +1474,8 @@ def models_command(args_list: list[str], console: Console) -> int:
     console.print(table)
     console.print(
         Text(
-            "GLM 5.3 complet n'a pas d'API gratuite permanente. "
-            "GLM 5.3 Flash est gratuit chez NVIDIA et OpenCode Zen. "
-            "Offres verifiees le 26/10/2026.",
+            "Les identifiants, offres gratuites et quotas evoluent. "
+            "Utilise `zerocode models --live` pour verifier les catalogues disponibles.",
             style="dim",
         )
     )
