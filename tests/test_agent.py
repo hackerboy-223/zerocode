@@ -510,3 +510,47 @@ def test_run_subagent_reports_start_and_end_events(tmp_path) -> None:
     assert agent._run_subagent("Explore le dépôt", "reviewer") == "Synthèse OK"
     assert [event["phase"] for event in events] == ["start", "end"]
     assert events[1]["ok"] is True and events[1]["role"] == "reviewer"
+
+
+def test_agent_runs_multiple_subagents_in_parallel(tmp_path) -> None:
+    import threading
+
+    barrier = threading.Barrier(2, timeout=3.0)
+
+    class ParallelRouter:
+        def __init__(self) -> None:
+            self.last = None
+            self.turn = 0
+            self.lock = threading.Lock()
+
+        def complete(self, messages, tools, *, model=None, provider=None, callbacks=None, needs_vision=False):
+            system = str(messages[0].get("content", ""))
+            if "sous-agent spécialisé" in system:
+                barrier.wait()
+                role = "reviewer" if "reviewer" in system else "security"
+                return Completion(content=f"Rapport {role}", tool_calls=[], usage=Usage(total_tokens=10), model="m", provider="p")
+            with self.lock:
+                self.turn += 1
+                step = self.turn
+            if step == 1:
+                return Completion(
+                    content="",
+                    tool_calls=[
+                        ToolCall(id="sub-1", name="subagent", arguments={"role": "reviewer", "task": "Review"}),
+                        ToolCall(id="sub-2", name="subagent", arguments={"role": "security", "task": "Audit"}),
+                    ],
+                    finish_reason="tool_calls",
+                    usage=Usage(total_tokens=20),
+                    model="m",
+                    provider="p",
+                )
+            return Completion(content="Synthèse finale", tool_calls=[], usage=Usage(total_tokens=15), model="m", provider="p")
+
+        def context_window(self, model=None) -> int:
+            return 200_000
+
+    agent, _, _, _ = build_agent(tmp_path, [])
+    agent.router = ParallelRouter()
+    result = agent.run_turn("Lance une revue et un audit en parallèle.")
+    assert result == "Synthèse finale"
+    assert agent.usage.total_tokens == 55

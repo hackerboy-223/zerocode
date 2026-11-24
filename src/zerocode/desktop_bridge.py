@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 import re
 import secrets
 import sys
@@ -11,13 +12,29 @@ from pathlib import Path
 from typing import Any
 
 from .checkpoints import CheckpointStore
-from .config import load_config, save_mcp_servers, validate_config
+from .config import (
+    delete_key,
+    load_config,
+    load_key_store,
+    mask_key,
+    save_mcp_servers,
+    store_key,
+    validate_config,
+)
 from .errors import ConfigError, ZeroCodeError
 from .hooks import HookManager
 from .mcp import MCPManager, register_mcp_tools
+from .prompts import MAX_INSTRUCTIONS_CHARS, remember_project_instruction
+from .providers import (
+    applied_providers,
+    build_clients,
+    provider_available,
+    provider_enabled,
+)
 from .router import Router
 from .security import redact_secrets
 from .session import SessionStore
+from .skills import all_skills
 from .tools import PermissionManager, ToolContext, build_registry
 from .tools.subagent import SPECIALIST_ROLES, roles_catalog
 from .types import Completion, Usage
@@ -224,11 +241,22 @@ def _visible_history(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
             continue
         content = message.get("content")
         if isinstance(content, list):
-            content = " ".join(
+            text_parts = [
                 str(part.get("text", ""))
                 for part in content
                 if isinstance(part, dict) and part.get("type") == "text"
+            ]
+            img_count = sum(
+                1
+                for part in content
+                if isinstance(part, dict) and part.get("type") in {"image_url", "input_image"}
             )
+            joined = " ".join(part for part in text_parts if part.strip())
+            if img_count and not joined:
+                joined = f"[{img_count} image(s) jointe(s)]"
+            elif img_count:
+                joined = f"{joined}\n[{img_count} image(s) jointe(s)]"
+            content = joined
         text = redact_secrets(str(content or "").strip())
         if text:
             visible.append({"role": str(role), "content": text})
@@ -403,6 +431,144 @@ def _apply_runtime_settings(
     return True, ""
 
 
+IMAGE_DATA_URL_RE = re.compile(r"^data:image/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$")
+MAX_PROMPT_IMAGES = 4
+MAX_IMAGE_DATA_URL_CHARS = 8_000_000
+
+
+def _sanitize_images(raw: Any) -> list[str]:
+    """Valide les images encodées en data URL envoyées depuis l'interface Desktop."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("Le champ images doit être une liste.")
+    if len(raw) > MAX_PROMPT_IMAGES:
+        raise ValueError(f"Maximum {MAX_PROMPT_IMAGES} images par message.")
+    cleaned: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            raise ValueError("Format d'image invalide.")
+        value = item.strip()
+        if len(value) > MAX_IMAGE_DATA_URL_CHARS:
+            raise ValueError("Image trop volumineuse (max ~6 Mo).")
+        if not IMAGE_DATA_URL_RE.match(value):
+            raise ValueError("Seules les images PNG, JPEG, WebP ou GIF encodées en base64 sont acceptées.")
+        cleaned.append(re.sub(r"\s+", "", value))
+    return cleaned
+
+
+def _skills_state(cwd: Path, agent: Any) -> dict[str, Any]:
+    """Expose le catalogue de skills disponibles et ceux actuellement actifs."""
+    catalog = all_skills(cwd)
+    active = list(getattr(agent, "skills", []))
+    available = [
+        {
+            "id": spec.name,
+            "label": spec.label,
+            "category": spec.category,
+            "summary": spec.summary,
+            "builtin": bool(spec.builtin),
+        }
+        for spec in catalog.values()
+    ]
+    return {"active": active, "available": available}
+
+
+def _project_memory(cwd: Path) -> dict[str, str]:
+    """Lit les consignes persistantes du projet (.zerocode/instructions.md)."""
+    rel = ".zerocode/instructions.md"
+    target = cwd.resolve() / rel
+    content = ""
+    if target.is_file():
+        with contextlib.suppress(OSError):
+            if target.stat().st_size <= 128_000:
+                content = redact_secrets(target.read_text(encoding="utf-8", errors="replace"))
+    return {"path": rel, "content": content}
+
+
+def _save_project_memory(cwd: Path, content: str) -> dict[str, str]:
+    """Enregistre ou nettoie .zerocode/instructions.md de façon sûre."""
+    rel = ".zerocode/instructions.md"
+    target = cwd.resolve() / rel
+    cleaned = redact_secrets(content).strip()
+    if len(cleaned) > MAX_INSTRUCTIONS_CHARS:
+        raise ValueError(f"La mémoire projet ne peut pas dépasser {MAX_INSTRUCTIONS_CHARS} caractères.")
+    if not cleaned:
+        if target.is_file():
+            target.unlink()
+        return {"path": rel, "content": ""}
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(cleaned + "\n", encoding="utf-8")
+    return {"path": rel, "content": cleaned + "\n"}
+
+
+def _public_providers(config: Any, router: Router) -> list[dict[str, Any]]:
+    """Expose l'état des fournisseurs sans jamais renvoyer de clé API brute."""
+    store = load_key_store()
+    items: list[dict[str, Any]] = []
+    for spec in router.providers.values():
+        env_key: str | None = None
+        for env_name in spec.api_key_envs:
+            candidate = os.environ.get(env_name)
+            if candidate and candidate.strip():
+                env_key = candidate.strip()
+                break
+        store_value: str | None = None
+        for name in (spec.name, *spec.api_key_envs):
+            candidate = store.get(name)
+            if candidate:
+                store_value = candidate
+                break
+        if spec.keyless:
+            source = "keyless"
+            masked = ""
+        elif env_key:
+            source = "env"
+            masked = mask_key(env_key)
+        elif store_value:
+            source = "store"
+            masked = mask_key(store_value)
+        else:
+            source = "none"
+            masked = ""
+        items.append(
+            {
+                "id": spec.name,
+                "label": spec.label,
+                "env_var": spec.api_key_envs[0] if spec.api_key_envs else "",
+                "requires_key": spec.requires_key,
+                "enabled": provider_enabled(spec, config),
+                "available": provider_available(spec, config),
+                "source": source,
+                "key_masked": masked,
+                "models_count": len(spec.models),
+                "signup_url": spec.signup_url,
+                "notes": spec.notes,
+            }
+        )
+    return items
+
+
+def _refresh_router_providers(config: Any, router: Router) -> None:
+    """Reconstruit les clients fournisseurs après ajout/suppression d'une clé API."""
+    old_clients = list(router.clients.values())
+    router.providers = applied_providers(config)
+    router.clients = build_clients(config, router.providers)
+    lock = getattr(router, "_cooldown_lock", None)
+    if lock is not None:
+        with lock:
+            router._cooldown.clear()
+    else:
+        router._cooldown.clear()
+    seen: set[int] = set()
+    for client in old_clients:
+        if id(client) in seen:
+            continue
+        seen.add(id(client))
+        with contextlib.suppress(Exception):
+            client.close()
+
+
 def _available_models(router: Router) -> list[str]:
     models: list[str] = ["auto"]
     for item in router.preview("auto"):
@@ -451,6 +617,9 @@ def _emit_session_state(
         checkpoints=checkpoints,
         runtime=_runtime_settings(config),
         subagent_roles=roles_catalog(),
+        skills=_skills_state(cwd, agent),
+        memory=_project_memory(cwd),
+        providers=_public_providers(config, router),
     )
 
 
@@ -478,13 +647,36 @@ def main(argv: list[str] | None = None) -> int:
         )
         ui.emit("mcp_servers", servers=_public_mcp_servers(config.mcp_servers))
         turn_lock = threading.Lock()
-        active = {"value": False}
+        active = {"turn": False, "subagents": 0}
 
-        def run_prompt(text: str) -> None:
+        def _begin_job(*, is_turn: bool) -> tuple[bool, bool]:
+            with turn_lock:
+                if is_turn:
+                    if active["turn"]:
+                        return False, False
+                    was_idle = active["subagents"] == 0
+                    active["turn"] = True
+                    return True, was_idle
+                if active["subagents"] >= 4:
+                    return False, False
+                was_idle = (not active["turn"]) and active["subagents"] == 0
+                active["subagents"] += 1
+                return True, was_idle
+
+        def _end_job(*, is_turn: bool) -> bool:
+            with turn_lock:
+                if is_turn:
+                    active["turn"] = False
+                else:
+                    active["subagents"] = max(0, active["subagents"] - 1)
+                return (not active["turn"]) and active["subagents"] == 0
+
+        def run_prompt(text: str, images: list[str] | None, emit_started: bool) -> None:
             try:
-                ui.emit("turn_started")
+                if emit_started:
+                    ui.emit("turn_started")
                 ui.emit("assistant_start")
-                result = agent.run_turn(text)
+                result = agent.run_turn(text, images=images or None)
                 ui.emit(
                     "result",
                     content=result,
@@ -508,13 +700,13 @@ def main(argv: list[str] | None = None) -> int:
                         checkpoints=agent.checkpoints.pending(agent.session.id),
                     )
                 ui.emit("sessions_changed", sessions=_session_summaries(store, cwd))
-                ui.emit("turn_complete")
-                with turn_lock:
-                    active["value"] = False
+                if _end_job(is_turn=True):
+                    ui.emit("turn_complete")
 
-        def run_subagent_job(task: str, role: str) -> None:
+        def run_subagent_job(task: str, role: str, emit_started: bool) -> None:
             try:
-                ui.emit("turn_started")
+                if emit_started:
+                    ui.emit("turn_started")
                 agent._run_subagent(task, role)
             except KeyboardInterrupt:
                 ui.emit("warning", message="Sous-agent interrompu.")
@@ -524,9 +716,8 @@ def main(argv: list[str] | None = None) -> int:
                 ui.error(f"{exc.__class__.__name__}: {exc}")
             finally:
                 ui.usage(agent.usage, router.last)
-                ui.emit("turn_complete")
-                with turn_lock:
-                    active["value"] = False
+                if _end_job(is_turn=False):
+                    ui.emit("turn_complete")
 
         for raw_line in sys.stdin:
             line = raw_line.strip()
@@ -605,15 +796,109 @@ def main(argv: list[str] | None = None) -> int:
                 if not isinstance(task, str) or not task.strip():
                     ui.error("La tâche du sous-agent est vide.")
                     continue
-                with turn_lock:
-                    if active["value"]:
-                        ui.error("Une demande est déjà en cours.")
-                        continue
-                    active["value"] = True
+                accepted, first = _begin_job(is_turn=False)
+                if not accepted:
+                    ui.error("Maximum 4 sous-agents simultanés atteint.")
+                    continue
                 ui.reset_interrupt()
                 threading.Thread(
-                    target=run_subagent_job, args=(task.strip(), role), daemon=True
+                    target=run_subagent_job, args=(task.strip(), role, first), daemon=True
                 ).start()
+                continue
+            if kind == "skills_list":
+                ui.emit("skills_changed", skills=_skills_state(cwd, agent))
+                continue
+            if kind == "skill_toggle":
+                raw_name = str(message.get("name") or "").strip()
+                if not raw_name:
+                    ui.error("Nom de skill manquant.")
+                    continue
+                ok, feedback = agent.toggle_skill(raw_name)
+                ui.emit("skills_changed", skills=_skills_state(cwd, agent))
+                if ok:
+                    ui.info(feedback)
+                else:
+                    ui.error(feedback)
+                continue
+            if kind == "skills_set":
+                names = message.get("names")
+                if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+                    ui.error("Liste de skills invalide.")
+                    continue
+                agent.set_skills(names)
+                ui.emit("skills_changed", skills=_skills_state(cwd, agent))
+                continue
+            if kind == "memory_get":
+                ui.emit("memory_changed", memory=_project_memory(cwd))
+                continue
+            if kind == "memory_add":
+                note = str(message.get("note") or "").strip()
+                if not note:
+                    ui.error("La consigne à mémoriser est vide.")
+                    continue
+                try:
+                    remember_project_instruction(cwd, note)
+                    agent._refresh_system_mode()
+                except (OSError, ValueError) as exc:
+                    ui.error(f"Impossible d'enregistrer la consigne : {exc}")
+                    continue
+                ui.emit("memory_changed", memory=_project_memory(cwd))
+                ui.success("Consigne mémorisée dans .zerocode/instructions.md.")
+                continue
+            if kind == "memory_save":
+                raw_content = message.get("content")
+                if not isinstance(raw_content, str):
+                    ui.error("Contenu de mémoire invalide.")
+                    continue
+                try:
+                    mem = _save_project_memory(cwd, raw_content)
+                    agent._refresh_system_mode()
+                except (OSError, ValueError) as exc:
+                    ui.error(f"Impossible d'enregistrer la mémoire : {exc}")
+                    continue
+                ui.emit("memory_changed", memory=mem)
+                ui.success("Mémoire projet enregistrée.")
+                continue
+            if kind == "providers_list":
+                ui.emit("providers_changed", providers=_public_providers(config, router))
+                continue
+            if kind == "provider_key_save":
+                provider_id = str(message.get("provider") or "").strip()
+                raw_key = str(message.get("key") or "").strip()
+                spec = router.providers.get(provider_id)
+                if spec is None or not spec.requires_key:
+                    ui.error("Fournisseur inconnu ou sans clé API requise.")
+                    continue
+                if not raw_key:
+                    ui.error("La clé API est vide.")
+                    continue
+                try:
+                    store_key(spec.name, raw_key)
+                    _refresh_router_providers(config, router)
+                except (OSError, ConfigError) as exc:
+                    ui.error(f"Impossible d'enregistrer la clé : {exc}")
+                    continue
+                ui.emit("providers_changed", providers=_public_providers(config, router))
+                ui.emit("models_changed", models=_available_models(router))
+                ui.success(f"Clé API enregistrée pour {spec.label}.")
+                continue
+            if kind == "provider_key_delete":
+                provider_id = str(message.get("provider") or "").strip()
+                spec = router.providers.get(provider_id)
+                if spec is None or not spec.requires_key:
+                    ui.error("Fournisseur inconnu.")
+                    continue
+                removed = False
+                for key_name in (spec.name, *spec.api_key_envs):
+                    if delete_key(key_name):
+                        removed = True
+                _refresh_router_providers(config, router)
+                ui.emit("providers_changed", providers=_public_providers(config, router))
+                ui.emit("models_changed", models=_available_models(router))
+                if removed:
+                    ui.info(f"Clé API supprimée du coffre pour {spec.label}.")
+                else:
+                    ui.info(f"Aucune clé stockée pour {spec.label} (une variable d'environnement peut rester active).")
                 continue
             if kind == "interrupt":
                 ui.request_interrupt()
@@ -621,16 +906,25 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             if kind == "prompt":
                 prompt = message.get("text")
-                if not isinstance(prompt, str) or not prompt.strip():
+                try:
+                    images = _sanitize_images(message.get("images"))
+                except ValueError as exc:
+                    ui.error(str(exc))
+                    continue
+                text = prompt.strip() if isinstance(prompt, str) else ""
+                if not text and images:
+                    text = "Analyse l'image jointe."
+                if not text:
                     ui.error("Le message est vide.")
                     continue
-                with turn_lock:
-                    if active["value"]:
-                        ui.error("Une demande est déjà en cours.")
-                        continue
-                    active["value"] = True
+                accepted, first = _begin_job(is_turn=True)
+                if not accepted:
+                    ui.error("Une demande est déjà en cours.")
+                    continue
                 ui.reset_interrupt()
-                threading.Thread(target=run_prompt, args=(prompt,), daemon=True).start()
+                threading.Thread(
+                    target=run_prompt, args=(text, images, first), daemon=True
+                ).start()
                 continue
             if kind == "set_mode":
                 mode = str(message.get("mode") or "")

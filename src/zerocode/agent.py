@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -101,6 +102,7 @@ class Agent:
         self.ui = ui
         self.store = store
         self.usage = session.usage
+        self._usage_lock = threading.Lock()
         self.mode = "build"
         self.skills: list[str] = list(DEFAULT_ACTIVE_SKILLS)
         self.strategy: str | None = None
@@ -157,7 +159,8 @@ class Agent:
                 )
                 if self._interrupted():
                     raise KeyboardInterrupt
-                self.usage.add(completion.usage)
+                with self._usage_lock:
+                    self.usage.add(completion.usage)
                 assistant: dict[str, Any] = {
                     "role": "assistant",
                     "content": completion.content or "",
@@ -606,7 +609,7 @@ class Agent:
             return False
         tool_map = {tool.name: tool for tool in self.tools.tools()}
         for call in calls:
-            if call.name in {"todo_write", "subagent"}:
+            if call.name == "todo_write":
                 return False
             spec = tool_map.get(call.name)
             if spec is None or spec.approval != "never":
@@ -708,7 +711,8 @@ class Agent:
                 model=self.config.model,
                 provider=self.config.provider,
             )
-            self.usage.add(completion.usage)
+            with self._usage_lock:
+                self.usage.add(completion.usage)
             if completion.content:
                 last_text = completion.content
             if not completion.tool_calls:

@@ -276,3 +276,73 @@ def test_subagent_events_are_forwarded_to_the_desktop() -> None:
     assert event["type"] == "subagent"
     assert event["role"] == "reviewer"
     assert event["phase"] == "start"
+
+
+def test_sanitize_images_validates_format_and_limits() -> None:
+    import pytest
+
+    from zerocode.desktop_bridge import _sanitize_images
+
+    valid = "data:image/png;base64,iVBORw0KGgo="
+    assert _sanitize_images([valid]) == [valid]
+    assert _sanitize_images(None) == []
+
+    with pytest.raises(ValueError):
+        _sanitize_images(["https://example.com/a.png"])
+    with pytest.raises(ValueError):
+        _sanitize_images(["data:image/svg+xml;base64,PHN2Zz4="])
+    with pytest.raises(ValueError):
+        _sanitize_images([valid] * 5)
+
+
+def test_visible_history_keeps_multimodal_indicator() -> None:
+    history = _visible_history(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Regarde ce bug"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}},
+                ],
+            }
+        ]
+    )
+    assert history == [{"role": "user", "content": "Regarde ce bug\n[1 image(s) jointe(s)]"}]
+
+
+def test_project_memory_roundtrip_and_secret_redaction(tmp_path: Path) -> None:
+    from zerocode.desktop_bridge import _project_memory, _save_project_memory
+
+    assert _project_memory(tmp_path)["content"] == ""
+    saved = _save_project_memory(tmp_path, "- Utilise pytest\n- Clé: sk-1234567890abcdefghijklmnop")
+    assert "Utilise pytest" in saved["content"]
+    assert "sk-1234567890abcdefghijklmnop" not in saved["content"]
+    assert (tmp_path / ".zerocode" / "instructions.md").is_file()
+
+    cleared = _save_project_memory(tmp_path, "   ")
+    assert cleared["content"] == ""
+    assert not (tmp_path / ".zerocode" / "instructions.md").exists()
+
+
+def test_public_providers_never_expose_raw_api_keys(monkeypatch, tmp_path: Path) -> None:
+    from zerocode.config import Config
+    from zerocode.desktop_bridge import _public_providers
+    from zerocode.router import Router
+
+    secret = "gsk_super_secret_key_999999999999"
+    monkeypatch.setenv("GROQ_API_KEY", secret)
+    monkeypatch.setattr("zerocode.desktop_bridge.load_key_store", lambda: {})
+    monkeypatch.setattr("zerocode.providers.load_key_store", lambda: {})
+
+    config = Config()
+    router = Router(config)
+    try:
+        items = _public_providers(config, router)
+    finally:
+        router.close()
+
+    groq = next(item for item in items if item["id"] == "groq")
+    assert groq["available"] is True
+    assert groq["source"] == "env"
+    assert secret not in json.dumps(items)
+    assert groq["key_masked"] and groq["key_masked"] != secret

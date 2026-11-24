@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
 from typing import Any
 
@@ -168,6 +169,7 @@ class Router:
         self.last_model: ModelSpec | None = None
         self.last_task: str = "auto"
         self._cooldown: dict[str, float] = {}
+        self._cooldown_lock = threading.Lock()
 
     def close(self) -> None:
         seen: set[int] = set()
@@ -442,7 +444,8 @@ class Router:
         return "\n".join(lines)
 
     def _is_cooling(self, key: str) -> bool:
-        until = self._cooldown.get(key)
+        with self._cooldown_lock:
+            until = self._cooldown.get(key)
         return bool(until and until > time.monotonic())
 
     def _set_cooldown(self, key: str, error: ProviderError) -> None:
@@ -456,7 +459,8 @@ class Router:
             delay = 45.0
         else:
             delay = 300.0
-        self._cooldown[key] = now + delay
+        with self._cooldown_lock:
+            self._cooldown[key] = now + delay
 
     def _warn(self, message: str) -> None:
         if self.ui is not None:

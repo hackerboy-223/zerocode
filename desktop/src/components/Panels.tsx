@@ -1,5 +1,6 @@
-import { ArrowLeft, Check, Code2, FileDiff, FileText, Folder, Plus, RefreshCw, RotateCcw } from "lucide-react";
-import type { DiffEntry, GitWorkspaceInfo, TodoItem, WorkspaceEntry } from "../types";
+import { useState } from "react";
+import { ArrowLeft, BookmarkPlus, Check, Code2, FileDiff, FileText, Folder, Plus, RefreshCw, RotateCcw } from "lucide-react";
+import type { DiffEntry, GitWorkspaceInfo, ProjectMemory, SkillsState, TodoItem, WorkspaceEntry } from "../types";
 
 const shortPath = (path: string) => path.replace(/\/+$/, "").split(/[\\/]/).filter(Boolean).pop() || path;
 
@@ -9,13 +10,21 @@ function formatBytes(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-export function OverviewPanel({ workspace, git, agentState, mode, model, provider, permissions, think, usage, todos, checkpoints, busy, onUndo, onTerminal }: {
+export function OverviewPanel({
+  workspace, git, agentState, mode, model, provider, permissions, think, usage, todos, checkpoints,
+  skills, memory, busy, ready, onUndo, onTerminal, onToggleSkill, onAddMemory, onOpenSkillsSettings
+}: {
   workspace: string | null; git: GitWorkspaceInfo; agentState: string; mode: string; model: string; provider: string;
-  permissions: string; think: string; usage: number; todos: TodoItem[]; checkpoints: number; busy: boolean;
-  onUndo: () => void; onTerminal: () => void;
+  permissions: string; think: string; usage: number; todos: TodoItem[]; checkpoints: number;
+  skills: SkillsState; memory: ProjectMemory; busy: boolean; ready: boolean;
+  onUndo: () => void; onTerminal: () => void; onToggleSkill: (name: string) => void;
+  onAddMemory: (note: string) => void; onOpenSkillsSettings: () => void;
 }) {
+  const [note, setNote] = useState("");
   const done = todos.filter((todo) => todo.status === "completed").length;
   const modeLabel = mode === "full-stack" ? "Autonomie Full-stack" : mode === "plan" ? "Lecture seule" : "Construction";
+  const featuredSkills = skills.available.filter((skill) => skill.builtin || skills.active.includes(skill.id)).slice(0, 12);
+  const memoryLines = memory.content.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
   return (
     <div className="panel">
       <div className="panel-section">
@@ -36,6 +45,50 @@ export function OverviewPanel({ workspace, git, agentState, mode, model, provide
         <div className="kv"><span>Jetons</span><strong>{new Intl.NumberFormat("fr-FR").format(usage)}</strong></div>
         {checkpoints > 0 && <button type="button" className="btn small full" onClick={onUndo} disabled={busy}><RotateCcw size={12} /> Annuler la dernière modification ({checkpoints})</button>}
       </div>
+      {featuredSkills.length > 0 && (
+        <div className="panel-section">
+          <div className="panel-label">
+            <span>SKILLS ACTIFS</span>
+            <button type="button" className="link-btn" onClick={onOpenSkillsSettings}>{skills.active.length}/{skills.available.length}</button>
+          </div>
+          <div className="role-chips">
+            {featuredSkills.map((skill) => {
+              const active = skills.active.includes(skill.id);
+              return (
+                <button type="button" key={skill.id} disabled={!ready || busy}
+                  className={active ? "chip active" : "chip"}
+                  onClick={() => onToggleSkill(skill.id)} title={skill.summary}>
+                  {skill.id}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {workspace && (
+        <div className="panel-section">
+          <div className="panel-label">
+            <span>MÉMOIRE PROJET</span>
+            <button type="button" className="link-btn" onClick={onOpenSkillsSettings}>Éditer</button>
+          </div>
+          {memoryLines.length > 0 ? (
+            <ul className="memory-preview">
+              {memoryLines.slice(0, 4).map((line, idx) => <li key={idx}>{line.replace(/^[-*]\s*/, "")}</li>)}
+            </ul>
+          ) : (
+            <p className="muted-note">Aucune consigne persistante (.zerocode/instructions.md).</p>
+          )}
+          <form className="inline-form compact-form" onSubmit={(event) => {
+            event.preventDefault();
+            if (!note.trim() || !ready) return;
+            onAddMemory(note.trim());
+            setNote("");
+          }}>
+            <input className="text-input" value={note} disabled={!ready} onChange={(event) => setNote(event.target.value)} placeholder="Mémoriser une règle…" />
+            <button type="submit" className="btn small" disabled={!ready || !note.trim()} title="Mémoriser (/remember)"><BookmarkPlus size={13} /></button>
+          </form>
+        </div>
+      )}
       {todos.length > 0 && (
         <div className="panel-section">
           <div className="panel-label">PLAN <span>{done}/{todos.length}</span></div>

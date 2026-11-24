@@ -557,6 +557,14 @@ struct GitWorkspaceInfo {
     changed_files: Vec<GitChangedFile>,
 }
 
+#[derive(Serialize)]
+struct WorkspaceSearchMatch {
+    path: String,
+    line: usize,
+    snippet: String,
+    score: usize,
+}
+
 fn is_sensitive_path(path: &Path) -> bool {
     let name = path
         .file_name()
@@ -928,6 +936,161 @@ fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
     })
 }
 
+#[tauri::command]
+fn search_workspace_files(
+    cwd: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<WorkspaceSearchMatch>, String> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let workspace = resolve_workspace(&cwd)?;
+    let root = PathBuf::from(&workspace);
+    let max_results = limit.unwrap_or(50).clamp(1, 100);
+    let needle = trimmed.to_lowercase();
+    let terms: Vec<&str> = needle.split_whitespace().collect();
+    if terms.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    const IGNORED_DIRS: &[&str] = &[
+        ".git",
+        ".ssh",
+        ".aws",
+        ".gnupg",
+        "node_modules",
+        ".venv",
+        "venv",
+        "target",
+        "__pycache__",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
+        "dist",
+        "build",
+        ".next",
+    ];
+    const IGNORED_EXTS: &[&str] = &[
+        "png", "jpg", "jpeg", "gif", "webp", "ico", "pdf", "zip", "gz", "tar", "lock", "sqlite",
+        "db", "wasm", "mp4", "mp3", "woff", "woff2", "ttf", "otf", "exe", "dll", "so", "dylib",
+    ];
+    const MAX_FILES: usize = 4_000;
+    const MAX_FILE_BYTES: u64 = 512_000;
+
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back((root.clone(), 0usize));
+    let mut matches: Vec<WorkspaceSearchMatch> = Vec::new();
+    let mut visited_files: usize = 0;
+
+    while let Some((dir, depth)) = queue.pop_front() {
+        if visited_files >= MAX_FILES || depth > 12 {
+            break;
+        }
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if visited_files >= MAX_FILES {
+                break;
+            }
+            let path = entry.path();
+            let Ok(meta) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if meta.file_type().is_symlink() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if meta.is_dir() {
+                if !IGNORED_DIRS.contains(&name.as_str()) {
+                    queue.push_back((path, depth + 1));
+                }
+                continue;
+            }
+            if !meta.is_file() || meta.len() > MAX_FILE_BYTES || is_sensitive_path(&path) {
+                continue;
+            }
+            if let Some(ext) = path.extension().and_then(|value| value.to_str()) {
+                if IGNORED_EXTS.contains(&ext.to_lowercase().as_str()) {
+                    continue;
+                }
+            }
+            visited_files += 1;
+
+            let rel_path = path
+                .strip_prefix(&root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let rel_lower = rel_path.to_lowercase();
+            let path_matches_all = terms.iter().all(|term| rel_lower.contains(term));
+
+            let Ok(bytes) = fs::read(&path) else {
+                continue;
+            };
+            if bytes.iter().take(4096).any(|&byte| byte == 0) {
+                continue;
+            }
+            let Ok(content) = String::from_utf8(bytes) else {
+                continue;
+            };
+
+            let mut file_hits = 0usize;
+            for (idx, line) in content.lines().enumerate() {
+                let line_lower = line.to_lowercase();
+                let exact = line_lower.contains(&needle);
+                let all_terms = exact || terms.iter().all(|term| line_lower.contains(term));
+                if all_terms {
+                    let mut score = if exact { 20 } else { 10 };
+                    if path_matches_all {
+                        score += 15;
+                    }
+                    let trimmed_line = line.trim();
+                    let snippet: String = trimmed_line.chars().take(180).collect();
+                    matches.push(WorkspaceSearchMatch {
+                        path: rel_path.clone(),
+                        line: idx + 1,
+                        snippet,
+                        score,
+                    });
+                    file_hits += 1;
+                    if file_hits >= 3 {
+                        break;
+                    }
+                }
+            }
+
+            if file_hits == 0 && path_matches_all {
+                let first_line: String = content
+                    .lines()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("")
+                    .trim()
+                    .chars()
+                    .take(160)
+                    .collect();
+                matches.push(WorkspaceSearchMatch {
+                    path: rel_path,
+                    line: 1,
+                    snippet: first_line,
+                    score: 18,
+                });
+            }
+        }
+    }
+
+    matches.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then_with(|| a.path.cmp(&b.path))
+            .then_with(|| a.line.cmp(&b.line))
+    });
+    matches.truncate(max_results);
+    Ok(matches)
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -944,8 +1107,122 @@ fn main() {
             read_workspace_file,
             write_workspace_file,
             create_workspace_file,
+            search_workspace_files,
             workspace_git_info
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de ZeroCode Desktop");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_temp_workspace(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = env::temp_dir().join(format!(
+            "zerocode-rust-test-{label}-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn sensitive_path_blocks_secrets_but_allows_examples() {
+        assert!(is_sensitive_path(Path::new("/tmp/proj/.env")));
+        assert!(is_sensitive_path(Path::new("/tmp/proj/.env.production")));
+        assert!(is_sensitive_path(Path::new("/tmp/proj/cert.pem")));
+        assert!(is_sensitive_path(Path::new("/tmp/proj/.ssh/id_rsa")));
+        assert!(is_sensitive_path(Path::new("/tmp/proj/credentials.json")));
+        assert!(!is_sensitive_path(Path::new("/tmp/proj/.env.example")));
+        assert!(!is_sensitive_path(Path::new("/tmp/proj/src/main.rs")));
+    }
+
+    #[test]
+    fn resolve_inside_workspace_rejects_parent_escape() {
+        let dir = make_temp_workspace("resolve");
+        let file = dir.join("hello.txt");
+        fs::write(&file, "hello").unwrap();
+
+        let ok = resolve_inside_workspace(dir.to_str().unwrap(), "hello.txt");
+        assert!(ok.is_ok());
+
+        let escaped = resolve_inside_workspace(dir.to_str().unwrap(), "../");
+        assert!(escaped.is_err());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_and_write_workspace_file_enforce_safety() {
+        let dir = make_temp_workspace("rw");
+        let cwd = dir.to_str().unwrap().to_string();
+
+        fs::write(dir.join(".env"), "SECRET=1").unwrap();
+        fs::write(dir.join("bin.dat"), [0u8, 1, 2, 3]).unwrap();
+        fs::write(dir.join("bad.txt"), [0xffu8, 0xfe]).unwrap();
+
+        assert!(read_workspace_file(cwd.clone(), ".env".into()).is_err());
+        assert!(read_workspace_file(cwd.clone(), "../etc/passwd".into()).is_err());
+        assert!(read_workspace_file(cwd.clone(), "bin.dat".into()).is_err());
+        assert!(read_workspace_file(cwd.clone(), "bad.txt".into()).is_err());
+
+        fs::create_dir_all(dir.join("notes")).unwrap();
+        let created = create_workspace_file(cwd.clone(), "notes/todo.md".into()).unwrap();
+        assert_eq!(created.path, "notes/todo.md");
+
+        let written = write_workspace_file(
+            cwd.clone(),
+            "notes/todo.md".into(),
+            "Ligne 1\nLigne 2".into(),
+        )
+        .unwrap();
+        assert_eq!(written.lines, 2);
+
+        let preview = read_workspace_file(cwd.clone(), "notes/todo.md".into()).unwrap();
+        assert_eq!(preview.content, "Ligne 1\nLigne 2");
+
+        assert!(write_workspace_file(cwd.clone(), "notes/todo.md".into(), "a\0b".into()).is_err());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn search_workspace_files_finds_matches_and_skips_secrets_and_ignored() {
+        let dir = make_temp_workspace("search");
+        let cwd = dir.to_str().unwrap().to_string();
+
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::create_dir_all(dir.join("node_modules/pkg")).unwrap();
+        fs::write(
+            dir.join("src/app.ts"),
+            "export function greetUser() {\n  return 'ZeroCode Ready';\n}\n",
+        )
+        .unwrap();
+        fs::write(dir.join(".env"), "API_KEY=ZeroCode Ready").unwrap();
+        fs::write(dir.join("node_modules/pkg/index.js"), "ZeroCode Ready").unwrap();
+
+        let results =
+            search_workspace_files(cwd.clone(), "ZeroCode Ready".into(), Some(20)).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].path, "src/app.ts");
+        assert_eq!(results[0].line, 2);
+        assert!(results[0].snippet.contains("ZeroCode Ready"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn workspace_git_info_handles_non_repo_safely() {
+        let dir = make_temp_workspace("git");
+        let info = workspace_git_info(dir.to_str().unwrap().to_string()).unwrap();
+        assert!(!info.is_repo);
+        assert_eq!(info.dirty_count, 0);
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

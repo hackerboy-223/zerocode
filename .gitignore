@@ -19,5 +19,6 @@ htmlcov/
 # ZeroCode Desktop
 desktop/node_modules/
 desktop/dist/
+desktop/public/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/

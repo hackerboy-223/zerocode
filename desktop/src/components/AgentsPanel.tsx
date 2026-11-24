@@ -48,14 +48,16 @@ export default function AgentsPanel({ roles, runs, ready, busy, defaultRole, onR
   const [task, setTask] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   useEffect(() => setRole(defaultRole), [defaultRole]);
-  const locked = !ready || busy;
+  const runningCount = runs.filter((run) => run.status === "running").length;
+  const canLaunchSubagent = ready && runningCount < 4;
+  const lockedPreset = !ready || busy;
   const current = roles.find((item) => item.id === role);
   const ordered = [...runs].sort((a, b) => b.seq - a.seq);
 
   return (
     <div className="panel agents-panel">
       <div className="panel-section">
-        <div className="panel-label">LANCER UN SPÉCIALISTE</div>
+        <div className="panel-label">LANCER UN SPÉCIALISTE {runningCount > 0 && <span>{runningCount}/4 actifs</span>}</div>
         <div className="role-chips">
           {roles.map((item) => (
             <button type="button" key={item.id} className={item.id === role ? "chip active" : "chip"} onClick={() => setRole(item.id)} title={item.description}>{item.id}</button>
@@ -65,19 +67,19 @@ export default function AgentsPanel({ roles, runs, ready, busy, defaultRole, onR
         <textarea className="task-input" rows={3} value={task} onChange={(event) => setTask(event.target.value)}
           placeholder="Que doit analyser ce spécialiste ? (fichiers, question, périmètre…)"
           onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && task.trim() && !locked) { onRun(role, task.trim()); setTask(""); }
+            if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && task.trim() && canLaunchSubagent) { onRun(role, task.trim()); setTask(""); }
           }} />
-        <button type="button" className="btn primary full" disabled={locked || !task.trim()} onClick={() => { onRun(role, task.trim()); setTask(""); }}>
+        <button type="button" className="btn primary full" disabled={!canLaunchSubagent || !task.trim()} onClick={() => { onRun(role, task.trim()); setTask(""); }}>
           <Play size={13} /> Lancer <small>Ctrl ↵</small>
         </button>
-        <p className="muted-note">Lecture seule : un sous-agent n’écrit aucun fichier et n’exécute aucune commande.</p>
+        <p className="muted-note">Lecture seule · jusqu’à 4 spécialistes peuvent tourner en parallèle.</p>
       </div>
 
       <div className="panel-section">
         <div className="panel-label">ORCHESTRATIONS</div>
         <div className="preset-list">
           {agentPresets.map((preset) => (
-            <button type="button" key={preset.id} className="preset" disabled={locked} onClick={() => onPreset(preset.prompt)}>
+            <button type="button" key={preset.id} className="preset" disabled={lockedPreset} onClick={() => onPreset(preset.prompt)}>
               <strong>{preset.title}</strong><span>{preset.hint}</span>
             </button>
           ))}

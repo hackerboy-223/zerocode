@@ -139,7 +139,14 @@ export default function ChatView({ messages, activities, subagents, busy, ready,
           if (message.role === "user") {
             return (
               <motion.article key={message.id} className="msg user" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                <div className="bubble">{message.content}</div>
+                <div className="bubble">
+                  {message.images && message.images.length > 0 && (
+                    <div className="msg-images">
+                      {message.images.map((src, index) => <img key={index} src={src} alt={`Image jointe ${index + 1}`} />)}
+                    </div>
+                  )}
+                  {message.content}
+                </div>
               </motion.article>
             );
           }

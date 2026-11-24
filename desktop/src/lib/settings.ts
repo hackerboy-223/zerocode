@@ -64,7 +64,7 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 }
 
-function sanitize(raw: unknown): Settings {
+export function sanitizeSettings(raw: unknown): Settings {
   const source = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const flag = (key: keyof Settings, fallback: boolean) => (typeof source[key] === "boolean" ? (source[key] as boolean) : fallback);
   const size = Number(source.fontSize);
@@ -100,10 +100,10 @@ function sanitize(raw: unknown): Settings {
 function load(): Settings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return sanitize(JSON.parse(stored));
+    if (stored) return sanitizeSettings(JSON.parse(stored));
     // Migration de l'ancien réglage de thème.
     const legacy = localStorage.getItem("zerocode.theme");
-    return sanitize(legacy === "light" || legacy === "dark" ? { theme: legacy } : {});
+    return sanitizeSettings(legacy === "light" || legacy === "dark" ? { theme: legacy } : {});
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

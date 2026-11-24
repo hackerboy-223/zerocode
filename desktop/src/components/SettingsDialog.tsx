@@ -1,16 +1,21 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Bot, Cpu, Database, Keyboard, Palette, ShieldCheck, SlidersHorizontal, Users, X } from "lucide-react";
+import {
+  Bot, Cpu, Database, ExternalLink, KeyRound, Keyboard, Palette, Save,
+  ShieldCheck, SlidersHorizontal, Sparkles, Trash2, Users, X
+} from "lucide-react";
 import { Row, NumberField, Segmented, Toggle } from "./ui";
 import { DEFAULT_RUNTIME, type Accent, type Settings, type ThinkLevel } from "../lib/settings";
-import type { RuntimeSettings, SubagentRole } from "../types";
+import type { ProjectMemory, ProviderStatus, RuntimeSettings, SkillsState, SubagentRole } from "../types";
 
-type Section = "general" | "agent" | "runtime" | "subagents" | "interface" | "data";
+export type SettingsSection = "general" | "agent" | "providers" | "runtime" | "skills" | "subagents" | "interface" | "data";
 
-const sections: Array<{ id: Section; label: string; icon: typeof Palette }> = [
+const sections: Array<{ id: SettingsSection; label: string; icon: typeof Palette }> = [
   { id: "general", label: "Apparence", icon: Palette },
   { id: "agent", label: "Agent", icon: Bot },
+  { id: "providers", label: "Fournisseurs & clés", icon: KeyRound },
   { id: "runtime", label: "Exécution", icon: Cpu },
+  { id: "skills", label: "Skills & mémoire", icon: Sparkles },
   { id: "subagents", label: "Sous-agents", icon: Users },
   { id: "interface", label: "Interface", icon: SlidersHorizontal },
   { id: "data", label: "Données & raccourcis", icon: Database }
@@ -31,18 +36,20 @@ const shortcuts: Array<[string, string]> = [
   ["Ctrl I", "Afficher/masquer l’inspecteur"],
   ["Ctrl `", "Afficher/masquer le terminal"],
   ["Ctrl ,", "Préférences"],
-  ["/", "Commandes rapides dans la zone de saisie"],
+  ["/", "Commandes rapides (/agent, /skill, /remember…)"],
   ["@", "Mentionner un fichier du projet"],
   ["Échap", "Fermer les fenêtres"]
 ];
 
 export interface SettingsDialogProps {
+  initialSection?: SettingsSection;
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
   reset: () => void;
   onClose: () => void;
   ready: boolean;
   busy: boolean;
+  workspace: string | null;
   mode: string;
   model: string;
   availableModels: string[];
@@ -50,26 +57,53 @@ export interface SettingsDialogProps {
   thinkMode: string;
   runtime: RuntimeSettings | null;
   roles: SubagentRole[];
+  skills: SkillsState;
+  memory: ProjectMemory;
+  providers: ProviderStatus[];
   onMode: (mode: string) => void;
   onModel: (model: string) => void;
   onPermissions: (mode: string) => void;
   onThink: (think: ThinkLevel) => void;
   onRuntime: (patch: Partial<RuntimeSettings>) => void;
+  onToggleSkill: (name: string) => void;
+  onSaveMemory: (content: string) => void;
+  onSaveProviderKey: (provider: string, key: string) => void;
+  onDeleteProviderKey: (provider: string) => void;
   onCompact: () => void;
   onCopyConversation: () => void;
   onClearRecents: () => void;
 }
 
 export default function SettingsDialog(props: SettingsDialogProps) {
-  const { settings, update, ready, busy, runtime, roles } = props;
-  const [section, setSection] = useState<Section>("general");
+  const { settings, update, ready, busy, runtime, roles, skills, memory, providers } = props;
+  const [section, setSection] = useState<SettingsSection>(props.initialSection ?? "general");
   const [customModel, setCustomModel] = useState("");
+  const [skillQuery, setSkillQuery] = useState("");
+  const [memoryDraft, setMemoryDraft] = useState(memory.content);
+  const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (props.initialSection) setSection(props.initialSection);
+  }, [props.initialSection]);
+
+  useEffect(() => {
+    setMemoryDraft(memory.content);
+  }, [memory.content]);
+
   const locked = !ready || busy;
   const effective: RuntimeSettings = runtime ?? { ...DEFAULT_RUNTIME, ...settings.runtime };
   const setRuntime = (patch: Partial<RuntimeSettings>) => {
     update({ runtime: { ...settings.runtime, ...patch } });
     props.onRuntime(patch);
   };
+
+  const filteredSkills = useMemo(() => {
+    const q = skillQuery.trim().toLowerCase();
+    if (!q) return skills.available;
+    return skills.available.filter((item) =>
+      `${item.id} ${item.label} ${item.category} ${item.summary}`.toLowerCase().includes(q)
+    );
+  }, [skills.available, skillQuery]);
 
   return (
     <div className="overlay" onMouseDown={props.onClose}>
@@ -170,6 +204,60 @@ export default function SettingsDialog(props: SettingsDialogProps) {
             </>
           )}
 
+          {section === "providers" && (
+            <>
+              <h2>Fournisseurs & clés API</h2>
+              <p className="section-note">Les clés enregistrées ici sont stockées localement dans le coffre ZeroCode (droits <code>0600</code>) et ne sont jamais réaffichées en clair.</p>
+              {providers.length === 0 ? (
+                <p className="muted-note">Connectez l’agent pour gérer les fournisseurs.</p>
+              ) : (
+                <div className="provider-list">
+                  {providers.map((item) => {
+                    const draftKey = keyDrafts[item.id] ?? "";
+                    const statusText = item.source === "keyless" ? "Sans clé"
+                      : item.source === "env" ? `Variable ${item.env_var}`
+                      : item.source === "store" ? `Coffre (${item.key_masked})`
+                      : "Non configuré";
+                    return (
+                      <article key={item.id} className="provider-card">
+                        <div className="provider-head">
+                          <div>
+                            <strong>{item.label}</strong>
+                            <span className="provider-sub">{item.id} · {item.models_count} modèle(s)</span>
+                          </div>
+                          <span className={"provider-pill " + (item.available ? "ok" : "off")}>{statusText}</span>
+                        </div>
+                        {item.notes && <p className="provider-note">{item.notes}</p>}
+                        {item.requires_key && (
+                          <form className="inline-form" onSubmit={(event) => {
+                            event.preventDefault();
+                            if (!draftKey.trim() || !ready) return;
+                            props.onSaveProviderKey(item.id, draftKey.trim());
+                            setKeyDrafts((prev) => ({ ...prev, [item.id]: "" }));
+                          }}>
+                            <input type="password" autoComplete="off" value={draftKey} disabled={!ready}
+                              placeholder={item.source === "store" ? "Remplacer la clé API…" : `Clé API (${item.env_var})…`}
+                              onChange={(event) => setKeyDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))} />
+                            <button type="submit" className="btn small primary" disabled={!ready || !draftKey.trim()}>Enregistrer</button>
+                            {item.source === "store" && (
+                              <button type="button" className="btn small danger" disabled={!ready} title="Supprimer du coffre"
+                                onClick={() => props.onDeleteProviderKey(item.id)}><Trash2 size={13} /></button>
+                            )}
+                          </form>
+                        )}
+                        {item.signup_url && (
+                          <a className="provider-link" href={item.signup_url} target="_blank" rel="noreferrer">
+                            Obtenir une clé <ExternalLink size={11} />
+                          </a>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
           {section === "runtime" && (
             <>
               <h2>Exécution</h2>
@@ -198,10 +286,55 @@ export default function SettingsDialog(props: SettingsDialogProps) {
             </>
           )}
 
+          {section === "skills" && (
+            <>
+              <h2>Skills d’expertise</h2>
+              <p className="section-note">Activez les compétences injectées dans le prompt système ({skills.active.length} actif(s) sur {skills.available.length}). Commande rapide : <code>/skill &lt;nom&gt;</code>.</p>
+              <div className="inline-form">
+                <input className="text-input" placeholder="Filtrer les skills (ex. dev, security, fabric…)" value={skillQuery} onChange={(event) => setSkillQuery(event.target.value)} />
+                <button type="button" className="btn small" disabled={locked} onClick={() => props.onToggleSkill("default")}>Par défaut</button>
+                <button type="button" className="btn small" disabled={locked} onClick={() => props.onToggleSkill("none")}>Aucun</button>
+              </div>
+              <div className="skill-list">
+                {filteredSkills.map((item) => {
+                  const active = skills.active.includes(item.id);
+                  return (
+                    <div key={item.id} className={"skill-row" + (active ? " active" : "")}>
+                      <div className="skill-copy">
+                        <strong>{item.id} <em>{item.category}{item.builtin ? "" : " · perso"}</em></strong>
+                        <span>{item.summary}</span>
+                      </div>
+                      <Toggle label={`Skill ${item.id}`} checked={active} disabled={locked} onChange={() => props.onToggleSkill(item.id)} />
+                    </div>
+                  );
+                })}
+                {filteredSkills.length === 0 && <p className="muted-note">Aucun skill correspondant.</p>}
+              </div>
+
+              <h3>Mémoire projet ({memory.path})</h3>
+              {props.workspace ? (
+                <>
+                  <p className="section-note">Ces consignes sont injectées automatiquement à chaque session dans ce projet. Les secrets connus sont masqués.</p>
+                  <textarea className="task-input memory-editor" rows={7} value={memoryDraft} disabled={!ready}
+                    placeholder="# Instructions projet ZeroCode&#10;- Toujours lancer pytest avant de conclure&#10;- Respecter le style TypeScript strict"
+                    onChange={(event) => setMemoryDraft(event.target.value)} />
+                  <div className="inline-actions">
+                    <button type="button" className="btn small primary" disabled={!ready || memoryDraft === memory.content}
+                      onClick={() => props.onSaveMemory(memoryDraft)}>
+                      <Save size={13} /> Enregistrer la mémoire
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="muted-note">Ouvrez un dossier de projet pour éditer sa mémoire persistante.</p>
+              )}
+            </>
+          )}
+
           {section === "subagents" && (
             <>
               <h2>Sous-agents</h2>
-              <p className="section-note">Les sous-agents sont des spécialistes isolés en lecture seule : ils explorent, analysent et rendent une synthèse. L’agent principal reste seul responsable des modifications.</p>
+              <p className="section-note">Les sous-agents sont des spécialistes isolés en lecture seule exécutés en parallèle : ils explorent, analysent et rendent une synthèse. L’agent principal reste seul responsable des modifications.</p>
               <Row title="Déléguer automatiquement" hint="Ajoute une consigne invitant l’agent à confier les analyses indépendantes à des spécialistes.">
                 <Toggle label="Déléguer automatiquement" checked={settings.autoDelegate} onChange={(autoDelegate) => update({ autoDelegate })} />
               </Row>
