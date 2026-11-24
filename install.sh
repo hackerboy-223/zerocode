@@ -346,13 +346,24 @@ install_engine() {
 
 
 install_linux_build_dependencies() {
-  info "Installation des bibliothèques natives nécessaires à Tauri…"
   if command -v apt-get >/dev/null 2>&1; then
+    REQUIRED_APT=(build-essential curl wget file libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf)
+    MISSING_APT=()
+    for pkg in "${REQUIRED_APT[@]}"; do
+      dpkg -s "$pkg" >/dev/null 2>&1 || MISSING_APT+=("$pkg")
+    done
+    if [[ "${#MISSING_APT[@]}" -eq 0 ]]; then
+      success "Dépendances natives Tauri déjà installées."
+      return
+    fi
+    info "Installation des bibliothèques natives nécessaires à Tauri…"
     as_root apt-get update
-    as_root apt-get install -y build-essential curl wget file libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
+    as_root apt-get install -y "${MISSING_APT[@]}"
   elif command -v dnf >/dev/null 2>&1; then
+    info "Installation des bibliothèques natives nécessaires à Tauri…"
     as_root dnf install -y gcc gcc-c++ make curl wget file openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel patchelf rpm-build
   elif command -v pacman >/dev/null 2>&1; then
+    info "Installation des bibliothèques natives nécessaires à Tauri…"
     as_root pacman -Sy --needed --noconfirm base-devel curl wget file openssl appmenu-gtk-module webkit2gtk-4.1 libappindicator-gtk3 librsvg xdotool patchelf fuse2
   else
     die "Distribution Linux non reconnue. Installe les dépendances Tauri indiquées dans docs/DESKTOP.md, puis relance."
@@ -405,6 +416,11 @@ install_node() {
 }
 
 install_rust() {
+  [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
+  if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
+    success "Rust détecté : $(rustc --version)"
+    return
+  fi
   if ! command -v rustup >/dev/null 2>&1; then
     info "Installation de Rust stable pour compiler l'application native…"
     TEMP_RUST="$(mktemp)"
