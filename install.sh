@@ -449,6 +449,19 @@ install_macos_app() {
   success "Application installée : $APP_DEST"
 }
 
+preserve_linux_package() {
+  pkg_file="$1"
+  install_cmd="$2"
+  save_dir="$HOME/Downloads"
+  [[ -d "$save_dir" ]] || save_dir="$HOME"
+  saved_pkg="$save_dir/$(basename "$pkg_file")"
+  cp -f -- "$pkg_file" "$saved_pkg"
+  warn "Paquet conservé pour éviter toute recompilation : $saved_pkg"
+  warn "Pour terminer l'installation maintenant, exécute :"
+  printf '  %s "%s"\n' "$install_cmd" "$saved_pkg" >&2
+  die "Authentification sudo annulée ou expirée."
+}
+
 install_linux_app() {
   BUNDLE_DIR="$BUILD_DIR/source/desktop/src-tauri/target/release/bundle"
   if command -v apt-get >/dev/null 2>&1; then
@@ -457,9 +470,9 @@ install_linux_app() {
     info "Installation du paquet système : $PACKAGE"
     PACKAGE_NAME="$(dpkg-deb -f "$PACKAGE" Package)"
     if dpkg-query -W -f='${Status}' "$PACKAGE_NAME" 2>/dev/null | grep -q "install ok installed"; then
-      as_root apt-get install -y --reinstall "$PACKAGE"
+      as_root apt-get install -y --reinstall "$PACKAGE" || preserve_linux_package "$PACKAGE" "sudo apt-get install -y --reinstall"
     else
-      as_root apt-get install -y "$PACKAGE"
+      as_root apt-get install -y "$PACKAGE" || preserve_linux_package "$PACKAGE" "sudo apt-get install -y"
     fi
   elif command -v dnf >/dev/null 2>&1; then
     PACKAGE="$(find "$BUNDLE_DIR/rpm" -maxdepth 1 -type f -name '*.rpm' -print -quit 2>/dev/null || true)"
@@ -467,9 +480,9 @@ install_linux_app() {
     info "Installation du paquet système : $PACKAGE"
     PACKAGE_NAME="$(rpm -qp --qf '%{NAME}' "$PACKAGE")"
     if rpm -q "$PACKAGE_NAME" >/dev/null 2>&1; then
-      as_root dnf reinstall -y "$PACKAGE"
+      as_root dnf reinstall -y "$PACKAGE" || preserve_linux_package "$PACKAGE" "sudo dnf reinstall -y"
     else
-      as_root dnf install -y "$PACKAGE"
+      as_root dnf install -y "$PACKAGE" || preserve_linux_package "$PACKAGE" "sudo dnf install -y"
     fi
   else
     APP_SOURCE="$(find "$BUNDLE_DIR/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit 2>/dev/null || true)"
