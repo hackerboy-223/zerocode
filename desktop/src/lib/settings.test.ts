@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_SETTINGS, sanitizeSettings } from "./settings";
+import { DEFAULT_SETTINGS, sanitizeSettings } from "./settingsCore.js";
 
 test("sanitizeSettings returns defaults for empty or invalid input", () => {
   assert.deepEqual(sanitizeSettings(null), DEFAULT_SETTINGS);
