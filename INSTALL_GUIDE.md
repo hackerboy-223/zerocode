@@ -154,12 +154,16 @@ Pour les tests ou le développement, tu peux forcer l'installation depuis la bra
 Linux/macOS :
 
 ```bash
+bash /tmp/zerocode-install.sh --source --mode both
+# ou pour cibler une branche précise :
 ZEROCODE_INSTALL_REF=main bash /tmp/zerocode-install.sh --mode both
 ```
 
 Windows :
 
 ```powershell
+& $installer -Source -Mode both
+# ou via variable d'environnement :
 $env:ZEROCODE_INSTALL_REF = "main"
 & $installer -Mode both
 Remove-Item Env:ZEROCODE_INSTALL_REF

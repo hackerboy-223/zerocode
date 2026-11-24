@@ -41,7 +41,9 @@ Le cœur de l'agent reste synchrone : une requête, un flux, un tour d'agent. Le
 | `prompts.py` | prompt système et instructions projet |
 | `security.py` | masquage DLP des secrets (`redact_secrets`) et pare-feu contre les commandes shell destructrices (`check_dangerous_command`) |
 | `checkpoints.py` | sauvegarde atomique avant écriture/édition et restauration sécurisée (`/undo`) |
-| `mcp.py` | client JSON-RPC stdio pour outils, ressources et prompts MCP, avec environnement assaini et approbation des actions distantes |\n| `hooks.py` | hooks locaux `PreToolUse` / `PostToolUse`, lancés sans shell depuis la configuration globale utilisateur |
+| `mcp.py` | client JSON-RPC stdio pour outils, ressources et prompts MCP, avec environnement assaini et approbation des actions distantes |
+| `hooks.py` | hooks locaux `PreToolUse` / `PostToolUse`, lancés sans shell depuis la configuration globale utilisateur |
+| `desktop_bridge.py` | pont JSONL local entre le moteur Python et ZeroCode Desktop (streaming, permissions, images, skills, mémoire projet, fournisseurs, sous-agents parallèles, réglages runtime) |
 | `tools/` | outils de fichiers, recherche, Git, shell, web, cartographie et vérification multi-stack, tâches, sous-agents spécialisés et permissions |
 
 ## Déroulement d'un tour
@@ -94,7 +96,7 @@ Le mode Full-Stack s'appuie sur des outils dédiés plutôt que sur une suite de
 - `project_map` dresse un inventaire borné du dépôt, identifie les manifestes, les piles et les points d'entrée, sans suivre les liens symboliques ni lire les secrets.
 - `git_status` et `git_diff` exposent les modifications suivies ; les chemins sensibles sont exclus du diff.
 - `project_verify` détecte les scripts et commandes de validation pour JavaScript/TypeScript, PHP, Python, Go, Rust, JVM, Ruby, .NET, Dart/Flutter, Swift, Elixir et C/C++.
-- `subagent` délègue des analyses isolées à sept profils en lecture seule : explorer, architect, reviewer, security, performance, tester et researcher. L'agent principal reste seul responsable des modifications.
+- `subagent` délègue des analyses isolées à sept profils en lecture seule : explorer, architect, reviewer, security, performance, tester et researcher. Plusieurs appels `subagent` (et les lancements simultanés depuis Desktop, jusqu'à 4) s'exécutent en parallèle avec comptage d'usage et cooldowns routeur protégés par verrous. L'agent principal reste seul responsable des modifications.
 - MCP peut fournir des outils, des ressources et des prompts. Les actions distantes exigent une confirmation, sauf serveur explicitement marqué `trusted: true` dans la configuration globale détenue par l'utilisateur. Les annotations `readOnlyHint` restent des indications fournies par le serveur.
 
 Les serveurs Playwright et Filesystem sont optionnels et documentés dans [MCP_SERVERS.md](MCP_SERVERS.md). Ils ne sont pas téléchargés avec ZeroCode.
@@ -124,9 +126,11 @@ Ce mécanisme est une approximation. Il ne remplace pas un comptage exact par mo
 ```bash
 pytest
 ruff check src tests
+cd desktop && npm test && npm run build
+cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml
 ```
 
-Les tests couvrent la configuration, le catalogue, le routage, les fournisseurs simulés, les outils, l'agent, les sessions, la compaction et le TUI headless (`run_test`). Aucun test ne contacte le réseau.
+Les tests couvrent la configuration, le catalogue, le routage, les fournisseurs simulés, les outils, l'agent (dont l'exécution parallèle des sous-agents), le pont Desktop, les sessions, la compaction, le TUI headless (`run_test`), la sécurité fichiers/recherche Rust côté Tauri et les préférences frontend. Aucun test ne contacte le réseau.
 
 ## Points d'extension
 

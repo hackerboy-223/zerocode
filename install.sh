@@ -46,6 +46,7 @@ Usage:
   bash install.sh --mode both      Installer TUI + Desktop
   bash install.sh --version latest Installer la dernière release stable
   bash install.sh --version v1.0.0 Installer une version précise
+  bash install.sh --source         Installer depuis la branche source (main)
   bash install.sh --yes --mode tui Confirmer automatiquement les étapes
 
 Variables:
@@ -160,7 +161,7 @@ resolve_install_ref() {
         INSTALL_REF="$SOURCE_REF"
         RELEASE_MODE="0"
       else
-        die "Impossible de joindre les releases GitHub (HTTP \${http_code:-inconnu}). Vérifie ta connexion puis relance."
+        die "Impossible de joindre les releases GitHub (HTTP ${http_code:-inconnu}). Vérifie ta connexion puis relance."
       fi
     fi
   elif [[ "$INSTALL_REF" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
@@ -551,6 +552,10 @@ install_desktop() {
 
   info "Installation des dépendances frontend…"
   (cd "$BUILD_DIR/source/desktop" && npm ci)
+  if [[ ! -f "$BUILD_DIR/source/desktop/public/vs/loader.js" ]]; then
+    info "Préparation des assets de l'éditeur Monaco…"
+    (cd "$BUILD_DIR/source/desktop" && node scripts/copy-monaco.mjs)
+  fi
 
   if [[ "$PLATFORM" == "macos" ]]; then
     BUNDLE_TARGET="app,dmg"
@@ -586,6 +591,10 @@ main() {
         INSTALL_REF="$2"
         shift 2
         ;;
+      --source)
+        INSTALL_REF="$SOURCE_REF"
+        shift
+        ;;
       *) die "Option inconnue : $1. Utilise --help pour voir les options." ;;
     esac
   done
@@ -597,7 +606,7 @@ main() {
   esac
 
   info "Installation sélectionnée : $INSTALL_MODE"
-  info "Branche source : $INSTALL_REF"
+  info "Version demandée : $INSTALL_REF"
   confirm "Continuer ? Les dépendances manquantes et les applications sélectionnées seront installées." || die "Installation annulée."
 
   install_engine

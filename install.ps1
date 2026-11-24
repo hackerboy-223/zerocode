@@ -1,6 +1,7 @@
-param(
+﻿param(
     [string]$Mode = "",
     [string]$Version = "",
+    [switch]$Source,
     [switch]$Yes
 )
 
@@ -11,6 +12,7 @@ if ([string]::IsNullOrWhiteSpace($InstallRef)) { $InstallRef = "latest" }
 if (-not [string]::IsNullOrWhiteSpace($Version)) { $InstallRef = $Version }
 $SourceRef = $env:ZEROCODE_SOURCE_REF
 if ([string]::IsNullOrWhiteSpace($SourceRef)) { $SourceRef = "main" }
+if ($Source) { $InstallRef = $SourceRef }
 $script:ReleaseMode = $false
 $script:Release = $null
 $script:WindowsArch = "x64"
@@ -333,6 +335,12 @@ function Install-Desktop {
             Write-Info "Installation des dépendances frontend (npm ci)…"
             & npm ci
             if ($LASTEXITCODE -ne 0) { Stop-Install "L'installation des dépendances npm a échoué." }
+
+            if (-not (Test-Path (Join-Path $desktopPath "public\vs\loader.js"))) {
+                Write-Info "Préparation des assets de l'éditeur Monaco…"
+                & node scripts\copy-monaco.mjs
+                if ($LASTEXITCODE -ne 0) { Stop-Install "La préparation des assets Monaco a échoué." }
+            }
 
             Write-Info "Compilation de ZeroCode Desktop…"
             & npm run app:build -- --bundles nsis

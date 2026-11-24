@@ -14,7 +14,7 @@ zerocode inspecte un dépôt, lit et modifie des fichiers, lance des tests et ex
 - Système de **Skills d'expertise** intégrés et extensibles (`/skills`, `/skill <nom>`, `--skill`) : `ultra-dev` (Ingénierie Senior), `cyber-sec` (Expert Cybersécurité, Audit OWASP/CWE & DevSecOps), `sys-tech` (Technicien Système, Réseau & Infra), `review` (Revue de code), `perf` (Haute Performance) et `sec-hardening` (Durcissement actif), plus découverte automatique de `.zerocode/skills/*.md` et `~/.config/zerocode/skills/*.md`.
 - Hooks de cycle de vie `PreToolUse` / `PostToolUse` configurables pour bloquer ou auditer les actions. Les hooks sont lus uniquement dans la configuration globale utilisateur et exécutés sans shell. Guide : [`docs/HOOKS.md`](docs/HOOKS.md).
 - Intégration Fabric native : `zerocode skills --sync-fabric` télécharge les Patterns (développement, sécurité, recherche, rédaction, apprentissage, etc.) dans le catalogue local et les stratégies de raisonnement dans un répertoire séparé. `--force` actualise les ressources déjà installées. Guide : [`docs/FABRIC_INTEGRATION.md`](docs/FABRIC_INTEGRATION.md). Connecteurs navigateur/fichiers (Playwright, filesystem) : [`docs/MCP_SERVERS.md`](docs/MCP_SERVERS.md).
-- Exécution parallèle automatique des appels d'outils en lecture seule (`ThreadPoolExecutor`), pré-injection directe des fichiers mentionnés avec `@chemin` (0 tour réseau) et cache TTL Git.
+- Exécution parallèle automatique des appels d'outils en lecture seule et des sous-agents spécialisés (`ThreadPoolExecutor`), pré-injection directe des fichiers mentionnés avec `@chemin` (0 tour réseau) et cache TTL Git.
 - Diagnostics syntaxiques instantanés (Python AST, JSON, TOML, Shell `bash -n` et JavaScript `node --check`) après chaque écriture ou édition pour auto-correction immédiate.
 - Sessions reprenables, mémoire projet persistante (`/remember`), copie rapide (`/copy`, `Ctrl+Y`), compaction du contexte, support multimodal (`/image`, `--image`), mode headless JSON Lines (`--json`) et autocomplétion shell (`zerocode completion`).
 - Interface TUI Textual sobre et moderne : sidebar projet/sessions, chat Markdown, streaming temps réel, diffs intégrés et approbations.
@@ -50,10 +50,12 @@ bash install.sh --version latest --mode both
 bash install.sh --version v1.0.0 --mode desktop
 ```
 
-Pour forcer le parcours depuis une branche source :
+Pour forcer le parcours depuis la branche source (`main`) afin de profiter immédiatement des derniers commits :
 
 ```bash
-ZEROCODE_INSTALL_REF=main bash install.sh --mode desktop
+bash install.sh --source --mode desktop
+# ou avec une branche précise :
+ZEROCODE_INSTALL_REF=main bash install.sh --mode both
 ```
 
 ### Windows · PowerShell
@@ -64,11 +66,14 @@ irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | 
 
 Le menu propose les mêmes trois choix. Une release stable installe le moteur depuis le wheel Python vérifié puis lance l'installateur Desktop Windows. `winget`, Node.js, Rust et Visual Studio Build Tools ne sont nécessaires que pour le parcours de compilation source.
 
-Pour choisir une version précise :
+Pour choisir une version précise ou installer directement depuis `main` :
 
 ```powershell
 $env:ZEROCODE_INSTALL_REF = "v1.0.0"
 irm https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install.ps1 | iex
+
+# ou depuis le script local sur la branche source (main) :
+.\install.ps1 -Source -Mode both
 ```
 
 ### Installation manuelle du moteur
@@ -95,7 +100,7 @@ ruff check src tests
 
 La release stable **[ZeroCode v1.0.0](https://github.com/hackerboy-223/zerocode/releases/tag/v1.0.0)** a été publiée le 22 novembre 2026. Elle comprend le moteur Python, les paquets Desktop pour Linux x86_64, Windows x64 et macOS Intel/Apple Silicon, ainsi que le manifeste `SHA256SUMS`.
 
-Le workflow de publication a terminé ses **7 jobs sur 7 avec succès**. Les workflows CI et Quality sur `main` sont également au vert. Les scripts d'installation téléchargent les paquets de la release stable et vérifient leur empreinte avant installation. Les binaires ne sont toutefois pas encore signés avec un certificat éditeur Windows ou Apple ; consulte le [guide d'installation](INSTALL_GUIDE.md) pour les avertissements et vérifications.
+Le workflow de publication a terminé ses **7 jobs sur 7 avec succès**. Les workflows CI, Quality et Desktop (Python, Rust `cargo test`, frontend `npm test` + Vite) sur `main` sont au vert. Les scripts d'installation téléchargent la release stable et vérifient son empreinte par défaut ; pour installer immédiatement les derniers ajouts de `main` (sous-agents parallèles, images, skills, mémoire projet, fournisseurs, recherche native Rust), utilise `bash install.sh --source --mode both` ou `.\install.ps1 -Source -Mode both`. Les binaires ne sont toutefois pas encore signés avec un certificat éditeur Windows ou Apple ; consulte le [guide d'installation](INSTALL_GUIDE.md) pour les avertissements et vérifications.
 
 ## Versions, mises à jour et désinstallation
 
@@ -375,13 +380,13 @@ ZeroCode existe aussi sous forme d’application graphique native, construite av
 
 Fonctionnalités principales :
 
-- Conversations avec réponses en streaming et blocs de code formatés.
-- Modes **Build**, **Plan** et **Full-stack**, avec sélection du modèle et des permissions.
-- Gestion des projets et des sessions, reprise d'une conversation et création d'une nouvelle session.
-- Inspecteur latéral : branche Git, tâches, historique des outils, explorateur de fichiers et diffs de session. Pour éviter d'exécuter à l'ouverture des filtres ou helpers Git configurés par un dépôt, l'état automatique n'exécute pas `git status` : la liste des fichiers modifiés n'est pas préremplie.
-- Terminal local intégré basé sur un pseudo-terminal (PTY).
-- Demandes d'autorisation explicites pour les opérations sensibles et restauration prudente des checkpoints.
-- Mascotte animée LUPUS, sans dépendance à une ressource distante.
+- **Interface minimaliste** : barre latérale pliable, conversation centrée, blocs de code formatés avec copie rapide, appels d'outils regroupés et thèmes Système / Clair / Sombre avec couleurs d'accent.
+- **Sous-agents en parallèle** : 7 spécialistes en lecture seule (`explorer`, `architect`, `reviewer`, `security`, `performance`, `tester`, `researcher`), pilotables depuis le panneau **Agents** ou `/agent` (jusqu'à 4 simultanément) + orchestrations prêtes à l'emploi.
+- **Multimodal (images)** : collage (`Ctrl+V`), glisser-déposer ou import d'images directement dans le chat.
+- **Skills, mémoire projet & fournisseurs** : activation en un clic des skills (`/skill`), édition de `.zerocode/instructions.md` (`/remember`), gestion locale des clés API (`/providers`, coffre `0600`) et préférences complètes (`Ctrl+,`).
+- **Modes et commandes rapides** : **Build**, **Plan** et **Full-stack**, commandes slash (`/agent`, `/skill`, `/remember`, `/providers`, `/model`, `/think`, `/compact`, `/undo`…), mentions `@fichier` et palette `Ctrl+K`.
+- **Inspecteur latéral (`Ctrl+I`)** : Aperçu, Agents, Fichiers, Changements (branche Git, diffs de session et checkpoints ; pour éviter d'exécuter à l'ouverture des filtres ou helpers Git configurés par un dépôt, l'état automatique n'exécute pas `git status`), éditeur Monaco, recherche native Rust ultra-rapide et gestionnaire MCP.
+- **Terminal PTY local** redimensionnable (`Ctrl+\``), demandes d'autorisation explicites, démarrage sûr en mode `ask` et mascotte vectorielle LUPUS.
 
 L'application et son terminal exécutent les commandes sur l'ordinateur de l'utilisateur. Les prompts, extraits de fichiers et réponses peuvent être transmis au fournisseur de modèle sélectionné. Pour garder l'inférence sur la machine, configure un fournisseur local compatible comme Ollama.
 
