@@ -184,28 +184,53 @@ function Get-VerifiedReleaseAsset([string]$Suffix, [string]$Architecture = "any"
     }
 }
 
-function Get-PythonCommand {
+function Test-PythonCommand {
+    $candidates = @()
     if (Get-Command py -ErrorAction SilentlyContinue) {
-        $script:PythonCommand = "py"
-        $script:PythonPrefix = @("-3")
-    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
-        $script:PythonCommand = "python"
-        $script:PythonPrefix = @()
-    } else {
-        Install-WingetPackage "Python.Python.3.12"
-        if (Get-Command py -ErrorAction SilentlyContinue) {
-            $script:PythonCommand = "py"
-            $script:PythonPrefix = @("-3")
-        } else {
-            Stop-Install "Python vient d'être installé, mais son lanceur n'est pas visible. Ferme puis rouvre PowerShell et relance install.ps1."
+        $candidates += [pscustomobject]@{ Command = "py"; Prefix = @("-3") }
+    }
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        $candidates += [pscustomobject]@{ Command = "python"; Prefix = @() }
+    }
+
+    foreach ($candidate in $candidates) {
+        $prefix = $candidate.Prefix
+        $executable = & $candidate.Command @prefix -c "import sys; print(sys.executable)" 2>$null
+        $pythonExitCode = $LASTEXITCODE
+        if ($pythonExitCode -ne 0 -or [string]::IsNullOrWhiteSpace(($executable -join "").Trim())) {
+            continue
         }
+
+        $version = & $candidate.Command @prefix -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
+        $pythonExitCode = $LASTEXITCODE
+        if ($pythonExitCode -ne 0 -or [string]::IsNullOrWhiteSpace(($version -join "").Trim())) {
+            continue
+        }
+
+        try { $parsedVersion = [version]($version -join "").Trim() } catch { continue }
+        if ($parsedVersion -lt [version]"3.10") {
+            continue
+        }
+
+        $script:PythonCommand = $candidate.Command
+        $script:PythonPrefix = $prefix
+        $script:PythonExecutable = ($executable -join "").Trim()
+        Write-Ok "Python $($version -join '') détecté."
+        return $true
     }
-    $script:PythonExecutable = (& $script:PythonCommand @script:PythonPrefix -c "import sys; print(sys.executable)").Trim()
-    $version = & $script:PythonCommand @script:PythonPrefix -c "import sys; print('%d.%d' % sys.version_info[:2])"
-    if ($LASTEXITCODE -ne 0 -or [version]$version -lt [version]"3.10") {
-        Stop-Install "Python 3.10+ est requis (version détectée : $version)."
+    return $false
+}
+
+function Get-PythonCommand {
+    if (Test-PythonCommand) { return }
+
+    Write-Info "Python utilisable introuvable. Installation de Python 3.12…"
+    Install-WingetPackage "Python.Python.3.12"
+    Refresh-Path
+
+    if (-not (Test-PythonCommand)) {
+        Stop-Install "Python a été installé, mais aucun interpréteur valide n'est accessible. Désactive les alias d'exécution Python du Microsoft Store dans Paramètres > Applications > Paramètres avancés des applications > Alias d'exécution des applications, puis relance install.ps1."
     }
-    Write-Ok "Python $version détecté."
 }
 function Install-Engine {
     Get-PythonCommand
