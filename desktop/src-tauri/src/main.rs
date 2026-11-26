@@ -547,6 +547,7 @@ struct WorkspaceFilePreview {
 struct GitChangedFile {
     status: String,
     path: String,
+    staged: bool,
 }
 
 #[derive(Serialize)]
@@ -555,6 +556,13 @@ struct GitWorkspaceInfo {
     branch: String,
     dirty_count: usize,
     changed_files: Vec<GitChangedFile>,
+}
+
+#[derive(Serialize)]
+struct GitFileVersions {
+    path: String,
+    original: String,
+    modified: String,
 }
 
 #[derive(Serialize)]
@@ -896,19 +904,13 @@ fn create_workspace_file(
 #[tauri::command]
 fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
     let workspace = resolve_workspace(&cwd)?;
-    let branch_out = ProcessCommand::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(&workspace)
+    let inside = safe_git_command(&workspace)
+        .args(["rev-parse", "--is-inside-work-tree"])
         .output();
-    let Ok(branch_res) = branch_out else {
-        return Ok(GitWorkspaceInfo {
-            is_repo: false,
-            branch: "local".to_string(),
-            dirty_count: 0,
-            changed_files: Vec::new(),
-        });
-    };
-    if !branch_res.status.success() {
+    let is_repo = inside
+        .map(|res| res.status.success() && String::from_utf8_lossy(&res.stdout).trim() == "true")
+        .unwrap_or(false);
+    if !is_repo {
         return Ok(GitWorkspaceInfo {
             is_repo: false,
             branch: "local".to_string(),
@@ -916,24 +918,226 @@ fn workspace_git_info(cwd: String) -> Result<GitWorkspaceInfo, String> {
             changed_files: Vec::new(),
         });
     }
-    let branch = String::from_utf8_lossy(&branch_res.stdout)
-        .trim()
-        .to_string();
+    let branch = safe_git_command(&workspace)
+        .args(["symbolic-ref", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|res| res.status.success())
+        .map(|res| String::from_utf8_lossy(&res.stdout).trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            safe_git_command(&workspace)
+                .args(["rev-parse", "--abbrev-ref", "HEAD"])
+                .output()
+                .ok()
+                .filter(|res| res.status.success())
+                .map(|res| String::from_utf8_lossy(&res.stdout).trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or_else(|| "HEAD".to_string());
     // Git status can invoke repository-configured fsmonitor helpers and clean filters.
     // Workspace opening must never execute those helpers implicitly. Keep the
     // automatic overview read-only until Git inspection is explicitly approved.
-    let changed_files: Vec<GitChangedFile> = Vec::new();
-    let dirty_count = 0;
     Ok(GitWorkspaceInfo {
         is_repo: true,
-        branch: if branch.is_empty() {
-            "HEAD".to_string()
-        } else {
-            branch
-        },
+        branch,
+        dirty_count: 0,
+        changed_files: Vec::new(),
+    })
+}
+
+fn safe_git_command(workspace: &str) -> ProcessCommand {
+    let mut cmd = ProcessCommand::new("git");
+    cmd.args([
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "diff.external=",
+    ])
+    .current_dir(workspace);
+    cmd
+}
+
+fn validate_relative_git_path(relative: &str) -> Result<String, String> {
+    let cleaned = relative.trim().replace('\\', "/");
+    if cleaned.is_empty() || cleaned.starts_with('-') {
+        return Err("Chemin Git invalide.".to_string());
+    }
+    let path = Path::new(&cleaned);
+    if path.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err("Chemin Git hors du dépôt refusé.".to_string());
+    }
+    if is_sensitive_path(path) {
+        return Err("Fichier de secrets protégé par ZeroCode.".to_string());
+    }
+    Ok(cleaned)
+}
+
+#[tauri::command]
+fn workspace_git_status_explicit(cwd: String) -> Result<GitWorkspaceInfo, String> {
+    let base = workspace_git_info(cwd.clone())?;
+    if !base.is_repo {
+        return Ok(base);
+    }
+    let workspace = resolve_workspace(&cwd)?;
+    let out = safe_git_command(&workspace)
+        .args(["status", "--porcelain=v1", "-uall"])
+        .output()
+        .map_err(|error| format!("Impossible d’exécuter git status : {error}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let mut changed_files: Vec<GitChangedFile> = Vec::new();
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        if line.len() < 4 {
+            continue;
+        }
+        let bytes = line.as_bytes();
+        let x = bytes[0] as char;
+        let y = bytes[1] as char;
+        let raw_path = line[3..].trim().trim_matches('"');
+        let path = raw_path
+            .rsplit(" -> ")
+            .next()
+            .unwrap_or(raw_path)
+            .to_string();
+        if path.is_empty() {
+            continue;
+        }
+        let staged = x != ' ' && x != '?';
+        let code = format!("{x}{y}").trim().to_string();
+        changed_files.push(GitChangedFile {
+            status: if code.is_empty() {
+                "M".to_string()
+            } else {
+                code
+            },
+            path,
+            staged,
+        });
+    }
+    let dirty_count = changed_files.len();
+    if changed_files.len() > 100 {
+        changed_files.truncate(100);
+    }
+    Ok(GitWorkspaceInfo {
+        is_repo: true,
+        branch: base.branch,
         dirty_count,
         changed_files,
     })
+}
+
+#[tauri::command]
+fn workspace_git_file_versions(
+    cwd: String,
+    relative_path: String,
+) -> Result<GitFileVersions, String> {
+    let rel = validate_relative_git_path(&relative_path)?;
+    let workspace = resolve_workspace(&cwd)?;
+    let head_spec = format!("HEAD:{rel}");
+    let head_out = safe_git_command(&workspace)
+        .args(["show", &head_spec])
+        .output()
+        .map_err(|error| format!("Lecture HEAD impossible : {error}"))?;
+    let original = if head_out.status.success() {
+        if head_out.stdout.len() > 200_000 {
+            return Err(
+                "Version HEAD trop volumineuse pour la comparaison (> 200 Ko).".to_string(),
+            );
+        }
+        if head_out.stdout.iter().take(4096).any(|&b| b == 0) {
+            return Err("Comparaison indisponible pour un fichier binaire.".to_string());
+        }
+        String::from_utf8(head_out.stdout)
+            .map_err(|_| "Version HEAD non UTF-8 : comparaison refusée.".to_string())?
+    } else {
+        String::new()
+    };
+
+    let candidate = PathBuf::from(&workspace).join(&rel);
+    let modified = if candidate.exists() {
+        read_workspace_file(cwd, rel.clone())?.content
+    } else {
+        String::new()
+    };
+
+    Ok(GitFileVersions {
+        path: rel,
+        original,
+        modified,
+    })
+}
+
+#[tauri::command]
+fn workspace_git_stage(
+    cwd: String,
+    relative_path: String,
+    unstage: bool,
+) -> Result<GitWorkspaceInfo, String> {
+    let rel = validate_relative_git_path(&relative_path)?;
+    let workspace = resolve_workspace(&cwd)?;
+    let mut cmd = safe_git_command(&workspace);
+    if unstage {
+        cmd.args(["reset", "HEAD", "--", &rel]);
+    } else {
+        cmd.args(["add", "--", &rel]);
+    }
+    let out = cmd
+        .output()
+        .map_err(|error| format!("Opération Git impossible : {error}"))?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            "L’opération Git a échoué.".to_string()
+        } else {
+            err
+        });
+    }
+    workspace_git_status_explicit(cwd)
+}
+
+#[tauri::command]
+fn workspace_git_commit(cwd: String, message: String) -> Result<String, String> {
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return Err("Le message de commit ne peut pas être vide.".to_string());
+    }
+    if trimmed.len() > 500 {
+        return Err("Le message de commit ne doit pas dépasser 500 caractères.".to_string());
+    }
+    let workspace = resolve_workspace(&cwd)?;
+    let out = safe_git_command(&workspace)
+        .args(["commit", "--no-verify", "-m", trimmed])
+        .output()
+        .map_err(|error| format!("Commit Git impossible : {error}"))?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        return Err(if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            "Rien à commiter (indexez d’abord au moins un fichier).".to_string()
+        });
+    }
+    let summary = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()
+        .unwrap_or("Commit créé.")
+        .trim()
+        .to_string();
+    Ok(summary)
 }
 
 #[tauri::command]
@@ -1108,7 +1312,11 @@ fn main() {
             write_workspace_file,
             create_workspace_file,
             search_workspace_files,
-            workspace_git_info
+            workspace_git_info,
+            workspace_git_status_explicit,
+            workspace_git_file_versions,
+            workspace_git_stage,
+            workspace_git_commit
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de ZeroCode Desktop");
@@ -1223,6 +1431,55 @@ mod tests {
         let info = workspace_git_info(dir.to_str().unwrap().to_string()).unwrap();
         assert!(!info.is_repo);
         assert_eq!(info.dirty_count, 0);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_relative_git_path_blocks_flags_escape_and_secrets() {
+        assert!(validate_relative_git_path("-f").is_err());
+        assert!(validate_relative_git_path("../secret.txt").is_err());
+        assert!(validate_relative_git_path(".env").is_err());
+        assert!(validate_relative_git_path("src/main.rs").is_ok());
+    }
+
+    #[test]
+    fn explicit_git_status_diff_stage_and_commit_flow() {
+        let dir = make_temp_workspace("git-flow");
+        let cwd = dir.to_str().unwrap().to_string();
+
+        let init = ProcessCommand::new("git")
+            .args(["init"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        assert!(init.status.success());
+        ProcessCommand::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        ProcessCommand::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+
+        fs::write(dir.join("hello.txt"), "v1\n").unwrap();
+        let staged = workspace_git_stage(cwd.clone(), "hello.txt".into(), false).unwrap();
+        assert_eq!(staged.dirty_count, 1);
+        assert!(staged.changed_files[0].staged);
+        let summary = workspace_git_commit(cwd.clone(), "Initial commit".into()).unwrap();
+        assert!(summary.contains("Initial commit"));
+
+        fs::write(dir.join("hello.txt"), "v2\n").unwrap();
+        let dirty = workspace_git_status_explicit(cwd.clone()).unwrap();
+        assert_eq!(dirty.dirty_count, 1);
+        assert!(!dirty.changed_files[0].staged);
+
+        let versions = workspace_git_file_versions(cwd.clone(), "hello.txt".into()).unwrap();
+        assert_eq!(versions.original, "v1\n");
+        assert_eq!(versions.modified, "v2\n");
+
         let _ = fs::remove_dir_all(&dir);
     }
 }

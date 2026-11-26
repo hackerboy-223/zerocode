@@ -144,23 +144,24 @@ Vérifie que le shell défini par `$SHELL` existe. Sur Linux, vérifie la prése
 
 Cette version fournit :
 - **Fenêtre desktop native** (Tauri 2 + React + TypeScript) avec icônes multi-plateformes configurées.
-- **Affichage minimal** : barre latérale (projets et conversations groupées par date), conversation centrée, inspecteur masqué par défaut. Le fil regroupe les appels d'outils en lignes repliables et affiche les sous-agents sous forme de cartes.
+- **Affichage minimal & coloration syntaxique** : barre latérale (projets et conversations groupées par date avec **renommage inline** et **bifurcation / fork**), conversation centrée avec blocs de code colorés localement (JS/TS, Python, Rust, Bash, JSON, SQL), inspecteur masqué par défaut. Le fil regroupe les appels d'outils en lignes repliables et affiche les sous-agents sous forme de cartes.
 - **Sous-agents en parallèle** : sept spécialistes en lecture seule (`explorer`, `architect`, `reviewer`, `security`, `performance`, `tester`, `researcher`), exécutables en parallèle (jusqu'à 4 simultanément) aussi bien par l'agent principal que depuis le panneau **Agents** ou `/agent [rôle] <tâche>`. Les exécutions sont suivies en direct avec leurs outils, leur durée et leur synthèse.
 - **Multimodal (images)** : collage (`Ctrl + V`), glisser-déposer ou bouton d'import d'images (PNG, JPEG, WebP, GIF, jusqu'à 4 images) directement dans la zone de saisie.
-- **Skills & mémoire projet** : activation en un clic des skills intégrés ou personnalisés (`/skill <nom>`) et édition de la mémoire persistante `.zerocode/instructions.md` (`/remember <règle>`) depuis l'onglet Aperçu ou les Préférences.
+- **Skills, mémoire projet, hooks & diagnostic** : activation en un clic des skills intégrés ou personnalisés (`/skill <nom>`), édition de `.zerocode/instructions.md` (`/remember <règle>`), gestion des hooks globaux `PreToolUse` / `PostToolUse` (`/hooks`, sans shell et hors dépôt projet) et diagnostic local (`/doctor`).
 - **Fournisseurs & clés API** : gestion locale des clés API (coffre chiffré par permissions `0600`, jamais réaffichées en clair) et actualisation à chaud des modèles disponibles (`/providers`).
-- **Commandes rapides** dans la zone de saisie : `/agent`, `/skill`, `/remember`, `/providers`, `/plan`, `/build`, `/fullstack`, `/model`, `/think`, `/new`, `/compact`, `/undo`, `/copy`, `/terminal`, `/settings`, `/help`. `@` propose les fichiers du projet.
-- **Préférences (`Ctrl + ,`)** en huit sections :
+- **Commandes rapides** dans la zone de saisie : `/agent`, `/skill`, `/remember`, `/providers`, `/hooks`, `/doctor`, `/rename`, `/fork`, `/plan`, `/build`, `/fullstack`, `/model`, `/think`, `/new`, `/compact`, `/undo`, `/copy`, `/terminal`, `/settings`, `/help`. `@` propose les fichiers du projet.
+- **Préférences (`Ctrl + ,`)** en neuf sections :
   - *Apparence* : thème Système/Clair/Sombre, couleur d'accent, densité, taille du texte.
   - *Agent* : mode (Build / Plan / Full-stack), politique d'autorisation (`ask`, `auto`, `allow`), modèle, profondeur de raisonnement, mode/modèle/raisonnement par défaut au démarrage.
   - *Fournisseurs & clés* : état de chaque fournisseur, enregistrement/suppression des clés API locales.
   - *Exécution* : étapes maximum, délai des commandes, jetons de sortie, température, seuil et activation de la compaction, routage par tâche, repli automatique, modèles gratuits uniquement, affichage des diffs. Appliqués à chaud puis rappliqués à chaque démarrage.
   - *Skills & mémoire* : filtrage/activation de tous les skills et éditeur complet de `.zerocode/instructions.md`.
+  - *Hooks globaux* : ajout/suppression des hooks `PreToolUse` et `PostToolUse` dans `~/.config/zerocode/config.json`.
   - *Sous-agents* : délégation automatique et spécialiste par défaut.
   - *Interface* : touche d'envoi (Entrée ou Ctrl + Entrée), défilement automatique, raisonnement et détails d'outils, confirmation des modes à risque, notification de fin de tâche.
-  - *Données & raccourcis* : compaction, copie de la conversation en Markdown, projets récents, réinitialisation.
+  - *Diagnostic & données* : diagnostic local (`/doctor`), compaction, copie de la conversation en Markdown, projets récents, réinitialisation.
 - **Frontières de sécurité inchangées** : l'accès hors du projet, la protection des secrets et la politique d'autorisation ne sont jamais restaurés ni modifiés par les réglages d'exécution ; le démarrage reste en mode `ask`, et Full-stack n'est jamais réactivé automatiquement.
-- **Inspecteur latéral** (`Ctrl + I`) à sept onglets : Aperçu (état, skills, mémoire, plan de travail, annulation), Agents, Fichiers, Changements (branche Git sans exécution implicite de `git status`, diffs de session, annulation), Code (Monaco), Recherche (recherche native Rust jusqu'à 4 000 fichiers, hors secrets et dossiers générés) et MCP.
+- **Inspecteur latéral** (`Ctrl + I`) à sept onglets : Aperçu (état, skills, mémoire, plan de travail, annulation), Agents, Fichiers, Changements (inspection Git explicite avec `core.fsmonitor=false` et `core.hooksPath=/dev/null`, indexation/unstage, commit, comparateur **Monaco DiffEditor** côte-à-côte HEAD ↔ fichier, diffs de session et checkpoints), Code (éditeur & comparateur Monaco), Recherche (recherche native Rust jusqu'à 4 000 fichiers, hors secrets et dossiers générés) et MCP.
 - **Palette de commandes (`Ctrl + K`)**, **Terminal PTY local** redimensionnable (`Ctrl` + accent grave), barre latérale (`Ctrl + B`).
 
 ### Protocole du pont (nouveautés)
@@ -173,5 +174,8 @@ Cette version fournit :
 | `skill_toggle {name}` / `skills_set {names}` | Active ou ajuste les skills ; émet `skills_changed` |
 | `memory_add {note}` / `memory_save {content}` | Met à jour `.zerocode/instructions.md` ; émet `memory_changed` |
 | `provider_key_save {provider, key}` / `provider_key_delete {provider}` | Met à jour le coffre de clés API et recharge les modèles à chaud ; émet `providers_changed` et `models_changed` |
+| `rename_session {session_id, title}` / `fork_session {session_id}` | Renomme ou bifurque une conversation ; émet `sessions_changed` / `session_changed` |
+| `hooks_list` / `hooks_save {hooks}` | Gère les hooks globaux `PreToolUse` / `PostToolUse` à chaud ; émet `hooks_changed` |
+| `doctor_run` | Exécute le diagnostic local ; émet `doctor_report` |
 
-Les événements `ready` et `session_changed` incluent désormais `runtime`, `subagent_roles`, `skills`, `memory` et `providers`.
+Les événements `ready` et `session_changed` incluent désormais `runtime`, `subagent_roles`, `skills`, `memory`, `providers` et `hooks`.

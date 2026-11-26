@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, BookmarkPlus, Check, Code2, FileDiff, FileText, Folder, Plus, RefreshCw, RotateCcw } from "lucide-react";
+import { ArrowLeft, BookmarkPlus, Check, Code2, Columns2, FileDiff, FileText, Folder, GitCommitHorizontal, Minus, Plus, RefreshCw, RotateCcw } from "lucide-react";
 import type { DiffEntry, GitWorkspaceInfo, ProjectMemory, SkillsState, TodoItem, WorkspaceEntry } from "../types";
 
 const shortPath = (path: string) => path.replace(/\/+$/, "").split(/[\\/]/).filter(Boolean).pop() || path;
@@ -135,22 +135,68 @@ export function FilesPanel({ workspace, currentDir, entries, loading, filter, on
   );
 }
 
-export function ChangesPanel({ git, diffs, checkpoints, busy, onOpenFile, onUndo }: {
-  git: GitWorkspaceInfo; diffs: DiffEntry[]; checkpoints: number; busy: boolean; onOpenFile: (path: string) => void; onUndo: () => void;
+export function ChangesPanel({
+  workspace, git, gitInspected, gitLoading, diffs, checkpoints, busy,
+  onInspectGit, onStageFile, onCommit, onOpenFile, onOpenDiff, onUndo
+}: {
+  workspace: string | null; git: GitWorkspaceInfo; gitInspected: boolean; gitLoading: boolean;
+  diffs: DiffEntry[]; checkpoints: number; busy: boolean;
+  onInspectGit: () => void; onStageFile: (path: string, unstage: boolean) => void;
+  onCommit: (message: string) => Promise<boolean>; onOpenFile: (path: string) => void;
+  onOpenDiff: (path: string) => void; onUndo: () => void;
 }) {
+  const [commitMsg, setCommitMsg] = useState("");
+  const [committing, setCommitting] = useState(false);
+  const stagedCount = git.changed_files.filter((item) => item.staged).length;
+
   return (
     <div className="panel">
-      {git.changed_files.length > 0 && (
+      {workspace && git.is_repo && (
         <div className="panel-section">
-          <div className="panel-label">GIT · {git.branch} <span>{git.changed_files.length}</span></div>
-          <div className="file-list">
-            {git.changed_files.map((item) => (
-              <button type="button" key={item.path} className="file-item" onClick={() => onOpenFile(item.path)} title={item.path}>
-                <b className={"git-badge s-" + item.status.replace(/[^A-Z?]/g, "")}>{item.status.trim() || "?"}</b>
-                <span>{item.path}</span>
-              </button>
-            ))}
+          <div className="panel-label">
+            <span>GIT · {git.branch}</span>
+            <button type="button" className="link-btn" disabled={gitLoading} onClick={onInspectGit}>
+              {gitLoading ? "Analyse…" : gitInspected ? "Actualiser" : "Inspecter Git"}
+            </button>
           </div>
+          {!gitInspected ? (
+            <p className="muted-note">Par sécurité, `git status` n’est jamais lancé automatiquement à l’ouverture. Cliquez sur « Inspecter Git » pour lister et indexer vos fichiers.</p>
+          ) : git.changed_files.length === 0 ? (
+            <p className="muted-note">Arbre de travail propre.</p>
+          ) : (
+            <>
+              <div className="file-list">
+                {git.changed_files.map((item) => (
+                  <div key={item.path} className="git-row">
+                    <button type="button" className="file-item" onClick={() => onOpenDiff(item.path)} title={`Comparer ${item.path} avec HEAD`}>
+                      <b className={"git-badge s-" + item.status.replace(/[^A-Z?]/g, "")}>{item.status.trim() || "?"}</b>
+                      <span>{item.path}</span>
+                    </button>
+                    <button type="button" className="tiny-icon" onClick={() => onOpenFile(item.path)} title="Ouvrir dans l’éditeur"><Code2 size={12} /></button>
+                    <button type="button" className={"tiny-icon" + (item.staged ? " staged-btn" : "")}
+                      onClick={() => onStageFile(item.path, Boolean(item.staged))}
+                      title={item.staged ? "Retirer de l’index (unstage)" : "Indexer (stage)"}>
+                      {item.staged ? <Minus size={12} /> : <Plus size={12} />}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <form className="git-commit-form" onSubmit={async (event) => {
+                event.preventDefault();
+                if (!commitMsg.trim() || stagedCount === 0 || committing) return;
+                setCommitting(true);
+                try {
+                  if (await onCommit(commitMsg.trim())) setCommitMsg("");
+                } finally { setCommitting(false); }
+              }}>
+                <input className="text-input" value={commitMsg} onChange={(event) => setCommitMsg(event.target.value)}
+                  placeholder={stagedCount > 0 ? `Message de commit (${stagedCount} indexé(s))…` : "Indexez (+) des fichiers pour commiter"} />
+                <button type="submit" className="btn small primary" disabled={!commitMsg.trim() || stagedCount === 0 || committing} title="Créer le commit">
+                  <GitCommitHorizontal size={13} /> {committing ? "…" : "Commit"}
+                </button>
+              </form>
+            </>
+          )}
         </div>
       )}
       <div className="panel-section">
@@ -158,7 +204,12 @@ export function ChangesPanel({ git, diffs, checkpoints, busy, onOpenFile, onUndo
         {checkpoints > 0 && <button type="button" className="btn small full" onClick={onUndo} disabled={busy}><RotateCcw size={12} /> Annuler la dernière modification ({checkpoints})</button>}
         {diffs.length === 0 ? <div className="empty-block"><FileDiff size={22} /><span>Les modifications de l’agent apparaîtront ici avec leur diff.</span></div> : diffs.map((item) => (
           <div key={item.id} className="diff-card">
-            <div className="diff-head"><FileDiff size={13} /><strong>{item.path}</strong><button type="button" className="icon-btn" onClick={() => onOpenFile(item.path)} title="Ouvrir dans l’éditeur"><Code2 size={13} /></button></div>
+            <div className="diff-head">
+              <FileDiff size={13} />
+              <strong>{item.path}</strong>
+              {git.is_repo && <button type="button" className="icon-btn" onClick={() => onOpenDiff(item.path)} title="Comparer côte-à-côte (Diff Monaco)"><Columns2 size={13} /></button>}
+              <button type="button" className="icon-btn" onClick={() => onOpenFile(item.path)} title="Ouvrir dans l’éditeur"><Code2 size={13} /></button>
+            </div>
             <pre className="diff-body">
               {item.diff.split("\n").map((line, index) => {
                 const cls = line.startsWith("+") && !line.startsWith("+++") ? "add" : line.startsWith("-") && !line.startsWith("---") ? "del" : line.startsWith("@@") ? "hunk" : "";

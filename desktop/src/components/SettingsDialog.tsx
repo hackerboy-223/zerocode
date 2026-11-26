@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Bot, Cpu, Database, ExternalLink, KeyRound, Keyboard, Palette, Save,
-  ShieldCheck, SlidersHorizontal, Sparkles, Trash2, Users, X
+  Bot, Cpu, Database, ExternalLink, KeyRound, Keyboard, Palette, Plus, RefreshCw, Save,
+  ShieldCheck, SlidersHorizontal, Sparkles, Stethoscope, Terminal, Trash2, Users, X
 } from "lucide-react";
 import { Row, NumberField, Segmented, Toggle } from "./ui";
 import { DEFAULT_RUNTIME, type Accent, type Settings, type ThinkLevel } from "../lib/settings";
-import type { ProjectMemory, ProviderStatus, RuntimeSettings, SkillsState, SubagentRole } from "../types";
+import type { DoctorReport, HookEntry, HooksConfig, ProjectMemory, ProviderStatus, RuntimeSettings, SkillsState, SubagentRole } from "../types";
 
-export type SettingsSection = "general" | "agent" | "providers" | "runtime" | "skills" | "subagents" | "interface" | "data";
+export type SettingsSection = "general" | "agent" | "providers" | "runtime" | "skills" | "hooks" | "subagents" | "interface" | "data";
 
 const sections: Array<{ id: SettingsSection; label: string; icon: typeof Palette }> = [
   { id: "general", label: "Apparence", icon: Palette },
@@ -16,9 +16,10 @@ const sections: Array<{ id: SettingsSection; label: string; icon: typeof Palette
   { id: "providers", label: "Fournisseurs & clés", icon: KeyRound },
   { id: "runtime", label: "Exécution", icon: Cpu },
   { id: "skills", label: "Skills & mémoire", icon: Sparkles },
+  { id: "hooks", label: "Hooks globaux", icon: Terminal },
   { id: "subagents", label: "Sous-agents", icon: Users },
   { id: "interface", label: "Interface", icon: SlidersHorizontal },
-  { id: "data", label: "Données & raccourcis", icon: Database }
+  { id: "data", label: "Diagnostic & données", icon: Database }
 ];
 
 const accents: Array<{ id: Accent; label: string; color: string }> = [
@@ -60,6 +61,8 @@ export interface SettingsDialogProps {
   skills: SkillsState;
   memory: ProjectMemory;
   providers: ProviderStatus[];
+  hooks: HooksConfig;
+  doctorReport: DoctorReport | null;
   onMode: (mode: string) => void;
   onModel: (model: string) => void;
   onPermissions: (mode: string) => void;
@@ -69,22 +72,32 @@ export interface SettingsDialogProps {
   onSaveMemory: (content: string) => void;
   onSaveProviderKey: (provider: string, key: string) => void;
   onDeleteProviderKey: (provider: string) => void;
+  onSaveHooks: (hooks: HooksConfig) => void;
+  onRunDoctor: () => void;
   onCompact: () => void;
   onCopyConversation: () => void;
   onClearRecents: () => void;
 }
 
 export default function SettingsDialog(props: SettingsDialogProps) {
-  const { settings, update, ready, busy, runtime, roles, skills, memory, providers } = props;
+  const { settings, update, ready, busy, runtime, roles, skills, memory, providers, hooks, doctorReport } = props;
   const [section, setSection] = useState<SettingsSection>(props.initialSection ?? "general");
   const [customModel, setCustomModel] = useState("");
   const [skillQuery, setSkillQuery] = useState("");
   const [memoryDraft, setMemoryDraft] = useState(memory.content);
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+  const [hookEvent, setHookEvent] = useState<"PreToolUse" | "PostToolUse">("PreToolUse");
+  const [hookCommand, setHookCommand] = useState("");
+  const [hookArgs, setHookArgs] = useState("");
+  const [hookTimeout, setHookTimeout] = useState(10);
 
   useEffect(() => {
     if (props.initialSection) setSection(props.initialSection);
   }, [props.initialSection]);
+
+  useEffect(() => {
+    if (section === "data" && ready && !doctorReport) props.onRunDoctor();
+  }, [section, ready, doctorReport, props]);
 
   useEffect(() => {
     setMemoryDraft(memory.content);
@@ -331,6 +344,80 @@ export default function SettingsDialog(props: SettingsDialogProps) {
             </>
           )}
 
+          {section === "hooks" && (
+            <>
+              <h2>Hooks globaux</h2>
+              <p className="section-note">Les hooks <code>PreToolUse</code> / <code>PostToolUse</code> sont lus uniquement dans votre configuration globale utilisateur (<code>~/.config/zerocode/config.json</code>) et exécutés sans shell (clés API retirées de l’environnement).</p>
+
+              {(["PreToolUse", "PostToolUse"] as const).map((ev) => (
+                <div key={ev} className="hook-group">
+                  <h3>{ev} ({hooks[ev].length}/8)</h3>
+                  {hooks[ev].length === 0 ? (
+                    <p className="muted-note">Aucun hook configuré pour {ev}.</p>
+                  ) : (
+                    <div className="hook-list">
+                      {hooks[ev].map((entry: HookEntry, index: number) => (
+                        <div key={`${ev}-${index}`} className="hook-card">
+                          <div>
+                            <code>{entry.command}{entry.args.length ? " " + entry.args.join(" ") : ""}</code>
+                            <span>Timeout : {entry.timeout} s</span>
+                          </div>
+                          <button type="button" className="btn small danger" disabled={!ready} title="Supprimer ce hook"
+                            onClick={() => {
+                              const next: HooksConfig = {
+                                PreToolUse: [...hooks.PreToolUse],
+                                PostToolUse: [...hooks.PostToolUse]
+                              };
+                              next[ev].splice(index, 1);
+                              props.onSaveHooks(next);
+                            }}>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <h3>Ajouter un hook</h3>
+              <form className="hook-form" onSubmit={(event) => {
+                event.preventDefault();
+                if (!hookCommand.trim() || !ready) return;
+                const parsedArgs = hookArgs.trim() ? hookArgs.trim().split(/\s+/) : [];
+                const next: HooksConfig = {
+                  PreToolUse: [...hooks.PreToolUse],
+                  PostToolUse: [...hooks.PostToolUse]
+                };
+                next[hookEvent].push({
+                  command: hookCommand.trim(),
+                  args: parsedArgs,
+                  timeout: Math.max(1, Math.min(30, hookTimeout))
+                });
+                props.onSaveHooks(next);
+                setHookCommand("");
+                setHookArgs("");
+              }}>
+                <div className="inline-form">
+                  <select value={hookEvent} onChange={(event) => setHookEvent(event.target.value as "PreToolUse" | "PostToolUse")}>
+                    <option value="PreToolUse">PreToolUse (avant outil)</option>
+                    <option value="PostToolUse">PostToolUse (après outil)</option>
+                  </select>
+                  <NumberField value={hookTimeout} min={1} max={30} suffix="s" onCommit={setHookTimeout} />
+                </div>
+                <input className="text-input" placeholder="Exécutable seul (ex. python3 ou /usr/local/bin/audit)" value={hookCommand}
+                  onChange={(event) => setHookCommand(event.target.value)} />
+                <input className="text-input" placeholder="Arguments séparés par des espaces (optionnel)" value={hookArgs}
+                  onChange={(event) => setHookArgs(event.target.value)} />
+                <div className="inline-actions">
+                  <button type="submit" className="btn small primary" disabled={!ready || !hookCommand.trim() || hooks[hookEvent].length >= 8}>
+                    <Plus size={13} /> Ajouter & activer
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
+
           {section === "subagents" && (
             <>
               <h2>Sous-agents</h2>
@@ -373,7 +460,29 @@ export default function SettingsDialog(props: SettingsDialogProps) {
 
           {section === "data" && (
             <>
-              <h2>Données & raccourcis</h2>
+              <div className="doctor-head">
+                <h2><Stethoscope size={17} /> Diagnostic local</h2>
+                <button type="button" className="btn small" disabled={!ready} onClick={props.onRunDoctor}>
+                  <RefreshCw size={12} /> Actualiser
+                </button>
+              </div>
+              {doctorReport ? (
+                <div className="doctor-list">
+                  {doctorReport.checks.map((check) => (
+                    <div key={check.id} className={"doctor-row status-" + check.status}>
+                      <i className="doctor-dot" />
+                      <div>
+                        <strong>{check.label}</strong>
+                        <span>{check.detail}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted-note">{ready ? "Chargement du diagnostic…" : "Connectez l’agent pour exécuter le diagnostic."}</p>
+              )}
+
+              <h3>Données</h3>
               <Row title="Compacter le contexte" hint="Résume la conversation pour libérer de la place."><button type="button" className="btn" disabled={locked} onClick={props.onCompact}>Compacter</button></Row>
               <Row title="Copier la conversation" hint="Au format Markdown."><button type="button" className="btn" onClick={props.onCopyConversation}>Copier</button></Row>
               <Row title="Projets récents"><button type="button" className="btn" onClick={props.onClearRecents}>Effacer</button></Row>

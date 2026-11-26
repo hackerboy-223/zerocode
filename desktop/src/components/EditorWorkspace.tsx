@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import Editor, { loader } from "@monaco-editor/react";
-import { Code2, Copy, FileCode2, Save, X } from "lucide-react";
-import type { WorkspaceFilePreview } from "../types";
+import Editor, { DiffEditor, loader } from "@monaco-editor/react";
+import { Code2, Columns2, Copy, FileCode2, FileDiff, Save, X } from "lucide-react";
+import type { GitFileVersions, WorkspaceFilePreview } from "../types";
 
 loader.config({ paths: { vs: `${import.meta.env.BASE_URL}vs` } });
 
@@ -22,16 +22,19 @@ function languageForPath(path: string) {
   return languages[ext || ""] || "plaintext";
 }
 
-export default function EditorWorkspace({ file, dark = true, onSave, onMention, onClose }: {
+export default function EditorWorkspace({ file, diffFile, dark = true, onSave, onMention, onClose, onCloseDiff }: {
   file: WorkspaceFilePreview | null;
+  diffFile?: GitFileVersions | null;
   dark?: boolean;
   onSave: (path: string, content: string) => Promise<void>;
   onMention: (path: string) => void;
   onClose: () => void;
+  onCloseDiff?: () => void;
 }) {
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activePath, setActivePath] = useState("");
   const [saving, setSaving] = useState(false);
+  const [sideBySide, setSideBySide] = useState(true);
   const active = tabs.find((tab) => tab.path === activePath) || null;
   const dirtyCount = tabs.filter((tab) => tab.content !== tab.savedContent).length;
 
@@ -71,6 +74,37 @@ export default function EditorWorkspace({ file, dark = true, onSave, onMention, 
     if (activePath === path) setActivePath(next.at(-1)?.path || "");
     if (next.length === 0) onClose();
   };
+
+  if (diffFile) {
+    const diffLang = languageForPath(diffFile.path);
+    return <section className="ide-editor">
+      <div className="ide-editor-toolbar">
+        <div className="ide-editor-tabs">
+          <span className="ide-editor-tab active" title={diffFile.path}>
+            <FileDiff size={13} /><span>HEAD ↔ {diffFile.path.split("/").pop()}</span>
+          </span>
+        </div>
+        <div className="ide-editor-actions">
+          <span className="editor-language">{diffLang}</span>
+          <button type="button" className="tiny-icon" onClick={() => setSideBySide((v) => !v)} title={sideBySide ? "Vue unifiée" : "Vue côte-à-côte"}>
+            <Columns2 size={14} />
+          </button>
+          <button type="button" className="tiny-icon" onClick={() => onMention(diffFile.path)} title="Ajouter au contexte (@)"><Code2 size={14} /></button>
+          <button type="button" className="tiny-icon" onClick={onCloseDiff} title="Fermer le comparateur"><X size={14} /></button>
+        </div>
+      </div>
+      <div className="ide-monaco-wrap">
+        <DiffEditor height="100%" language={diffLang} original={diffFile.original} modified={diffFile.modified}
+          theme={dark ? "vs-dark" : "vs"} loading={<div className="editor-loading">Chargement du comparateur…</div>}
+          options={{
+            readOnly: true, renderSideBySide: sideBySide, automaticLayout: true, minimap: { enabled: false },
+            fontSize: 12.5, fontFamily: "'JetBrains Mono', 'Fira Code', monospace", scrollBeyondLastLine: false,
+            padding: { top: 10, bottom: 10 }
+          }} />
+      </div>
+      <footer className="ide-editor-footer"><span>{diffFile.path}</span><span>Comparaison HEAD ↔ espace de travail</span></footer>
+    </section>;
+  }
 
   return <section className="ide-editor">
     <div className="ide-editor-toolbar">

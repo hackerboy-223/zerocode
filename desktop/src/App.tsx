@@ -21,15 +21,17 @@ import { Segmented } from "./components/ui";
 import { useResolvedTheme, useSettings, type ThinkLevel } from "./lib/settings";
 import { desktopInvoke, isTauri, listen } from "./lib/desktop";
 import type {
-  AgentEvent, AttachedImage, ChatMessage, DiffEntry, GitWorkspaceInfo, InspectorTab,
-  PermissionRequest, ProjectMemory, ProviderStatus, RuntimeSettings, SessionSummary,
-  SkillsState, SubagentRole, SubagentRun, TodoItem, ToolActivity, WorkspaceEntry, WorkspaceFilePreview
+  AgentEvent, AttachedImage, ChatMessage, DiffEntry, DoctorReport, GitFileVersions, GitWorkspaceInfo,
+  HooksConfig, InspectorTab, PermissionRequest, ProjectMemory, ProviderStatus, RuntimeSettings,
+  SessionSummary, SkillsState, SubagentRole, SubagentRun, TodoItem, ToolActivity, WorkspaceEntry,
+  WorkspaceFilePreview
 } from "./types";
 
 const shortPath = (path: string) => path.replace(/\/+$/, "").split(/[\\/]/).filter(Boolean).pop() || path;
 const emptyGit: GitWorkspaceInfo = { is_repo: false, branch: "local", dirty_count: 0, changed_files: [] };
 const emptySkills: SkillsState = { active: [], available: [] };
 const emptyMemory: ProjectMemory = { path: ".zerocode/instructions.md", content: "" };
+const emptyHooks: HooksConfig = { PreToolUse: [], PostToolUse: [] };
 
 let sequence = 0;
 const nextSeq = () => ++sequence;
@@ -107,6 +109,11 @@ export default function App() {
   const [skills, setSkills] = useState<SkillsState>(emptySkills);
   const [memory, setMemory] = useState<ProjectMemory>(emptyMemory);
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
+  const [hooks, setHooks] = useState<HooksConfig>(emptyHooks);
+  const [doctorReport, setDoctorReport] = useState<DoctorReport | null>(null);
+  const [gitInspected, setGitInspected] = useState(false);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [diffFile, setDiffFile] = useState<GitFileVersions | null>(null);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState("build");
   const [permissionsMode, setPermissionsMode] = useState("ask");
@@ -191,11 +198,54 @@ export default function App() {
   const openFilePreview = useCallback(async (relativePath: string) => {
     if (!workspace || !isTauri()) return;
     try {
+      setDiffFile(null);
       setPreviewFile(await desktopInvoke<WorkspaceFilePreview>("read_workspace_file", { cwd: workspace, relativePath }));
       setInspectorTab("editor");
       setInspectorOpen(true);
     } catch (error) { say(String(error), "error"); }
   }, [workspace, say]);
+
+  const inspectGitExplicit = useCallback(async () => {
+    if (!workspace || !isTauri()) return;
+    setGitLoading(true);
+    try {
+      const info = await desktopInvoke<GitWorkspaceInfo>("workspace_git_status_explicit", { cwd: workspace });
+      setGitInfo(info);
+      setGitInspected(true);
+    } catch (error) { say(String(error), "error"); } finally { setGitLoading(false); }
+  }, [workspace, say]);
+
+  const openGitDiff = useCallback(async (relativePath: string) => {
+    if (!workspace || !isTauri()) return;
+    try {
+      const versions = await desktopInvoke<GitFileVersions>("workspace_git_file_versions", { cwd: workspace, relativePath });
+      setDiffFile(versions);
+      setInspectorTab("editor");
+      setInspectorOpen(true);
+    } catch (error) { say(String(error), "error"); }
+  }, [workspace, say]);
+
+  const stageGitFile = useCallback(async (relativePath: string, unstage: boolean) => {
+    if (!workspace || !isTauri()) return;
+    try {
+      const info = await desktopInvoke<GitWorkspaceInfo>("workspace_git_stage", { cwd: workspace, relativePath, unstage });
+      setGitInfo(info);
+      setGitInspected(true);
+    } catch (error) { say(String(error), "error"); }
+  }, [workspace, say]);
+
+  const commitGit = useCallback(async (message: string): Promise<boolean> => {
+    if (!workspace || !isTauri()) return false;
+    try {
+      const summary = await desktopInvoke<string>("workspace_git_commit", { cwd: workspace, message });
+      say(summary);
+      await inspectGitExplicit();
+      return true;
+    } catch (error) {
+      say(String(error), "error");
+      return false;
+    }
+  }, [workspace, inspectGitExplicit, say]);
 
   const saveWorkspaceFile = useCallback(async (relativePath: string, content: string) => {
     if (!workspace || !isTauri()) throw new Error("Workspace indisponible.");
@@ -267,6 +317,7 @@ export default function App() {
         if (event.skills) setSkills(event.skills as SkillsState);
         if (event.memory) setMemory(event.memory as ProjectMemory);
         if (Array.isArray(event.providers)) setProviders(event.providers as ProviderStatus[]);
+        if (event.hooks) setHooks(event.hooks as HooksConfig);
         setModel(String(event.model || "auto"));
         setProvider(String(event.provider || ""));
         setMode(String(event.mode || "build"));
@@ -300,6 +351,12 @@ export default function App() {
         break;
       case "models_changed":
         if (Array.isArray(event.models) && event.models.length > 0) setAvailableModels(event.models.map((item) => String(item)));
+        break;
+      case "hooks_changed":
+        if (event.hooks) setHooks(event.hooks as HooksConfig);
+        break;
+      case "doctor_report":
+        if (event.report) setDoctorReport(event.report as DoctorReport);
         break;
       case "assistant_start":
         breakNextRef.current = false;
@@ -426,6 +483,7 @@ export default function App() {
         if (event.skills) setSkills(event.skills as SkillsState);
         if (event.memory) setMemory(event.memory as ProjectMemory);
         if (Array.isArray(event.providers)) setProviders(event.providers as ProviderStatus[]);
+        if (event.hooks) setHooks(event.hooks as HooksConfig);
         setActivities([]); setSubagents([]); setDiffs([]);
         break;
       case "sessions_changed":
@@ -551,7 +609,7 @@ export default function App() {
       return next;
     });
     resetConversationState();
-    setCheckpoints(0); setPreviewFile(null); setCurrentDir(""); setSessionId(""); setNotice(null);
+    setCheckpoints(0); setPreviewFile(null); setDiffFile(null); setGitInspected(false); setCurrentDir(""); setSessionId(""); setNotice(null);
   }, [resetConversationState]);
 
   const chooseWorkspace = useCallback(async () => {
@@ -563,7 +621,7 @@ export default function App() {
   const returnToFreeChat = useCallback(() => {
     setWorkspace(null);
     resetConversationState();
-    setCheckpoints(0); setPreviewFile(null); setCurrentDir(""); setWorkspaceFiles([]); setSessionId("");
+    setCheckpoints(0); setPreviewFile(null); setDiffFile(null); setGitInspected(false); setCurrentDir(""); setWorkspaceFiles([]); setSessionId("");
     setGitInfo(emptyGit); setNotice(null);
   }, [resetConversationState]);
 
@@ -680,6 +738,16 @@ export default function App() {
     await send({ type: "provider_key_delete", provider: providerId }).catch((error) => say(String(error), "error"));
   }, [agentId, agentReady, send, say]);
 
+  const saveHooks = useCallback(async (nextHooks: HooksConfig) => {
+    if (!agentId || !agentReady) return;
+    await send({ type: "hooks_save", hooks: nextHooks }).catch((error) => say(String(error), "error"));
+  }, [agentId, agentReady, send, say]);
+
+  const runDoctor = useCallback(async () => {
+    if (!agentId || !agentReady) return;
+    await send({ type: "doctor_run" }).catch((error) => say(String(error), "error"));
+  }, [agentId, agentReady, send, say]);
+
   const answerPermission = useCallback(async (allowed: boolean) => {
     if (!agentId || !pending) return;
     if (pending.type === "sudo_password_request") {
@@ -710,6 +778,16 @@ export default function App() {
     await send({ type: "delete_session", session_id: id }).catch((error) => say(String(error), "error"));
   }, [canAct, send, say]);
 
+  const renameSession = useCallback(async (id: string, title: string) => {
+    if (!canAct) return;
+    await send({ type: "rename_session", session_id: id, title }).catch((error) => say(String(error), "error"));
+  }, [canAct, send, say]);
+
+  const forkSession = useCallback(async (id: string) => {
+    if (!canAct) return;
+    await send({ type: "fork_session", session_id: id }).catch((error) => say(String(error), "error"));
+  }, [canAct, send, say]);
+
   const mentionFileInDraft = useCallback((relativePath: string) => {
     setDraft((prev) => `${prev.trim() ? prev.trimEnd() + " " : ""}@${relativePath} `);
     composerRef.current?.focus();
@@ -733,6 +811,10 @@ export default function App() {
     { name: "skill", args: "<nom|default|none>", description: "Activer/désactiver un skill d’expertise" },
     { name: "remember", args: "<règle>", description: "Mémoriser une consigne projet persistante" },
     { name: "providers", description: "Gérer les fournisseurs et clés API" },
+    { name: "hooks", description: "Gérer les hooks globaux PreToolUse / PostToolUse" },
+    { name: "doctor", description: "Exécuter le diagnostic local" },
+    { name: "rename", args: "<titre>", description: "Renommer la conversation active" },
+    { name: "fork", description: "Bifurquer (dupliquer) la conversation active" },
     { name: "plan", description: "Passer en mode Plan (lecture seule)" },
     { name: "build", description: "Passer en mode Build" },
     { name: "fullstack", description: "Passer en mode Full-stack" },
@@ -775,6 +857,20 @@ export default function App() {
       case "providers":
         openSettings("providers");
         return true;
+      case "hooks":
+        openSettings("hooks");
+        return true;
+      case "doctor":
+        openSettings("data");
+        void runDoctor();
+        return true;
+      case "rename":
+        if (!args) { say("Usage : /rename <nouveau titre>", "error"); return true; }
+        await renameSession(sessionId, args);
+        return true;
+      case "fork":
+        await forkSession(sessionId);
+        return true;
       case "plan": await changeMode("plan"); return true;
       case "build": await changeMode("build"); return true;
       case "fullstack": case "full-stack": await changeMode("full-stack"); return true;
@@ -794,7 +890,7 @@ export default function App() {
         say(`Commande inconnue : /${name}. Tapez /help pour la liste.`, "error");
         return true;
     }
-  }, [roles, model, openInspector, openSettings, runSubagent, toggleSkill, addMemoryNote, changeMode, changeModel, changeThink, newSession, compactContext, undoCheckpoint, copyConversation, slashCommands, say]);
+  }, [roles, model, sessionId, openInspector, openSettings, runSubagent, toggleSkill, addMemoryNote, runDoctor, renameSession, forkSession, changeMode, changeModel, changeThink, newSession, compactContext, undoCheckpoint, copyConversation, slashCommands, say]);
 
   const submitDraft = useCallback(async () => {
     const text = draft.trim();
@@ -843,6 +939,9 @@ export default function App() {
       { id: "settings", group: "Actions", label: "Préférences", hint: "Ctrl ,", icon: <Settings2 size={15} />, run: () => openSettings("general") },
       { id: "providers", group: "Actions", label: "Fournisseurs & clés API", hint: "/providers", icon: <Settings2 size={15} />, run: () => openSettings("providers") },
       { id: "skills-mem", group: "Actions", label: "Skills & mémoire projet", hint: "/skill · /remember", icon: <Wand2 size={15} />, run: () => openSettings("skills") },
+      { id: "hooks", group: "Actions", label: "Hooks globaux", hint: "/hooks", icon: <Settings2 size={15} />, run: () => openSettings("hooks") },
+      { id: "doctor", group: "Actions", label: "Diagnostic local (Doctor)", hint: "/doctor", icon: <Activity size={15} />, run: () => { openSettings("data"); void runDoctor(); } },
+      { id: "fork", group: "Actions", label: "Bifurquer la conversation (Fork)", hint: "/fork", icon: <GitBranch size={15} />, disabled: !canAct || !sessionId, run: () => void forkSession(sessionId) },
       { id: "terminal", group: "Actions", label: terminalOpen ? "Masquer le terminal" : "Afficher le terminal", hint: "Ctrl `", icon: <SquareTerminal size={15} />, run: () => setTerminalOpen((value) => !value) },
       { id: "sidebar", group: "Actions", label: sidebarOpen ? "Masquer la barre latérale" : "Afficher la barre latérale", hint: "Ctrl B", icon: <PanelLeftClose size={15} />, run: () => setSidebarOpen((value) => !value) },
       { id: "inspector", group: "Actions", label: inspectorOpen ? "Masquer l’inspecteur" : "Afficher l’inspecteur", hint: "Ctrl I", icon: <PanelRight size={15} />, run: () => setInspectorOpen((value) => !value) },
@@ -868,7 +967,7 @@ export default function App() {
       items.push({ id: "p-" + path, group: "Projets récents", label: shortPath(path), hint: path, icon: <Folder size={15} />, run: () => activateWorkspace(path) });
     }
     return items;
-  }, [canAct, newSession, chooseWorkspace, openSettings, terminalOpen, sidebarOpen, inspectorOpen, messages.length, copyConversation, checkpoints, undoCheckpoint,
+  }, [canAct, newSession, chooseWorkspace, openSettings, runDoctor, forkSession, terminalOpen, sidebarOpen, inspectorOpen, messages.length, copyConversation, checkpoints, undoCheckpoint,
     changeMode, openInspector, roles, sessions, sessionId, resumeSession, recentProjects, activateWorkspace]);
 
   const wideInspector = inspectorTab === "editor";
@@ -879,8 +978,9 @@ export default function App() {
         <Sidebar
           workspace={workspace} recents={recentProjects} sessions={sessions} sessionId={sessionId} ready={agentReady} busy={busy}
           onNew={newSession} onChoose={() => void chooseWorkspace()} onSelect={activateWorkspace} onFree={returnToFreeChat}
-          onResume={(id) => void resumeSession(id)} onDelete={(id) => void deleteSession(id)}
-          onSettings={() => setSettingsOpen(true)} onPalette={() => setPaletteOpen(true)}
+          onResume={(id) => void resumeSession(id)} onRename={(id, title) => void renameSession(id, title)}
+          onFork={(id) => void forkSession(id)} onDelete={(id) => void deleteSession(id)}
+          onSettings={() => openSettings("general")} onPalette={() => setPaletteOpen(true)}
         />
       )}
 
@@ -1013,11 +1113,22 @@ export default function App() {
                     onOpenEntry={(entry) => { if (entry.kind === "dir") { setFileFilter(""); void loadDirectory(entry.path); } else void openFilePreview(entry.path); }} />
                 )}
                 {inspectorTab === "changes" && (
-                  <ChangesPanel git={gitInfo} diffs={diffs} checkpoints={checkpoints} busy={busy} onOpenFile={(path) => void openFilePreview(path)} onUndo={() => void undoCheckpoint()} />
+                  <ChangesPanel
+                    workspace={workspace} git={gitInfo} gitInspected={gitInspected} gitLoading={gitLoading}
+                    diffs={diffs} checkpoints={checkpoints} busy={busy}
+                    onInspectGit={() => void inspectGitExplicit()}
+                    onStageFile={(path, unstage) => void stageGitFile(path, unstage)}
+                    onCommit={commitGit}
+                    onOpenFile={(path) => void openFilePreview(path)}
+                    onOpenDiff={(path) => void openGitDiff(path)}
+                    onUndo={() => void undoCheckpoint()}
+                  />
                 )}
                 {inspectorTab === "editor" && (
-                  <EditorWorkspace key={workspace || "free-chat"} file={previewFile} dark={resolvedTheme === "dark"} onSave={saveWorkspaceFile} onMention={mentionFileInDraft}
-                    onClose={() => { setPreviewFile(null); setInspectorTab("files"); }} />
+                  <EditorWorkspace key={workspace || "free-chat"} file={previewFile} diffFile={diffFile} dark={resolvedTheme === "dark"}
+                    onSave={saveWorkspaceFile} onMention={mentionFileInDraft}
+                    onClose={() => { setPreviewFile(null); setInspectorTab("files"); }}
+                    onCloseDiff={() => setDiffFile(null)} />
                 )}
                 {inspectorTab === "search" && (workspace
                   ? <WorkspaceSearch workspace={workspace} onOpen={(path) => void openFilePreview(path)} onMention={mentionFileInDraft} />
@@ -1051,7 +1162,7 @@ export default function App() {
           settings={settings} update={update} reset={reset} onClose={() => setSettingsOpen(false)}
           ready={Boolean(agentId && agentReady)} busy={busy} workspace={workspace} mode={mode} model={model} availableModels={availableModels}
           permissionsMode={permissionsMode} thinkMode={thinkMode} runtime={runtime} roles={roles}
-          skills={skills} memory={memory} providers={providers}
+          skills={skills} memory={memory} providers={providers} hooks={hooks} doctorReport={doctorReport}
           onMode={(next) => void changeMode(next)} onModel={(next) => void changeModel(next)}
           onPermissions={(next) => void changePermissions(next)} onThink={(next) => void changeThink(next)}
           onRuntime={(patch) => void applyRuntime(patch)}
@@ -1059,6 +1170,8 @@ export default function App() {
           onSaveMemory={(content) => void saveMemory(content)}
           onSaveProviderKey={(providerId, key) => void saveProviderKey(providerId, key)}
           onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
+          onSaveHooks={(next) => void saveHooks(next)}
+          onRunDoctor={() => void runDoctor()}
           onCompact={() => void compactContext()}
           onCopyConversation={copyConversation}
           onClearRecents={() => {

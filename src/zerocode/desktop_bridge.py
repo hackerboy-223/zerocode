@@ -4,8 +4,10 @@ import argparse
 import contextlib
 import json
 import os
+import platform
 import re
 import secrets
+import shutil
 import sys
 import threading
 from pathlib import Path
@@ -17,6 +19,7 @@ from .config import (
     load_config,
     load_key_store,
     mask_key,
+    save_hooks,
     save_mcp_servers,
     store_key,
     validate_config,
@@ -38,6 +41,7 @@ from .skills import all_skills
 from .tools import PermissionManager, ToolContext, build_registry
 from .tools.subagent import SPECIALIST_ROLES, roles_catalog
 from .types import Completion, Usage
+from .version import __version__
 
 
 class DesktopBridgeUI:
@@ -569,6 +573,97 @@ def _refresh_router_providers(config: Any, router: Router) -> None:
             client.close()
 
 
+def _public_hooks(hooks: Any) -> dict[str, list[dict[str, Any]]]:
+    """Normalise les hooks globaux PreToolUse / PostToolUse pour l'interface."""
+    source = hooks if isinstance(hooks, dict) else {}
+    out: dict[str, list[dict[str, Any]]] = {"PreToolUse": [], "PostToolUse": []}
+    for event in ("PreToolUse", "PostToolUse"):
+        entries = source.get(event)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            command = str(entry.get("command") or "").strip()
+            if not command:
+                continue
+            args = [str(item) for item in entry.get("args", []) if isinstance(item, str)]
+            raw_timeout = entry.get("timeout", 10)
+            timeout = raw_timeout if isinstance(raw_timeout, int) and not isinstance(raw_timeout, bool) else 10
+            out[event].append({"command": command, "args": args, "timeout": max(1, min(30, timeout))})
+    return out
+
+
+def _doctor_report(
+    cwd: Path,
+    config: Any,
+    router: Router,
+    agent: Any,
+    store: SessionStore,
+) -> dict[str, Any]:
+    """Diagnostic local rapide (sans appel réseau) de l'environnement ZeroCode."""
+    providers = _public_providers(config, router)
+    ready_providers = [p["id"] for p in providers if p["available"]]
+    mcp_total = len(config.mcp_servers)
+    mcp_enabled = sum(1 for srv in config.mcp_servers.values() if isinstance(srv, dict) and srv.get("enabled", True))
+    hooks_norm = _public_hooks(config.hooks)
+    hooks_count = len(hooks_norm["PreToolUse"]) + len(hooks_norm["PostToolUse"])
+    memory = _project_memory(cwd)
+    git_path = shutil.which("git")
+    rg_path = shutil.which("rg")
+    checks = [
+        {
+            "id": "engine",
+            "label": "Moteur ZeroCode",
+            "status": "ok",
+            "detail": f"v{__version__} · Python {platform.python_version()} ({platform.system()})",
+        },
+        {
+            "id": "workspace",
+            "label": "Dossier actif",
+            "status": "ok" if cwd.is_dir() and os.access(cwd, os.W_OK) else "warn",
+            "detail": f"{cwd} ({'accessible en écriture' if os.access(cwd, os.W_OK) else 'lecture seule'})",
+        },
+        {
+            "id": "providers",
+            "label": "Fournisseurs disponibles",
+            "status": "ok" if ready_providers else "error",
+            "detail": f"{len(ready_providers)} prêt(s) : {', '.join(ready_providers[:6])}" if ready_providers else "Aucun fournisseur configuré",
+        },
+        {
+            "id": "git",
+            "label": "Git",
+            "status": "ok" if git_path else "warn",
+            "detail": git_path or "git introuvable dans PATH",
+        },
+        {
+            "id": "ripgrep",
+            "label": "Ripgrep (rg)",
+            "status": "ok" if rg_path else "info",
+            "detail": rg_path or "non installé (repli Python / Rust actif)",
+        },
+        {
+            "id": "mcp",
+            "label": "Serveurs MCP",
+            "status": "ok" if mcp_enabled else "info",
+            "detail": f"{mcp_enabled}/{mcp_total} activé(s)",
+        },
+        {
+            "id": "hooks",
+            "label": "Hooks globaux",
+            "status": "ok" if hooks_count else "info",
+            "detail": f"{hooks_count} hook(s) (PreToolUse: {len(hooks_norm['PreToolUse'])}, PostToolUse: {len(hooks_norm['PostToolUse'])})",
+        },
+        {
+            "id": "skills",
+            "label": "Skills & mémoire projet",
+            "status": "ok",
+            "detail": f"{len(getattr(agent, 'skills', []))} skill(s) actif(s) · mémoire {'présente' if memory['content'].strip() else 'vide'} · {len(_session_summaries(store, cwd))} session(s)",
+        },
+    ]
+    return {"version": __version__, "checks": checks}
+
+
 def _available_models(router: Router) -> list[str]:
     models: list[str] = ["auto"]
     for item in router.preview("auto"):
@@ -620,6 +715,7 @@ def _emit_session_state(
         skills=_skills_state(cwd, agent),
         memory=_project_memory(cwd),
         providers=_public_providers(config, router),
+        hooks=_public_hooks(config.hooks),
     )
 
 
@@ -1032,6 +1128,70 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 else:
                     ui.emit("sessions_changed", sessions=_session_summaries(store, cwd))
+                continue
+            if kind == "rename_session":
+                ref = str(message.get("session_id") or agent.session.id).strip()
+                title = message.get("title")
+                if not isinstance(title, str):
+                    ui.error("Titre de session invalide.")
+                    continue
+                target = store.load(ref)
+                if target is None or Path(target.cwd).expanduser().resolve() != cwd:
+                    ui.error("Session introuvable pour ce dossier.")
+                    continue
+                renamed = store.rename(target.id, title)
+                if renamed is not None and renamed.id == agent.session.id:
+                    agent.session.title = renamed.title
+                ui.emit("sessions_changed", sessions=_session_summaries(store, cwd))
+                ui.success("Conversation renommée.")
+                continue
+            if kind == "fork_session":
+                ref = str(message.get("session_id") or agent.session.id).strip()
+                target = store.load(ref)
+                if target is None or Path(target.cwd).expanduser().resolve() != cwd:
+                    ui.error("Session introuvable pour ce dossier.")
+                    continue
+                if target.id == agent.session.id:
+                    store.save(agent.session)
+                forked = store.fork(target.id)
+                if forked is None:
+                    ui.error("Impossible de dupliquer cette conversation.")
+                    continue
+                agent.load_session(forked)
+                _emit_session_state(
+                    ui, "session_changed", cwd, config, store, router, agent, permissions, context
+                )
+                ui.success("Conversation bifurquée (fork créé).")
+                continue
+            if kind == "hooks_list":
+                ui.emit("hooks_changed", hooks=_public_hooks(config.hooks))
+                continue
+            if kind == "hooks_save":
+                raw_hooks = message.get("hooks")
+                if not isinstance(raw_hooks, dict):
+                    ui.error("Configuration de hooks invalide.")
+                    continue
+                cleaned_hooks: dict[str, list[dict[str, Any]]] = {}
+                for event in ("PreToolUse", "PostToolUse"):
+                    entries = raw_hooks.get(event)
+                    if entries:
+                        cleaned_hooks[event] = entries
+                previous = config.hooks
+                config.hooks = cleaned_hooks
+                try:
+                    save_hooks(cleaned_hooks, cwd=cwd)
+                except Exception as exc:
+                    config.hooks = previous
+                    ui.error(f"Hooks refusés : {exc}")
+                    continue
+                hook_mgr = getattr(context.run_hook, "__self__", None)
+                if isinstance(hook_mgr, HookManager):
+                    hook_mgr.config = cleaned_hooks
+                ui.emit("hooks_changed", hooks=_public_hooks(config.hooks))
+                ui.success("Hooks globaux enregistrés et actifs.")
+                continue
+            if kind == "doctor_run":
+                ui.emit("doctor_report", report=_doctor_report(cwd, config, router, agent, store))
                 continue
             if kind == "undo_checkpoint":
                 if getattr(agent, "checkpoints", None) is None:

@@ -569,3 +569,51 @@ button.crumb:hover { background: var(--elev2); color: var(--text); } .crumb.stat
 .skill-copy strong { font-size: .88em; }
 .skill-copy strong em { font-style: normal; color: var(--faint); font-weight: 500; font-size: .85em; margin-left: 6px; }
 .skill-copy span { color: var(--muted); font-size: .78em; line-height: 1.35; }
+
+/* ---------- Coloration syntaxique, Sessions, Git, Hooks & Diagnostic ---------- */
+.tok-kw { color: #c792ea; font-weight: 550; }
+.tok-str { color: #a3e08f; }
+.tok-cmt { color: #6c7789; font-style: italic; }
+.tok-num { color: #f4a261; }
+.tok-type { color: #7cc4ff; }
+:root[data-theme="light"] .tok-kw { color: #7c3aed; }
+:root[data-theme="light"] .tok-str { color: #15803d; }
+:root[data-theme="light"] .tok-cmt { color: #7c8799; }
+:root[data-theme="light"] .tok-num { color: #c2410c; }
+:root[data-theme="light"] .tok-type { color: #0369a1; }
+
+.session-actions { display: flex; align-items: center; gap: 1px; margin-right: 4px; opacity: 0; transition: opacity .12s; }
+.session:hover .session-actions, .session:focus-within .session-actions { opacity: 1; }
+.session-act { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; color: var(--faint); }
+.session-act:hover { background: var(--elev); color: var(--text); }
+.session-act.del:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.session-rename { flex: 1; height: 28px; margin: 2px 4px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--accent); background: var(--bg); color: var(--text); font-size: .88em; outline: none; }
+
+.git-row { display: flex; align-items: center; gap: 2px; border-radius: 7px; }
+.git-row:hover { background: var(--elev2); }
+.git-row .file-item { flex: 1; min-width: 0; }
+.git-row .file-item:hover { background: transparent; }
+.staged-btn { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.git-commit-form { display: flex; gap: 6px; margin-top: 10px; }
+.git-commit-form .text-input { height: 28px; font-size: .84em; }
+
+.hook-group { margin-top: 10px; }
+.hook-list { display: grid; gap: 6px; margin-top: 6px; }
+.hook-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.hook-card > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hook-card code { font-size: .82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hook-card span { color: var(--faint); font-size: .74em; }
+.hook-form { display: grid; gap: 8px; margin-top: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--bg); }
+
+.doctor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.doctor-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; }
+.doctor-list { display: grid; gap: 6px; margin-bottom: 18px; }
+.doctor-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); }
+.doctor-row > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.doctor-row strong { font-size: .86em; }
+.doctor-row span { color: var(--muted); font-size: .78em; overflow-wrap: anywhere; }
+.doctor-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--accent); }
+.doctor-row.status-ok .doctor-dot { background: var(--ok); }
+.doctor-row.status-warn .doctor-dot { background: var(--warn); }
+.doctor-row.status-error .doctor-dot { background: var(--danger); }
+.doctor-row.status-info .doctor-dot { background: var(--faint); }

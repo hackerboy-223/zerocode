@@ -346,3 +346,33 @@ def test_public_providers_never_expose_raw_api_keys(monkeypatch, tmp_path: Path)
     assert groq["source"] == "env"
     assert secret not in json.dumps(items)
     assert groq["key_masked"] and groq["key_masked"] != secret
+
+
+def test_public_hooks_and_doctor_report(tmp_path: Path) -> None:
+    from zerocode.agent import Agent
+    from zerocode.config import Config
+    from zerocode.desktop_bridge import _doctor_report, _public_hooks
+    from zerocode.router import Router
+    from zerocode.tools import PermissionManager, build_registry
+    from zerocode.ui import NullUI
+
+    hooks = _public_hooks(
+        {"PreToolUse": [{"command": "python3", "args": ["-V"], "timeout": 99}], "PostToolUse": []}
+    )
+    assert hooks["PreToolUse"] == [{"command": "python3", "args": ["-V"], "timeout": 30}]
+    assert hooks["PostToolUse"] == []
+
+    config = Config(hooks=hooks)
+    store = SessionStore(tmp_path / "sessions")
+    session = store.new(tmp_path, "auto")
+    ctx = ToolContext(cwd=tmp_path)
+    registry = build_registry(ctx, PermissionManager(mode="ask", interactive=False), NullUI())
+    router = Router(config)
+    try:
+        agent = Agent(config, router, registry, session, NullUI(), store=store)
+        report = _doctor_report(tmp_path, config, router, agent, store)
+    finally:
+        router.close()
+
+    ids = {check["id"] for check in report["checks"]}
+    assert {"engine", "workspace", "providers", "git", "mcp", "hooks", "skills"} <= ids

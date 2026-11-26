@@ -66,6 +66,7 @@ export interface WorkspaceFilePreview {
 export interface GitChangedFile {
   status: string;
   path: string;
+  staged?: boolean;
 }
 
 export interface GitWorkspaceInfo {
@@ -73,6 +74,35 @@ export interface GitWorkspaceInfo {
   branch: string;
   dirty_count: number;
   changed_files: GitChangedFile[];
+}
+
+export interface GitFileVersions {
+  path: string;
+  original: string;
+  modified: string;
+}
+
+export interface HookEntry {
+  command: string;
+  args: string[];
+  timeout: number;
+}
+
+export interface HooksConfig {
+  PreToolUse: HookEntry[];
+  PostToolUse: HookEntry[];
+}
+
+export interface DoctorCheck {
+  id: string;
+  label: string;
+  status: "ok" | "warn" | "error" | "info";
+  detail: string;
+}
+
+export interface DoctorReport {
+  version: string;
+  checks: DoctorCheck[];
 }
 
 export interface SubagentRole {

@@ -380,12 +380,12 @@ ZeroCode existe aussi sous forme d’application graphique native, construite av
 
 Fonctionnalités principales :
 
-- **Interface minimaliste** : barre latérale pliable, conversation centrée, blocs de code formatés avec copie rapide, appels d'outils regroupés et thèmes Système / Clair / Sombre avec couleurs d'accent.
+- **Interface minimaliste & coloration syntaxique** : barre latérale pliable avec **renommage** et **bifurcation (fork)** de conversations, conversation centrée avec coloration syntaxique locale, appels d'outils regroupés et thèmes Système / Clair / Sombre avec couleurs d'accent.
 - **Sous-agents en parallèle** : 7 spécialistes en lecture seule (`explorer`, `architect`, `reviewer`, `security`, `performance`, `tester`, `researcher`), pilotables depuis le panneau **Agents** ou `/agent` (jusqu'à 4 simultanément) + orchestrations prêtes à l'emploi.
 - **Multimodal (images)** : collage (`Ctrl+V`), glisser-déposer ou import d'images directement dans le chat.
-- **Skills, mémoire projet & fournisseurs** : activation en un clic des skills (`/skill`), édition de `.zerocode/instructions.md` (`/remember`), gestion locale des clés API (`/providers`, coffre `0600`) et préférences complètes (`Ctrl+,`).
-- **Modes et commandes rapides** : **Build**, **Plan** et **Full-stack**, commandes slash (`/agent`, `/skill`, `/remember`, `/providers`, `/model`, `/think`, `/compact`, `/undo`…), mentions `@fichier` et palette `Ctrl+K`.
-- **Inspecteur latéral (`Ctrl+I`)** : Aperçu, Agents, Fichiers, Changements (branche Git, diffs de session et checkpoints ; pour éviter d'exécuter à l'ouverture des filtres ou helpers Git configurés par un dépôt, l'état automatique n'exécute pas `git status`), éditeur Monaco, recherche native Rust ultra-rapide et gestionnaire MCP.
+- **Skills, mémoire projet, hooks, diagnostic & fournisseurs** : activation en un clic des skills (`/skill`), édition de `.zerocode/instructions.md` (`/remember`), gestion des hooks globaux (`/hooks`), diagnostic local (`/doctor`), coffre local de clés API (`/providers`, permissions `0600`) et préférences complètes (`Ctrl+,`).
+- **Modes et commandes rapides** : **Build**, **Plan** et **Full-stack**, commandes slash (`/agent`, `/skill`, `/remember`, `/providers`, `/hooks`, `/doctor`, `/rename`, `/fork`, `/model`, `/think`, `/compact`, `/undo`…), mentions `@fichier` et palette `Ctrl+K`.
+- **Inspecteur latéral (`Ctrl+I`)** : Aperçu, Agents, Fichiers, Changements (inspection Git explicite sûre avec stage/unstage, commit et comparateur **Monaco DiffEditor** HEAD ↔ fichier ; à l'ouverture, aucun `git status` automatique n'est lancé), éditeur Monaco, recherche native Rust ultra-rapide et gestionnaire MCP.
 - **Terminal PTY local** redimensionnable (`Ctrl+\``), demandes d'autorisation explicites, démarrage sûr en mode `ask` et mascotte vectorielle LUPUS.
 
 L'application et son terminal exécutent les commandes sur l'ordinateur de l'utilisateur. Les prompts, extraits de fichiers et réponses peuvent être transmis au fournisseur de modèle sélectionné. Pour garder l'inférence sur la machine, configure un fournisseur local compatible comme Ollama.

@@ -33,6 +33,7 @@ class Session:
     cwd: str
     model: str
     provider: str | None = None
+    title: str | None = None
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
     messages: list[dict[str, Any]] = field(default_factory=list)
@@ -43,7 +44,7 @@ class Session:
         self.updated_at = _now()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "version": 1,
             "id": self.id,
             "cwd": self.cwd,
@@ -55,6 +56,9 @@ class Session:
             "usage": self.usage.as_dict(),
             "todos": self.todos,
         }
+        if self.title:
+            payload["title"] = self.title
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Session:
@@ -73,11 +77,14 @@ class Session:
         provider = data.get("provider")
         if not isinstance(provider, str) or not provider.strip():
             provider = None
+        raw_title = data.get("title")
+        title = " ".join(raw_title.split())[:80] if isinstance(raw_title, str) and raw_title.strip() else None
         return cls(
             id=session_id,
             cwd=cwd,
             model=model,
             provider=provider,
+            title=title,
             created_at=str(data.get("created_at") or _now()),
             updated_at=str(data.get("updated_at") or _now()),
             messages=[message for message in messages if isinstance(message, dict)],
@@ -180,6 +187,12 @@ class SessionStore:
             usage = data.get("usage")
             if not isinstance(usage, dict):
                 usage = {}
+            custom_title = data.get("title")
+            resolved_title = (
+                " ".join(custom_title.split())[:80]
+                if isinstance(custom_title, str) and custom_title.strip()
+                else _session_title(messages)
+            )
             result.append(
                 {
                     "id": str(data.get("id", path.stem)),
@@ -193,11 +206,33 @@ class SessionStore:
                     "updated_at": str(data.get("updated_at", "")),
                     "messages": len(messages),
                     "total_tokens": _as_int(usage.get("total_tokens")),
-                    "title": _session_title(messages),
+                    "title": resolved_title,
                 }
             )
         result.sort(key=lambda item: item["updated_at"], reverse=True)
         return result
+
+    def rename(self, ref: str, title: str) -> Session | None:
+        session = self.load(ref)
+        if session is None:
+            return None
+        cleaned = " ".join(title.split())[:80]
+        session.title = cleaned or None
+        self.save(session)
+        return session
+
+    def fork(self, ref: str) -> Session | None:
+        original = self.load(ref)
+        if original is None:
+            return None
+        forked = self.new(Path(original.cwd), original.model, original.provider)
+        base_title = original.title or _session_title(original.messages) or "Conversation"
+        suffix = " (copie)"
+        forked.title = base_title[: max(1, 80 - len(suffix))] + suffix
+        forked.messages = json.loads(json.dumps(original.messages))
+        forked.todos = json.loads(json.dumps(original.todos))
+        self.save(forked)
+        return forked
 
     def delete(self, ref: str) -> bool:
         session = self.load(ref)

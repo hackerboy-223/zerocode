@@ -465,6 +465,23 @@ def save_mcp_servers(
     return target
 
 
+def save_hooks(
+    hooks: dict[str, list[dict[str, Any]]],
+    *,
+    cwd: Path | None = None,
+) -> Path:
+    """Persist only user-level lifecycle hooks in global configuration (0600)."""
+    config = load_config(cwd=cwd)
+    config.hooks = hooks
+    validate_config(config)
+
+    target = default_config_path()
+    payload = _read_json(target, label="la configuration globale") if target.is_file() else {}
+    payload["hooks"] = hooks
+    _atomic_write(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n", mode=0o600)
+    return target
+
+
 def save_config(config: Config, path: Path | None = None) -> Path:
     target = path or default_config_path()
     target.parent.mkdir(parents=True, exist_ok=True)

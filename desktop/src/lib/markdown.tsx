@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { ReactNode } from "react";
 import { Copy } from "lucide-react";
+import { tokenizeCode } from "./syntax";
 
 function renderInlineMarkdown(text: string): ReactNode[] {
   const token = /(`[^`\n]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g;
@@ -44,10 +45,11 @@ export function FormattedMessage({ content, onCopy }: { content: string; onCopy:
         while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) code.push(lines[i++]);
         if (i < lines.length) i++;
         const value = code.join("\n");
+        const tokens = tokenizeCode(value, lang);
         nodes.push(
           <div key={key++} className="code-block">
             <div className="code-block-header"><span>{lang}</span><button type="button" className="code-copy-btn" onClick={() => onCopy(value)} title="Copier le code"><Copy size={12} /> Copier</button></div>
-            <pre><code>{value}</code></pre>
+            <pre><code>{tokens.map((tok, idx) => tok.kind === "plain" ? tok.text : <span key={idx} className={"tok-" + tok.kind}>{tok.text}</span>)}</code></pre>
           </div>
         );
         continue;

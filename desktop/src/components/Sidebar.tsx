@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, Folder, FolderOpen, MessageSquare, Plus, Search, Settings2, Trash2 } from "lucide-react";
+import { ChevronDown, Folder, FolderOpen, GitFork, MessageSquare, Pencil, Plus, Search, Settings2, Trash2 } from "lucide-react";
 import Lupus from "./Lupus";
 import type { SessionSummary } from "../types";
 
@@ -14,13 +14,19 @@ function bucket(value: string): string {
   return "Plus ancien";
 }
 
-export default function Sidebar({ workspace, recents, sessions, sessionId, ready, busy, onNew, onChoose, onSelect, onFree, onResume, onDelete, onSettings, onPalette }: {
+export default function Sidebar({
+  workspace, recents, sessions, sessionId, ready, busy,
+  onNew, onChoose, onSelect, onFree, onResume, onRename, onFork, onDelete, onSettings, onPalette
+}: {
   workspace: string | null; recents: string[]; sessions: SessionSummary[]; sessionId: string; ready: boolean; busy: boolean;
   onNew: () => void; onChoose: () => void; onSelect: (path: string) => void; onFree: () => void;
-  onResume: (id: string) => void; onDelete: (id: string) => void; onSettings: () => void; onPalette: () => void;
+  onResume: (id: string) => void; onRename: (id: string, title: string) => void; onFork: (id: string) => void;
+  onDelete: (id: string) => void; onSettings: () => void; onPalette: () => void;
 }) {
   const [menu, setMenu] = useState(false);
   const [filter, setFilter] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
 
   const groups = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -33,6 +39,12 @@ export default function Sidebar({ workspace, recents, sessions, sessionId, ready
     }
     return order.filter((key) => map.has(key)).map((key) => ({ key, items: map.get(key)! }));
   }, [sessions, filter]);
+
+  const commitRename = (session: SessionSummary) => {
+    const cleaned = editingTitle.trim();
+    setEditingId(null);
+    if (cleaned && cleaned !== session.title) onRename(session.id, cleaned);
+  };
 
   return (
     <aside className="sidebar">
@@ -75,10 +87,27 @@ export default function Sidebar({ workspace, recents, sessions, sessionId, ready
             <div className="group-label">{group.key}</div>
             {group.items.map((session) => (
               <div key={session.id} className={"session" + (session.id === sessionId ? " current" : "")}>
-                <button type="button" onClick={() => onResume(session.id)} disabled={busy || session.id === sessionId} title={session.title}>
-                  <span>{session.title}</span>
-                </button>
-                <button type="button" className="session-del" onClick={() => onDelete(session.id)} disabled={busy} aria-label="Supprimer la conversation" title="Supprimer"><Trash2 size={12} /></button>
+                {editingId === session.id ? (
+                  <input autoFocus className="session-rename" value={editingTitle} maxLength={80}
+                    onChange={(event) => setEditingTitle(event.target.value)}
+                    onBlur={() => commitRename(session)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") commitRename(session);
+                      else if (event.key === "Escape") setEditingId(null);
+                    }} />
+                ) : (
+                  <>
+                    <button type="button" onClick={() => onResume(session.id)} disabled={busy || session.id === sessionId} title={session.title}
+                      onDoubleClick={() => { if (!busy) { setEditingId(session.id); setEditingTitle(session.title); } }}>
+                      <span>{session.title}</span>
+                    </button>
+                    <div className="session-actions">
+                      <button type="button" className="session-act" onClick={() => { setEditingId(session.id); setEditingTitle(session.title); }} disabled={busy} aria-label="Renommer" title="Renommer"><Pencil size={11} /></button>
+                      <button type="button" className="session-act" onClick={() => onFork(session.id)} disabled={busy} aria-label="Dupliquer (fork)" title="Bifurquer (fork)"><GitFork size={11} /></button>
+                      <button type="button" className="session-act del" onClick={() => onDelete(session.id)} disabled={busy} aria-label="Supprimer la conversation" title="Supprimer"><Trash2 size={11} /></button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

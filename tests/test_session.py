@@ -168,3 +168,30 @@ def test_session_refuses_secret_file_path(tmp_path):
     with pytest.raises(ConfigError, match="chemin sensible"):
         store.load(str(secret))
 
+
+
+def test_session_rename_and_fork(tmp_path) -> None:
+    store = SessionStore(tmp_path / "sessions")
+    session = store.new(tmp_path, "auto", None)
+    session.messages.append({"role": "user", "content": "Premier message"})
+    session.todos.append({"content": "Etape 1", "status": "pending"})
+    store.save(session)
+
+    renamed = store.rename(session.id, "  Refonte   API  ")
+    assert renamed is not None
+    assert renamed.title == "Refonte API"
+    listed = store.list()
+    assert listed[0]["title"] == "Refonte API"
+
+    forked = store.fork(session.id)
+    assert forked is not None
+    assert forked.id != session.id
+    assert forked.title == "Refonte API (copie)"
+    assert forked.messages == session.messages
+    assert forked.todos == session.todos
+    forked.messages.append({"role": "assistant", "content": "Nouvelle branche"})
+    store.save(forked)
+
+    reloaded_original = store.load(session.id)
+    assert reloaded_original is not None
+    assert len(reloaded_original.messages) == 1

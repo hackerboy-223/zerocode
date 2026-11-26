@@ -12,6 +12,11 @@ const tscBin = resolve(
   process.platform === "win32" ? "tsc.cmd" : "tsc"
 );
 
+const testFiles = [
+  "src/lib/settings.test.ts",
+  "src/lib/syntax.test.ts"
+];
+
 try {
   writeFileSync(join(outDir, "package.json"), JSON.stringify({ type: "module" }));
   const tsconfigPath = join(outDir, "tsconfig.json");
@@ -29,7 +34,7 @@ try {
         rootDir: resolve(root, "src"),
         outDir
       },
-      files: [resolve(root, "src/lib/settings.test.ts")]
+      files: testFiles.map((file) => resolve(root, file))
     })
   );
   const compile = spawnSync(tscBin, ["-p", tsconfigPath], {
@@ -39,11 +44,12 @@ try {
   if (compile.status !== 0) {
     process.exitCode = compile.status ?? 1;
   } else {
-    const run = spawnSync(
-      process.execPath,
-      ["--test", join(outDir, "lib/settings.test.js")],
-      { stdio: "inherit" }
+    const compiledTests = testFiles.map((file) =>
+      join(outDir, file.replace(/^src\//, "").replace(/\.ts$/, ".js"))
     );
+    const run = spawnSync(process.execPath, ["--test", ...compiledTests], {
+      stdio: "inherit"
+    });
     process.exitCode = run.status ?? 1;
   }
 } finally {
