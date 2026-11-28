@@ -181,7 +181,11 @@ CLI / TUI / Desktop
 - Les clés des fournisseurs sont stockées côté serveur, chiffrées avec Fernet. Le client ne reçoit jamais les clés amont.
 - Le mode local continue d'utiliser le routeur actuel et les clés locales ; aucun basculement silencieux entre Cloud et local n'est effectué.
 - Les jetons d'accès ont une durée courte. Les jetons de renouvellement sont rotatifs et associés à un appareil révocable.
-- Les politiques administrateur contrôlent les modèles disponibles, leur ordre, le mode maintenance et certains drapeaux de fonctionnalités.
+- Les politiques administrateur contrôlent les modèles disponibles, leur ordre, le mode maintenance et les drapeaux de fonctionnalités.
+- Les admissions de requêtes sont vérifiées côté serveur : débit par compte, concurrence par compte et globale, taille de la requête, nombre de messages et limite de sortie.
+- Les comptes sont limités à cinq sessions d'appareils actives par défaut. Une nouvelle connexion révoque la session active la plus ancienne lorsque ce plafond est atteint.
+- La suspension d'un compte révoque immédiatement ses appareils et bloque les jetons d'accès encore valides. Les administrateurs peuvent également révoquer un appareil isolé.
+- Les plafonds sont configurables par l'administrateur via `/v1/admin/guardrails`; le mode maintenance bloque les nouvelles requêtes IA pour l'ensemble du service.
 
 ### API et déploiement
 
@@ -192,7 +196,8 @@ Endpoints principaux :
 - `GET /v1/client/config`
 - `POST /v1/chat/completions` (streaming SSE)
 - `/v1/admin/providers`, `/models`, `/routing`, `/client-config`
-- `GET /v1/admin/usage/summary`, `/audit-logs`
+- `/v1/admin/overview`, `/users`, `/guardrails`
+- `GET /v1/admin/usage/summary`, `/usage/recent`, `/audit-logs`
 
-Les abonnements, budgets, réservations atomiques de crédits, webhooks de paiement, vérification d'e-mail et interface web d'administration ne sont pas encore implémentés. Le serveur est une fondation de préversion et ne doit pas accepter de paiements avant la mise en place des limites de consommation et de la comptabilité des coûts.
+Le contrôle opérationnel est en cours de consolidation. L'API permet déjà de surveiller l'activité, d'ajuster les plafonds, de mettre le service en maintenance et de suspendre des comptes. L'interface web d'administration, la protection contre les tentatives de connexion abusives, le MFA administrateur, la sauvegarde/restauration et les tests de charge restent à finaliser avant une ouverture large.
 
