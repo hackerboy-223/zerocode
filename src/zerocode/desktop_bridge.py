@@ -509,6 +509,26 @@ def _save_project_memory(cwd: Path, content: str) -> dict[str, str]:
 
 def _public_providers(config: Any, router: Router) -> list[dict[str, Any]]:
     """Expose l'état des fournisseurs sans jamais renvoyer de clé API brute."""
+    if getattr(router, "is_cloud", False):
+        remote = getattr(router, "remote_config", None) or {}
+        aliases = [
+            item.get("alias")
+            for item in remote.get("models", [])
+            if isinstance(item, dict) and isinstance(item.get("alias"), str)
+        ]
+        return [{
+            "id": "zerocode-cloud",
+            "label": "ZeroCode Cloud",
+            "env_var": "",
+            "requires_key": False,
+            "enabled": True,
+            "available": True,
+            "source": "keyless",
+            "key_masked": "",
+            "models_count": len(aliases),
+            "signup_url": "",
+            "notes": "Inférence distante · modèles et fournisseurs gérés par ZeroCode Cloud.",
+        }]
     store = load_key_store()
     items: list[dict[str, Any]] = []
     for spec in router.providers.values():
@@ -1044,8 +1064,13 @@ def main(argv: list[str] | None = None) -> int:
                 next_provider = message.get("provider")
                 if isinstance(next_provider, str):
                     next_provider = next_provider.strip() or None
-                elif "/" in next_model and next_model.split("/", 1)[0] in router.providers:
+                elif "/" in next_model and (
+                    next_model.split("/", 1)[0] in router.providers
+                    or next_model.split("/", 1)[0] == "zerocode-cloud"
+                ):
                     next_provider, next_model = next_model.split("/", 1)
+                    if next_provider == "zerocode-cloud":
+                        next_provider = None
                 else:
                     next_provider = None
                 config.model = next_model
