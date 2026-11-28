@@ -17,7 +17,7 @@ if ! command -v zenity >/dev/null 2>&1; then
   printf 'Zenity est absent : ouverture de l’installateur interactif en mode terminal.\n'
   curl -fsSL "$REPO_RAW/install.sh" -o "$INSTALLER"
   chmod 700 "$INSTALLER"
-  exec bash "$INSTALLER"
+  bash "$INSTALLER"
 fi
 
 MODE="$(zenity --list --radiolist \
