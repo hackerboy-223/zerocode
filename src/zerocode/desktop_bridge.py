@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .checkpoints import CheckpointStore
+from .cloud_client import create_router
 from .config import (
     delete_key,
     load_config,
@@ -316,7 +317,7 @@ def _build_runtime(cwd: Path, session_ref: str | None, model: str | None):
     session.provider = config.provider
 
     ui = DesktopBridgeUI()
-    router = Router(config, ui=ui)
+    router = create_router(config, ui=ui)
     hooks = HookManager(config.hooks, cwd)
     context = ToolContext(
         cwd=cwd,
