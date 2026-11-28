@@ -36,6 +36,7 @@ def admin_headers(client):
     )
     # Promote only in the isolated test database; production role changes are admin-only.
     from sqlalchemy import select
+
     from app.database import SessionLocal
     from app.models import User
 
