@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
@@ -75,7 +75,7 @@ def register(payload: RegisterIn, db: DbSession) -> dict:
 
 
 @router.post("/auth/login", tags=["authentication"])
-def login(payload: LoginIn, db: DbSession, request: Request) -> dict:
+def login(payload: LoginIn, db: DbSession) -> dict:
     email = str(payload.email).strip().lower()
     ensure_login_allowed(db, email)
     user = authenticate_user(db, email, payload.password)
