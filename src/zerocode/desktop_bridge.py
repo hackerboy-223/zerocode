@@ -509,6 +509,26 @@ def _save_project_memory(cwd: Path, content: str) -> dict[str, str]:
 
 def _public_providers(config: Any, router: Router) -> list[dict[str, Any]]:
     """Expose l'état des fournisseurs sans jamais renvoyer de clé API brute."""
+    if getattr(router, "is_cloud", False):
+        remote = getattr(router, "remote_config", None) or {}
+        aliases = [
+            item.get("alias")
+            for item in remote.get("models", [])
+            if isinstance(item, dict) and isinstance(item.get("alias"), str)
+        ]
+        return [{
+            "id": "zerocode-cloud",
+            "label": "ZeroCode Cloud",
+            "env_var": "",
+            "requires_key": False,
+            "enabled": True,
+            "available": True,
+            "source": "keyless",
+            "key_masked": "",
+            "models_count": len(aliases),
+            "signup_url": "",
+            "notes": "Inférence distante · modèles et fournisseurs gérés par ZeroCode Cloud.",
+        }]
     store = load_key_store()
     items: list[dict[str, Any]] = []
     for spec in router.providers.values():
@@ -663,6 +683,22 @@ def _doctor_report(
         },
     ]
     return {"version": __version__, "checks": checks}
+
+
+def _resolve_model_selection(
+    router: Router, raw_model: str, raw_provider: Any = None
+) -> tuple[str, str | None]:
+    """Normalize UI model IDs while keeping provider routing local/cloud-safe."""
+    next_model = raw_model.strip()
+    if isinstance(raw_provider, str):
+        return next_model, raw_provider.strip() or None
+    if "/" in next_model:
+        prefix, model_id = next_model.split("/", 1)
+        if prefix in getattr(router, "providers", {}):
+            return model_id, prefix
+        if prefix == "zerocode-cloud" and getattr(router, "is_cloud", False):
+            return model_id, None
+    return next_model, None
 
 
 def _available_models(router: Router) -> list[str]:
@@ -1041,13 +1077,9 @@ def main(argv: list[str] | None = None) -> int:
                 if not next_model:
                     ui.error("Modèle invalide.")
                     continue
-                next_provider = message.get("provider")
-                if isinstance(next_provider, str):
-                    next_provider = next_provider.strip() or None
-                elif "/" in next_model and next_model.split("/", 1)[0] in router.providers:
-                    next_provider, next_model = next_model.split("/", 1)
-                else:
-                    next_provider = None
+                next_model, next_provider = _resolve_model_selection(
+                    router, next_model, message.get("provider")
+                )
                 config.model = next_model
                 config.provider = next_provider
                 agent.session.model = next_model

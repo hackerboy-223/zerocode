@@ -49,14 +49,26 @@ Set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` before the first serv
 
 Public signup is disabled by default (`ALLOW_PUBLIC_SIGNUP=false`). Provision the first administrator through the bootstrap environment variables. Only enable signup temporarily in a controlled development environment; do not open it to the public until email verification, abuse protection and account recovery are ready.
 
-## Connect a ZeroCode client
+## Connect TUI and Desktop to the same Cloud account
+
+Authenticate once from a terminal on the same operating-system user account:
 
 ```bash
-zerocode cloud login --url https://YOUR-CLOUD-HOST
+zerocode cloud login --url https://zerocode-cloud-api-2l3z.onrender.com
 zerocode cloud status
 ```
 
+The login creates a device session and stores it in `~/.config/zerocode/cloud.json` (or the platform's XDG configuration directory) with restrictive POSIX permissions. **The TUI and ZeroCode Desktop both read this same session file**: no second login, provider key, or per-client Kilo credential is required. Start `zerocode` for the TUI, or open ZeroCode Desktop; both use the Cloud router while the session mode is `cloud`.
+
 To switch between the managed gateway and direct local/BYOK providers:
+
+```bash
+zerocode cloud use cloud
+zerocode cloud use local
+zerocode cloud logout
+```
+
+The Desktop settings identify the managed gateway as **ZeroCode Cloud**. Model aliases such as `MIMI` are selected from the remote client configuration; provider credentials and fallback routing remain server-side.
 
 ```bash
 zerocode cloud use cloud

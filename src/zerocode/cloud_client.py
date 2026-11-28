@@ -145,6 +145,11 @@ class CloudRouter:
     def __init__(self, config: Config, ui: Any = None) -> None:
         self.config = config
         self.ui = ui
+        # Keep the Router interface expected by TUI/Desktop bridge consumers.
+        # Cloud mode owns provider selection remotely, so local provider/key
+        # management must see an empty catalog rather than crash or expose BYOK.
+        self.providers: dict[str, ProviderSpec] = {}
+        self.is_cloud = True
         self.auth = load_cloud_auth()
         if self.auth.get("mode") != "cloud" or not self.auth.get("access_token"):
             raise ConfigError("Connecte-toi avec zerocode cloud login.")
