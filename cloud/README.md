@@ -44,7 +44,7 @@ In development, docs are available at `http://localhost:8000/docs`.
 
 Set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` before the first server start. If that email does not exist, the service creates it with the admin role. Remove the bootstrap password from the environment after initial setup. Never use the sample values in production.
 
-Public signup is controlled by `ALLOW_PUBLIC_SIGNUP`. Keep it disabled for a public launch until email verification, abuse protection and account recovery are ready.
+Public signup is disabled by default (`ALLOW_PUBLIC_SIGNUP=false`). Provision the first administrator through the bootstrap environment variables. Only enable signup temporarily in a controlled development environment; do not open it to the public until email verification, abuse protection and account recovery are ready.
 
 ## Connect a ZeroCode client
 
