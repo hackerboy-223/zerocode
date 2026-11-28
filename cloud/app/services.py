@@ -108,6 +108,10 @@ def audit(
 
 
 def issue_login_tokens(db: Session, user: User, device_name: str) -> dict[str, Any]:
+    locked_user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if not locked_user or not locked_user.is_active:
+        raise HTTPException(status_code=401, detail="Account unavailable")
+    user = locked_user
     raw_refresh = new_refresh_token()
     now = datetime.now(UTC)
     limits = get_guardrails(db)
@@ -160,7 +164,9 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
 
 def refresh_login(db: Session, raw_token: str) -> dict[str, Any]:
     device = db.scalar(
-        select(Device).where(Device.refresh_token_hash == hash_refresh_token(raw_token))
+        select(Device)
+        .where(Device.refresh_token_hash == hash_refresh_token(raw_token))
+        .with_for_update()
     )
     now = datetime.now(UTC)
     expires = None
