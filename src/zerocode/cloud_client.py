@@ -5,6 +5,7 @@ import getpass
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -167,6 +168,7 @@ class CloudRouter:
         )
         self.last_model: ModelSpec | None = None
         self.remote_config: dict[str, Any] | None = None
+        self.remote_config_checked_at = 0.0
 
     def close(self) -> None:
         self.http.close()
@@ -216,7 +218,8 @@ class CloudRouter:
         return response
 
     def _get_remote_config(self) -> dict[str, Any]:
-        if self.remote_config is not None:
+        now = time.monotonic()
+        if self.remote_config is not None and now - self.remote_config_checked_at < 30:
             return self.remote_config
         url = self.auth["base_url"] + "/v1/client/config"
         try:
@@ -237,6 +240,7 @@ class CloudRouter:
                 status=response.status_code,
             )
         self.remote_config = response.json()
+        self.remote_config_checked_at = time.monotonic()
         return self.remote_config
 
     def preview(self, model: str | None = None, provider: str | None = None) -> list[str]:
@@ -272,11 +276,30 @@ class CloudRouter:
                 "En mode Cloud, le fournisseur est choisi par le routeur distant. "
                 "Utilise le mode local pour forcer une clé BYOK ou un modèle Ollama."
             )
+        remote = self._get_remote_config()
+        if remote.get("maintenance_mode"):
+            raise ProviderError(
+                "ZeroCode Cloud est en maintenance. Réessaie dans quelques instants.",
+                provider="zerocode-cloud",
+                model=model or "auto",
+                status=503,
+                retryable=True,
+            )
+        flags = remote.get("feature_flags", {})
+        if isinstance(flags, dict) and flags.get("cloud_ai") is False:
+            raise ProviderError(
+                "L'inférence Cloud est désactivée par l'administrateur.",
+                provider="zerocode-cloud",
+                model=model or "auto",
+                status=503,
+                retryable=False,
+            )
         requested_model = (model or self.config.model or "auto").strip()
         payload: dict[str, Any] = {
             "model": requested_model,
             "messages": messages,
             "stream": True,
+            "stream_options": {"include_usage": True},
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
         }
@@ -284,6 +307,7 @@ class CloudRouter:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         response = self._stream_request(payload)
+        self.last_task = response.headers.get("X-ZeroCode-Task", "auto")
         content: list[str] = []
         reasoning: list[str] = []
         tool_parts: dict[int, dict[str, str]] = {}
