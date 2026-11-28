@@ -382,7 +382,8 @@ def acquire_request_lease(
     requested_count = extra.get("n", 1)
     if not isinstance(requested_count, int) or isinstance(requested_count, bool) or requested_count != 1:
         raise HTTPException(status_code=422, detail="Multiple completions per request are disabled")
-    if extra.get("best_of", 1) != 1:
+    best_of = extra.get("best_of", 1)
+    if isinstance(best_of, bool) or best_of != 1:
         raise HTTPException(status_code=422, detail="Multiple candidate generation is disabled")
 
     global_active = db.scalar(
