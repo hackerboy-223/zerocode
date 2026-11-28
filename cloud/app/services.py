@@ -670,7 +670,12 @@ def record_login_failure(db: Session, email: str) -> None:
     if db.bind and db.bind.dialect.name == "postgresql":
         lock_id = int(key_hash[:16], 16) % (2**63 - 1)
         db.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": lock_id})
-    attempt = db.get(LoginAttempt, key_hash)
+    attempt = db.scalar(
+        select(LoginAttempt)
+        .where(LoginAttempt.key_hash == key_hash)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if not attempt:
         attempt = LoginAttempt(
             key_hash=key_hash,
