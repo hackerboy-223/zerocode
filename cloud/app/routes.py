@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
@@ -13,6 +14,7 @@ from .models import (
     Device,
     ModelRoute,
     Provider,
+    RequestLease,
     RoutingPolicy,
     UsageEvent,
     User,
@@ -20,6 +22,7 @@ from .models import (
 from .schemas import (
     ChatRequest,
     ClientConfigPatch,
+    GuardrailsPatch,
     LoginIn,
     ModelCreate,
     ModelPatch,
@@ -28,11 +31,13 @@ from .schemas import (
     RefreshIn,
     RegisterIn,
     RoutingPolicyIn,
+    UserStatusPatch,
 )
 from .security import encrypt_secret, hash_password, hash_refresh_token
 from .services import (
     audit,
     authenticate_user,
+    get_guardrails,
     issue_login_tokens,
     proxy_chat,
     refresh_login,
@@ -416,6 +421,199 @@ def usage_summary(_: AdminPrincipal, db: DbSession) -> dict:
         "successful_requests": successful,
         "failed_requests": failed,
     }
+
+
+@router.get("/admin/overview", tags=["administration"])
+def admin_overview(_: AdminPrincipal, db: DbSession) -> dict:
+    now = datetime.now(UTC)
+    day_ago = now - timedelta(hours=24)
+    return {
+        "users_total": db.scalar(select(func.count(User.id))) or 0,
+        "users_active": db.scalar(select(func.count(User.id)).where(User.is_active.is_(True))) or 0,
+        "devices_active": db.scalar(
+            select(func.count(Device.id)).where(
+                Device.is_revoked.is_(False),
+                Device.refresh_expires_at > now,
+            )
+        ) or 0,
+        "requests_24h": db.scalar(
+            select(func.count(UsageEvent.id)).where(UsageEvent.created_at >= day_ago)
+        ) or 0,
+        "failed_requests_24h": db.scalar(
+            select(func.count(UsageEvent.id)).where(
+                UsageEvent.created_at >= day_ago,
+                UsageEvent.success.is_(False),
+            )
+        ) or 0,
+        "active_requests": db.scalar(
+            select(func.count(RequestLease.id)).where(
+                RequestLease.completed_at.is_(None),
+                RequestLease.expires_at > now,
+            )
+        ) or 0,
+    }
+
+
+@router.get("/admin/users", tags=["administration"])
+def admin_users(
+    _: AdminPrincipal,
+    db: DbSession,
+    query: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    limit = max(1, min(limit, 200))
+    statement = select(User).order_by(User.created_at.desc()).limit(limit)
+    if query:
+        statement = statement.where(User.email.ilike(f"%{query.strip()}%"))
+    users = db.scalars(statement).all()
+    result = []
+    for user in users:
+        devices = db.scalars(
+            select(Device).where(Device.user_id == user.id).order_by(Device.created_at.desc())
+        ).all()
+        result.append(
+            {
+                "id": user.id,
+                "email": user.email,
+                "role": user.role,
+                "is_active": user.is_active,
+                "created_at": user.created_at.isoformat(),
+                "devices_total": len(devices),
+                "devices_active": sum(1 for item in devices if not item.is_revoked),
+            }
+        )
+    return result
+
+
+@router.patch("/admin/users/{user_id}", tags=["administration"])
+def update_user_status(
+    user_id: str,
+    payload: UserStatusPatch,
+    principal: AdminPrincipal,
+    db: DbSession,
+) -> dict:
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not payload.is_active:
+        if user.id == principal.user.id:
+            raise HTTPException(status_code=409, detail="You cannot disable your own administrator account")
+        if user.role == "admin":
+            active_admins = db.scalar(
+                select(func.count(User.id)).where(
+                    User.role == "admin",
+                    User.is_active.is_(True),
+                )
+            ) or 0
+            if active_admins <= 1:
+                raise HTTPException(status_code=409, detail="The last active administrator cannot be disabled")
+        devices = db.scalars(select(Device).where(Device.user_id == user.id)).all()
+        for device in devices:
+            device.is_revoked = True
+            device.refresh_token_hash = hash_refresh_token(str(uuid4()))
+    user.is_active = payload.is_active
+    audit(
+        db,
+        principal.user,
+        "user.enable" if payload.is_active else "user.disable",
+        "user",
+        user.id,
+        {"email": user.email},
+    )
+    db.commit()
+    return {"id": user.id, "email": user.email, "is_active": user.is_active}
+
+
+@router.post("/admin/users/{user_id}/devices/{device_id}/revoke", tags=["administration"])
+def admin_revoke_device(
+    user_id: str,
+    device_id: str,
+    principal: AdminPrincipal,
+    db: DbSession,
+) -> dict:
+    device = db.scalar(
+        select(Device).where(Device.id == device_id, Device.user_id == user_id)
+    )
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found for this user")
+    device.is_revoked = True
+    device.refresh_token_hash = hash_refresh_token(str(uuid4()))
+    audit(
+        db,
+        principal.user,
+        "device.revoke",
+        "device",
+        device.id,
+        {"user_id": user_id, "device_name": device.name},
+    )
+    db.commit()
+    return {"status": "revoked", "device_id": device.id}
+
+
+@router.get("/admin/guardrails", tags=["administration"])
+def read_guardrails(_: AdminPrincipal, db: DbSession) -> dict:
+    setting = db.get(CloudSetting, "guardrails")
+    return {
+        "limits": get_guardrails(db),
+        "config_version": setting.version if setting else 1,
+    }
+
+
+@router.patch("/admin/guardrails", tags=["administration"])
+def update_guardrails(
+    payload: GuardrailsPatch,
+    principal: AdminPrincipal,
+    db: DbSession,
+) -> dict:
+    setting = db.get(CloudSetting, "guardrails")
+    current = get_guardrails(db)
+    changes = payload.model_dump(exclude_unset=True)
+    current.update({key: value for key, value in changes.items() if value is not None})
+    if not setting:
+        setting = CloudSetting(key="guardrails", value=current, version=1)
+        db.add(setting)
+    else:
+        setting.value = current
+        setting.version += 1
+    audit(
+        db,
+        principal.user,
+        "guardrails.update",
+        "guardrails",
+        "global",
+        {"values": changes},
+    )
+    db.commit()
+    return {"limits": current, "config_version": setting.version}
+
+
+@router.get("/admin/usage/recent", tags=["administration"])
+def recent_usage(_: AdminPrincipal, db: DbSession, limit: int = 100) -> list[dict]:
+    limit = max(1, min(limit, 500))
+    rows = db.execute(
+        select(UsageEvent, User.email)
+        .join(User, User.id == UsageEvent.user_id)
+        .order_by(UsageEvent.created_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "id": event.id,
+            "request_id": event.request_id,
+            "user_email": email,
+            "device_id": event.device_id,
+            "task_type": event.task_type,
+            "requested_model": event.requested_model,
+            "model_alias": event.model_alias,
+            "provider_name": event.provider_name,
+            "total_tokens": event.total_tokens,
+            "latency_ms": event.latency_ms,
+            "success": event.success,
+            "error_code": event.error_code,
+            "created_at": event.created_at.isoformat(),
+        }
+        for event, email in rows
+    ]
 
 
 @router.get("/admin/audit-logs", tags=["administration"])
