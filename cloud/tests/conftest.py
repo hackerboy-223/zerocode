@@ -1,5 +1,8 @@
 import os
 
+import pytest
+from fastapi.testclient import TestClient
+
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_zerocode_cloud.db")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-that-is-long-enough-for-hs256")
@@ -7,11 +10,8 @@ os.environ.setdefault("FERNET_KEY", "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI
 os.environ.setdefault("ALLOW_PUBLIC_SIGNUP", "true")
 os.environ.setdefault("AUTO_CREATE_SCHEMA", "false")
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.database import Base, engine
-from app.main import app
+from app.database import Base, engine  # noqa: E402
+from app.main import app  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +34,7 @@ def admin_headers(client):
         "/v1/auth/register",
         json={"email": "admin@test.example", "password": "correct-horse-battery-99"},
     )
-    # Promote only in the isolated test database; role changes are admin-only in production.
+    # Promote only in the isolated test database; production role changes are admin-only.
     from sqlalchemy import select
     from app.database import SessionLocal
     from app.models import User
