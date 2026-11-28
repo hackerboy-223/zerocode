@@ -109,6 +109,21 @@ def audit(
 def issue_login_tokens(db: Session, user: User, device_name: str) -> dict[str, Any]:
     raw_refresh = new_refresh_token()
     now = datetime.now(UTC)
+    limits = get_guardrails(db)
+    active_devices = db.scalars(
+        select(Device)
+        .where(
+            Device.user_id == user.id,
+            Device.is_revoked.is_(False),
+            Device.refresh_expires_at > now,
+        )
+        .order_by(Device.created_at.asc())
+    ).all()
+    while len(active_devices) >= limits["max_active_devices"]:
+        oldest = active_devices.pop(0)
+        oldest.is_revoked = True
+        oldest.refresh_token_hash = hash_refresh_token(str(uuid4()))
+
     device = Device(
         user_id=user.id,
         name=device_name.strip()[:120] or "ZeroCode device",
@@ -279,9 +294,12 @@ def record_usage_safely(**kwargs: Any) -> None:
 DEFAULT_GUARDRAILS = {
     "requests_per_minute": 12,
     "max_concurrent_requests": 2,
+    "global_requests_per_minute": 240,
+    "max_global_concurrent_requests": 40,
     "max_prompt_chars": 120000,
     "max_output_tokens": 8192,
     "max_messages": 100,
+    "max_active_devices": 5,
 }
 
 
@@ -313,7 +331,7 @@ def acquire_request_lease(
         )
 
     measured_payload = json.dumps(
-        {"messages": request.messages, "tools": extra.get("tools")},
+        request.model_dump(exclude_none=True),
         ensure_ascii=False,
         default=str,
     )
@@ -331,8 +349,12 @@ def acquire_request_lease(
             status_code=422,
             detail=f"Output token limit exceeds the server maximum of {limits['max_output_tokens']}.",
         )
-    if extra.get("n", 1) not in (None, 1):
+    requested_count = extra.get("n", 1)
+    if not isinstance(requested_count, int) or isinstance(requested_count, bool) or requested_count != 1:
         raise HTTPException(status_code=422, detail="Multiple completions per request are disabled")
+    best_of = extra.get("best_of", 1)
+    if best_of != 1:
+        raise HTTPException(status_code=422, detail="Multiple candidate generation is disabled")
 
     now = datetime.now(UTC)
     # Serializing admission per account makes the limits consistent across
@@ -340,6 +362,31 @@ def acquire_request_lease(
     locked_user = db.scalar(select(User).where(User.id == user.id).with_for_update())
     if not locked_user or not locked_user.is_active:
         raise HTTPException(status_code=403, detail="This account is disabled")
+
+    global_active = db.scalar(
+        select(func.count(RequestLease.id)).where(
+            RequestLease.completed_at.is_(None),
+            RequestLease.expires_at > now,
+        )
+    ) or 0
+    if global_active >= limits["max_global_concurrent_requests"]:
+        raise HTTPException(
+            status_code=429,
+            detail="ZeroCode Cloud is busy. Please retry shortly.",
+            headers={"Retry-After": "10"},
+        )
+
+    global_recent = db.scalar(
+        select(func.count(RequestLease.id)).where(
+            RequestLease.created_at >= now - timedelta(minutes=1),
+        )
+    ) or 0
+    if global_recent >= limits["global_requests_per_minute"]:
+        raise HTTPException(
+            status_code=429,
+            detail="The service-wide request limit has been reached. Please retry shortly.",
+            headers={"Retry-After": "60"},
+        )
 
     active_requests = db.scalar(
         select(func.count(RequestLease.id)).where(
