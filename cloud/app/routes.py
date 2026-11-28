@@ -7,7 +7,16 @@ from sqlalchemy.orm import joinedload
 
 from .config import get_settings
 from .dependencies import AdminPrincipal, CurrentPrincipal, DbSession
-from .models import AuditLog, CloudSetting, Device, ModelRoute, Provider, RoutingPolicy, UsageEvent, User
+from .models import (
+    AuditLog,
+    CloudSetting,
+    Device,
+    ModelRoute,
+    Provider,
+    RoutingPolicy,
+    UsageEvent,
+    User,
+)
 from .schemas import (
     ChatRequest,
     ClientConfigPatch,
