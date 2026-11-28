@@ -617,3 +617,54 @@ button.crumb:hover { background: var(--elev2); color: var(--text); } .crumb.stat
 .doctor-row.status-warn .doctor-dot { background: var(--warn); }
 .doctor-row.status-error .doctor-dot { background: var(--danger); }
 .doctor-row.status-info .doctor-dot { background: var(--faint); }
+
+
+/* ---------- Cloud sign-in ---------- */
+.cloud-gate { width:100%; height:100%; min-height:560px; display:grid; place-items:center; padding:28px; overflow:auto; background:var(--bg); }
+.cloud-gate-card { width:min(920px,100%); min-height:590px; display:grid; grid-template-columns:1fr 1fr; overflow:hidden; border:1px solid var(--border); border-radius:22px; background:var(--panel); box-shadow:var(--shadow); }
+.cloud-gate-aside { display:flex; flex-direction:column; justify-content:space-between; padding:30px; background:var(--elev); border-right:1px solid var(--border); }
+.cloud-gate-brand { display:flex; align-items:center; gap:10px; font-size:1.05rem; }
+.cloud-gate-brand strong { font-weight:760; letter-spacing:-.4px; }
+.cloud-gate-brand > span:last-child { margin-left:2px; color:var(--faint); font-size:.62rem; letter-spacing:1.5px; font-weight:750; }
+.cloud-gate-mark { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; color:var(--accent); background:color-mix(in srgb,var(--accent) 13%,transparent); }
+.cloud-gate-intro { max-width:350px; padding:36px 0; }
+.cloud-gate-eyebrow { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:.68rem; letter-spacing:1.5px; font-weight:750; }
+.cloud-gate-eyebrow span { width:7px; height:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 13%,transparent); }
+.cloud-gate-intro h1 { margin:22px 0 14px; font-size:clamp(2.5rem,5vw,4.1rem); line-height:1.02; letter-spacing:-3px; font-weight:760; }
+.cloud-gate-intro h1 em { color:var(--accent); font-style:normal; }
+.cloud-gate-intro p { max-width:300px; color:var(--muted); font-size:.98rem; line-height:1.7; }
+.cloud-gate-security { display:flex; align-items:center; gap:9px; color:var(--muted); font-size:.78rem; }
+.cloud-gate-security svg { color:var(--ok); flex:none; }
+.cloud-gate-form-wrap { display:flex; flex-direction:column; justify-content:center; padding:clamp(26px,4vw,48px); }
+.cloud-gate-heading { display:flex; align-items:center; gap:14px; margin-bottom:28px; }
+.cloud-gate-icon { width:46px; height:46px; display:grid; place-items:center; border-radius:14px; color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,transparent); }
+.cloud-gate-kicker { color:var(--faint); font-size:.66rem; font-weight:750; letter-spacing:1.3px; }
+.cloud-gate-heading h2 { margin:2px 0 0; font-size:1.65rem; line-height:1.2; letter-spacing:-.7px; }
+.cloud-gate-heading p { margin:4px 0 0; color:var(--muted); font-size:.88rem; }
+.cloud-gate-form { display:grid; gap:16px; }
+.cloud-gate-form label { display:grid; gap:7px; color:var(--muted); font-size:.8rem; font-weight:650; }
+.cloud-gate-form input { width:100%; height:43px; padding:0 12px; border:1px solid var(--border-strong); border-radius:9px; outline:none; background:var(--bg); color:var(--text); font-size:.9rem; }
+.cloud-gate-form input:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); }
+.cloud-password-field { display:flex; align-items:center; gap:9px; height:43px; padding:0 11px; border:1px solid var(--border-strong); border-radius:9px; background:var(--bg); color:var(--faint); }
+.cloud-password-field:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); }
+.cloud-password-field input { height:39px; min-width:0; padding:0; border:0; box-shadow:none!important; background:transparent; }
+.cloud-password-field button { display:grid; place-items:center; width:26px; height:28px; color:var(--muted); }
+.cloud-gate-error { padding:10px 12px; border:1px solid color-mix(in srgb,var(--danger) 35%,transparent); border-radius:8px; background:color-mix(in srgb,var(--danger) 8%,transparent); color:var(--danger); font-size:.82rem; line-height:1.45; overflow-wrap:anywhere; }
+.cloud-gate-submit { display:flex; align-items:center; justify-content:center; gap:9px; height:44px; margin-top:3px; border-radius:9px; background:var(--accent); color:var(--accent-ink); font-weight:700; transition:filter .15s,transform .15s; }
+.cloud-gate-submit:hover:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
+.cloud-gate-submit:disabled { opacity:.55; cursor:not-allowed; }
+.cloud-gate-divider { display:flex; align-items:center; gap:12px; margin:21px 0 14px; color:var(--faint); font-size:.68rem; font-weight:700; }
+.cloud-gate-divider span { flex:1; height:1px; background:var(--border); }
+.cloud-gate-local { display:flex; align-items:center; justify-content:center; gap:8px; min-height:42px; border:1px solid var(--border-strong); border-radius:9px; color:var(--text); font-size:.85rem; font-weight:650; }
+.cloud-gate-local:hover:not(:disabled) { background:var(--elev2); }
+.cloud-gate-foot { margin:16px 0 0; color:var(--faint); font-size:.72rem; line-height:1.55; text-align:center; }
+@media (max-width:760px) {
+  .cloud-gate { padding:12px; }
+  .cloud-gate-card { grid-template-columns:1fr; min-height:0; max-width:480px; }
+  .cloud-gate-aside { min-height:190px; padding:20px 22px; }
+  .cloud-gate-intro { padding:20px 0 8px; }
+  .cloud-gate-intro h1 { margin:12px 0 8px; font-size:2.2rem; letter-spacing:-1.5px; }
+  .cloud-gate-intro p { margin:0; font-size:.84rem; }
+  .cloud-gate-security { margin-top:18px; font-size:.72rem; }
+  .cloud-gate-form-wrap { padding:24px 22px; }
+}
