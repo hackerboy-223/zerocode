@@ -40,3 +40,5 @@ jobs:
         run: pytest
       - name: Lint
         run: ruff check app tests migrations
+      - name: Check admin console JavaScript
+        run: node --check admin/admin.js
