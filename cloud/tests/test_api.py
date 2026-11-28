@@ -237,3 +237,49 @@ def test_login_rotates_oldest_session_when_device_limit_is_reached(client):
     assert len(devices) == 6
     assert sum(1 for device in devices if not device["is_revoked"]) == 5
     assert any(device["is_revoked"] for device in devices)
+
+
+def test_server_enforces_cloud_ai_kill_switch(client, admin_headers):
+    client.post(
+        "/v1/auth/register",
+        json={"email": "kill-switch@example.com", "password": "correct-horse-battery-99"},
+    )
+    login = client.post(
+        "/v1/auth/login",
+        json={"email": "kill-switch@example.com", "password": "correct-horse-battery-99"},
+    ).json()
+    user_headers = {"Authorization": f"Bearer {login['access_token']}"}
+
+    changed = client.patch(
+        "/v1/admin/client-config",
+        headers=admin_headers,
+        json={"feature_flags": {"cloud_ai": False, "remote_config": True}},
+    )
+    assert changed.status_code == 200
+    blocked = client.post(
+        "/v1/chat/completions",
+        headers=user_headers,
+        json={"messages": [{"role": "user", "content": "try the gateway"}]},
+    )
+    assert blocked.status_code == 503
+    assert "disabled" in blocked.json()["detail"].lower()
+
+
+def test_admin_console_is_served_with_security_headers(client):
+    page = client.get("/admin")
+    assert page.status_code == 200
+    assert "Centre de contrôle" in page.text
+    assert page.headers["x-frame-options"] == "DENY"
+    assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+    asset = client.get("/admin/assets/admin.js")
+    assert asset.status_code == 200
+    assert "async function boot" in asset.text
+
+
+def test_cloud_rejects_oversized_http_body(client):
+    response = client.post(
+        "/v1/auth/login",
+        content=b"x" * (1_048_577),
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 413
