@@ -37,7 +37,14 @@ def test_signup_login_refresh_and_revoke(client):
     assert client.get("/v1/auth/me", headers=fresh_headers).status_code == 401
 
 
-def test_admin_can_configure_provider_model_and_routing(client, admin_headers):
+def test_admin_can_configure_provider_model_and_routing(client, admin_headers, monkeypatch):
+    import app.services
+
+    monkeypatch.setattr(
+        app.services.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(None, None, None, None, ("1.1.1.1", 443))],
+    )
     blocked = client.post(
         "/v1/admin/providers",
         headers=admin_headers,
