@@ -373,6 +373,8 @@ def acquire_request_lease(
     requested_tokens = extra.get("max_completion_tokens", request.max_tokens)
     if not isinstance(requested_tokens, int) or isinstance(requested_tokens, bool):
         raise HTTPException(status_code=422, detail="Invalid output token limit")
+    if requested_tokens < 1:
+        raise HTTPException(status_code=422, detail="Output token limit must be at least 1")
     if requested_tokens > limits["max_output_tokens"] or request.max_tokens > limits["max_output_tokens"]:
         raise HTTPException(
             status_code=422,
