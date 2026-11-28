@@ -45,7 +45,7 @@ chmod 700 "$INSTALLER"
 
 if command -v x-terminal-emulator >/dev/null 2>&1; then
   x-terminal-emulator -e bash -c '
-    bash "$1" --mode "$2" --yes
+    bash "$1" --source --mode "$2" --yes
     result=$?
     echo
     if [ "$result" -eq 0 ]; then
@@ -60,5 +60,5 @@ if command -v x-terminal-emulator >/dev/null 2>&1; then
   trap - EXIT
 else
   zenity --info --title="ZeroCode" --text="Aucun émulateur de terminal n’a été détecté. L’installation va continuer dans ce terminal."
-  bash "$INSTALLER" --mode "$MODE" --yes
+  bash "$INSTALLER" --source --mode "$MODE" --yes
 fi
