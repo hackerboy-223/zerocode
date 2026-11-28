@@ -10,6 +10,8 @@ depends_on = None
 
 
 def upgrade() -> None:
+    if "request_leases" in sa.inspect(op.get_bind()).get_table_names():
+        return
     op.create_table(
         "request_leases",
         sa.Column("id", sa.String(length=36), primary_key=True),
@@ -26,6 +28,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if "request_leases" not in sa.inspect(op.get_bind()).get_table_names():
+        return
     op.drop_index("ix_request_leases_expires_at", table_name="request_leases")
     op.drop_index("ix_request_leases_created_at", table_name="request_leases")
     op.drop_index("ix_request_leases_device_id", table_name="request_leases")
