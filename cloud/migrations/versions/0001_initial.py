@@ -12,7 +12,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    Base.metadata.create_all(bind=op.get_bind())
+    # Keep this baseline migration stable: request_leases is introduced by 0002.
+    tables = [table for table in Base.metadata.sorted_tables if table.name != "request_leases"]
+    Base.metadata.create_all(bind=op.get_bind(), tables=tables)
 
 
 def downgrade() -> None:
