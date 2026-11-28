@@ -141,6 +141,9 @@ def revoke_device(device_id: str, principal: CurrentPrincipal, db: DbSession) ->
 def client_config(principal: CurrentPrincipal, db: DbSession) -> dict:
     setting = db.get(CloudSetting, "client")
     value = setting.value if setting else {}
+    feature_flags = value.get("feature_flags", {"cloud_ai": True, "remote_config": True})
+    if isinstance(feature_flags, dict) and feature_flags.get("remote_config") is False:
+        raise HTTPException(status_code=503, detail="Remote client configuration is disabled")
     models = db.scalars(
         select(ModelRoute)
         .join(Provider)
@@ -151,7 +154,7 @@ def client_config(principal: CurrentPrincipal, db: DbSession) -> dict:
         "config_version": setting.version if setting else 1,
         "maintenance_mode": bool(value.get("maintenance_mode", False)),
         "client_min_version": value.get("client_min_version", get_settings().client_min_version),
-        "feature_flags": value.get("feature_flags", {"cloud_ai": True, "remote_config": True}),
+        "feature_flags": feature_flags,
         "models": [
             {
                 "alias": item.alias,
@@ -424,6 +427,18 @@ def usage_summary(_: AdminPrincipal, db: DbSession) -> dict:
         "completion_tokens": totals[3],
         "successful_requests": successful,
         "failed_requests": failed,
+    }
+
+
+@router.get("/admin/client-config", tags=["administration"])
+def admin_client_config(_: AdminPrincipal, db: DbSession) -> dict:
+    setting = db.get(CloudSetting, "client")
+    value = setting.value if setting else {}
+    return {
+        "config_version": setting.version if setting else 1,
+        "maintenance_mode": bool(value.get("maintenance_mode", False)),
+        "client_min_version": value.get("client_min_version", get_settings().client_min_version),
+        "feature_flags": value.get("feature_flags", {"cloud_ai": True, "remote_config": True}),
     }
 
 
