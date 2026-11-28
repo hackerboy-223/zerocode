@@ -10,7 +10,6 @@ services:
     branch: main
     autoDeployTrigger: checksPass
     healthCheckPath: /v1/health/ready
-    maxShutdownDelaySeconds: 60
     envVars:
       - key: APP_ENV
         value: production
