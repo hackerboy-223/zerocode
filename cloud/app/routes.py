@@ -169,8 +169,12 @@ def client_config(principal: CurrentPrincipal, db: DbSession) -> dict:
 async def chat_completions(payload: ChatRequest, principal: CurrentPrincipal, db: DbSession):
     request_id = str(uuid4())
     setting = db.get(CloudSetting, "client")
-    if setting and setting.value.get("maintenance_mode"):
-        raise HTTPException(status_code=503, detail="ZeroCode Cloud is in maintenance mode")
+    if setting:
+        if setting.value.get("maintenance_mode"):
+            raise HTTPException(status_code=503, detail="ZeroCode Cloud is in maintenance mode")
+        flags = setting.value.get("feature_flags", {})
+        if isinstance(flags, dict) and flags.get("cloud_ai") is False:
+            raise HTTPException(status_code=503, detail="Cloud AI has been disabled by an administrator")
 
     result, stream, task_type = await proxy_chat(
         db=db,
