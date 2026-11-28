@@ -23,6 +23,7 @@ from rich.text import Text
 from .agent import Agent
 from .catalog import PROVIDERS, all_choices, get_provider
 from .checkpoints import CheckpointStore
+from .cloud_client import cloud_command, create_router
 from .config import (
     Config,
     config_dir,
@@ -73,6 +74,7 @@ COMMANDS = {
     "providers",
     "sessions",
     "config",
+    "cloud",
     "help",
     "version",
     "run",
@@ -112,6 +114,8 @@ def _dispatch(argv: list[str], console: Console) -> int:
         return 0
     if first == "setup":
         return setup_command(argv[1:], console)
+    if first == "cloud":
+        return cloud_command(argv[1:], console)
     if first == "doctor":
         return doctor_command(argv[1:], console)
     if first == "audit":
@@ -324,7 +328,7 @@ def run_agent(
             interactive=interactive,
         )
     )
-    router = Router(config, ui=ui)
+    router = create_router(config, ui=ui)
     hook_manager = HookManager(config.hooks, cwd)
     context = ToolContext(
         cwd=cwd,
