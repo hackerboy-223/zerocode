@@ -694,7 +694,7 @@ def _resolve_model_selection(
         return next_model, raw_provider.strip() or None
     if "/" in next_model:
         prefix, model_id = next_model.split("/", 1)
-        if prefix in getattr(router, "providers", {}) :
+        if prefix in getattr(router, "providers", {}):
             return model_id, prefix
         if prefix == "zerocode-cloud" and getattr(router, "is_cloud", False):
             return model_id, None
