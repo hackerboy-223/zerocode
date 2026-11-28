@@ -479,7 +479,11 @@ def admin_users(
                 "is_active": user.is_active,
                 "created_at": user.created_at.isoformat(),
                 "devices_total": len(devices),
-                "devices_active": sum(1 for item in devices if not item.is_revoked),
+                "devices_active": sum(
+                    1
+                    for item in devices
+                    if not item.is_revoked and item.refresh_expires_at > datetime.now(UTC)
+                ),
             }
         )
     return result
