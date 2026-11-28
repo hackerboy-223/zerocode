@@ -466,11 +466,19 @@ def admin_users(
     if query:
         statement = statement.where(User.email.ilike(f"%{query.strip()}%"))
     users = db.scalars(statement).all()
+    now = datetime.now(UTC)
     result = []
     for user in users:
         devices = db.scalars(
             select(Device).where(Device.user_id == user.id).order_by(Device.created_at.desc())
         ).all()
+        active_device_count = 0
+        for item in devices:
+            expires_at = item.refresh_expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if not item.is_revoked and expires_at > now:
+                active_device_count += 1
         result.append(
             {
                 "id": user.id,
@@ -479,11 +487,7 @@ def admin_users(
                 "is_active": user.is_active,
                 "created_at": user.created_at.isoformat(),
                 "devices_total": len(devices),
-                "devices_active": sum(
-                    1
-                    for item in devices
-                    if not item.is_revoked and item.refresh_expires_at > datetime.now(UTC)
-                ),
+                "devices_active": active_device_count,
             }
         )
     return result
