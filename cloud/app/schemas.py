@@ -78,9 +78,12 @@ class ClientConfigPatch(BaseModel):
 class GuardrailsPatch(BaseModel):
     requests_per_minute: int | None = Field(default=None, ge=1, le=120)
     max_concurrent_requests: int | None = Field(default=None, ge=1, le=20)
+    global_requests_per_minute: int | None = Field(default=None, ge=1, le=5000)
+    max_global_concurrent_requests: int | None = Field(default=None, ge=1, le=500)
     max_prompt_chars: int | None = Field(default=None, ge=1000, le=500000)
     max_output_tokens: int | None = Field(default=None, ge=256, le=32768)
     max_messages: int | None = Field(default=None, ge=1, le=200)
+    max_active_devices: int | None = Field(default=None, ge=1, le=20)
 
 
 class UserStatusPatch(BaseModel):
@@ -93,7 +96,7 @@ class ChatRequest(BaseModel):
     messages: list[dict[str, Any]] = Field(min_length=1, max_length=200)
     stream: bool = False
     temperature: float | None = Field(default=0.2, ge=0, le=2)
-    max_tokens: int | None = Field(default=8192, ge=1, le=32768)
+    max_tokens: int = Field(default=8192, ge=1, le=32768)
 
     @field_validator("messages")
     @classmethod
