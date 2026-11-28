@@ -90,7 +90,7 @@ def test_cloud_router_streams_text_and_tool_calls(monkeypatch: pytest.MonkeyPatc
     )
     monkeypatch.setattr(cloud_client.httpx, "Client", lambda *args, **kwargs: client)
     streamed: list[str] = []
-    router = cloud_client.CloudRouter(Config())
+    router = cloud_client.CloudRouter(Config(provider="kilo", model="local-model-name"))
     try:
         result = router.complete(
             [{"role": "user", "content": "fix the code"}],
