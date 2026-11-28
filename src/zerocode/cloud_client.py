@@ -476,8 +476,9 @@ def cloud_command(args_list: list[str], console: Console) -> int:
     if args.action == "logout":
         if auth.get("base_url") and auth.get("access_token"):
             try:
+                base_url = _validate_url(str(auth["base_url"]))
                 httpx.post(
-                    auth["base_url"] + "/v1/auth/logout",
+                    base_url + "/v1/auth/logout",
                     headers={"Authorization": f"Bearer {auth['access_token']}"},
                     timeout=10,
                     follow_redirects=False,
