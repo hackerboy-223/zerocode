@@ -11,6 +11,7 @@ from zerocode.desktop_bridge import (
     _desktop_permission_manager,
     _public_mcp_servers,
     _public_providers,
+    _resolve_model_selection,
     _session_summaries,
     _think_value,
     _visible_history,
@@ -407,3 +408,14 @@ def test_desktop_bridge_exposes_cloud_gateway_without_local_api_keys() -> None:
             "notes": "Inférence distante · modèles et fournisseurs gérés par ZeroCode Cloud.",
         }
     ]
+
+
+
+def test_desktop_bridge_normalizes_cloud_model_aliases() -> None:
+    class CloudRouter:
+        is_cloud = True
+        providers = {}
+
+    assert _resolve_model_selection(
+        CloudRouter(), "zerocode-cloud/MIMI"
+    ) == ("MIMI", None)
