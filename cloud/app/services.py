@@ -3,6 +3,7 @@ import json
 import re
 import socket
 import time
+from uuid import uuid4
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
