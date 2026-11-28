@@ -114,6 +114,6 @@ Provider credentials remain on the server. The client sends OpenAI-compatible re
 
 ## Deployment and production gate
 
-This remains a pre-release service. Before exposing it broadly, add login abuse protection, admin MFA, secrets rotation, a browser-based control panel, explicit data retention/deletion rules, backups and restore drills, monitoring/alerting, and load/security tests. Run Alembic migrations before production data is stored; do not rely on development-only automatic schema creation.
+This remains a pre-release service. Before exposing it broadly, add admin MFA, secrets rotation, a browser-based control panel, explicit data retention/deletion rules, backups and restore drills, monitoring/alerting, and load/security tests. Failed sign-in attempts are now rate-limited per normalized account email using persistent database state (8 failures per 15-minute window, followed by a 15-minute block). Run Alembic migrations before production data is stored; do not rely on development-only automatic schema creation.
 
 A free hosting tier can sleep, restart, or lose ephemeral files. Use durable managed PostgreSQL storage, backups and an always-on service before relying on the Cloud control plane for active users.

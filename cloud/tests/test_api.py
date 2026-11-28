@@ -306,3 +306,15 @@ def test_admin_can_disable_remote_config_but_keep_admin_control(client, admin_he
     admin_config = client.get("/v1/admin/client-config", headers=admin_headers)
     assert admin_config.status_code == 200
     assert admin_config.json()["feature_flags"]["remote_config"] is False
+
+
+
+def test_login_is_rate_limited_after_repeated_failures(client):
+    payload = {"email": "brute-force@example.com", "password": "wrong-password"}
+    for _ in range(8):
+        response = client.post("/v1/auth/login", json=payload)
+        assert response.status_code == 401
+
+    blocked = client.post("/v1/auth/login", json=payload)
+    assert blocked.status_code == 429
+    assert int(blocked.headers["retry-after"]) > 0

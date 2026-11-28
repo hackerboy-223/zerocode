@@ -37,9 +37,12 @@ from .security import encrypt_secret, hash_password, hash_refresh_token
 from .services import (
     audit,
     authenticate_user,
+    clear_login_failures,
+    ensure_login_allowed,
     get_guardrails,
     issue_login_tokens,
     proxy_chat,
+    record_login_failure,
     refresh_login,
     validate_provider_url,
 )
@@ -73,9 +76,13 @@ def register(payload: RegisterIn, db: DbSession) -> dict:
 
 @router.post("/auth/login", tags=["authentication"])
 def login(payload: LoginIn, db: DbSession) -> dict:
-    user = authenticate_user(db, str(payload.email), payload.password)
+    email = str(payload.email).strip().lower()
+    ensure_login_allowed(db, email)
+    user = authenticate_user(db, email, payload.password)
     if not user:
+        record_login_failure(db, email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    clear_login_failures(db, email)
     return issue_login_tokens(db, user, payload.device_name)
 
 
