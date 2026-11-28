@@ -40,6 +40,14 @@ curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install
 
 Choisis TUI, Desktop ou les deux dans le menu. Les paquets Desktop sont installés selon le système : `.deb`, `.rpm`, AppImage ou `.dmg`/`.app`.
 
+Pour une installation graphique guidée sous Linux (Zenity), avec choix visuel TUI/Desktop/les deux et compilation des dernières modifications de `main` :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hackerboy-223/zerocode/main/install-gui.sh | bash
+```
+
+Le lanceur graphique ouvre ensuite l'installateur dans un terminal pour afficher les étapes et permettre les demandes d'autorisation système. Si Zenity n'est pas installé, il revient automatiquement au menu terminal.
+
 Pour choisir le mode ou une version sans passer par le menu :
 
 ```bash

@@ -16,6 +16,7 @@ on:
       - "src/zerocode/maintenance.py"
       - ".github/workflows/release.yml"
       - "install.sh"
+      - "install-gui.sh"
       - "install.ps1"
       - "README.md"
       - "docs/DESKTOP.md"
@@ -110,6 +111,7 @@ jobs:
       - name: Validate shell installer
         run: |
           bash -n install.sh
+          bash -n install-gui.sh
           bash install.sh --help
 
   installer-windows:

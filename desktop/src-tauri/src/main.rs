@@ -1295,6 +1295,104 @@ fn search_workspace_files(
     Ok(matches)
 }
 
+#[tauri::command]
+fn cloud_auth(
+    action: String,
+    email: Option<String>,
+    password: Option<String>,
+    base_url: Option<String>,
+) -> Result<Value, String> {
+    let (subcommand, payload) = match action.as_str() {
+        "status" => ("status-json", None),
+        "login" => {
+            let email = email.unwrap_or_default().trim().to_string();
+            let password = password.unwrap_or_default();
+            let base_url = base_url.unwrap_or_default().trim().to_string();
+            if email.is_empty() || password.is_empty() || base_url.is_empty() {
+                return Err(
+                    "Renseigne le serveur, l’adresse e-mail et le mot de passe.".to_string()
+                );
+            }
+            (
+                "login-json",
+                Some(json!({
+                    "email": email,
+                    "password": password,
+                    "base_url": base_url
+                })),
+            )
+        }
+        "logout" => ("logout", None),
+        "use-cloud" => ("use-cloud", None),
+        "use-local" => ("use-local", None),
+        _ => return Err("Action Cloud inconnue.".to_string()),
+    };
+
+    let mut command = ProcessCommand::new("zerocode");
+    command.env("PATH", desktop_path()).arg("cloud");
+    match action.as_str() {
+        "logout" => {
+            command.arg("logout");
+        }
+        "use-cloud" => {
+            command.args(["use", "cloud"]);
+        }
+        "use-local" => {
+            command.args(["use", "local"]);
+        }
+        _ => {
+            command.arg(subcommand);
+        }
+    }
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| {
+        format!("Moteur ZeroCode introuvable. Réinstalle le moteur TUI : {error}")
+    })?;
+    if let Some(payload) = payload {
+        let mut input = child
+            .stdin
+            .take()
+            .ok_or_else(|| "Entrée Cloud indisponible.".to_string())?;
+        let bytes =
+            serde_json::to_vec(&payload).map_err(|error| format!("Données invalides : {error}"))?;
+        input
+            .write_all(&bytes)
+            .map_err(|error| format!("Envoi des identifiants impossible : {error}"))?;
+    } else {
+        drop(child.stdin.take());
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("Commande Cloud interrompue : {error}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        if let Ok(value) = serde_json::from_str::<Value>(&stdout) {
+            if let Some(message) = value.get("error").and_then(Value::as_str) {
+                return Err(message.to_string());
+            }
+        }
+        let message = stderr.trim();
+        return Err(if message.is_empty() {
+            "Opération ZeroCode Cloud échouée.".to_string()
+        } else {
+            message.to_string()
+        });
+    }
+    if action == "status" {
+        return serde_json::from_str::<Value>(&stdout)
+            .map_err(|_| "Réponse de statut Cloud invalide.".to_string());
+    }
+    if action == "login" {
+        return serde_json::from_str::<Value>(&stdout)
+            .map_err(|_| "Réponse de connexion Cloud invalide.".to_string());
+    }
+    Ok(json!({ "ok": true }))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -1316,7 +1414,8 @@ fn main() {
             workspace_git_status_explicit,
             workspace_git_file_versions,
             workspace_git_stage,
-            workspace_git_commit
+            workspace_git_commit,
+            cloud_auth
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de ZeroCode Desktop");

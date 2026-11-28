@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import TerminalPanel from "./components/TerminalPanel";
+import CloudLogin, { type CloudAuthStatus } from "./components/CloudLogin";
 import EditorWorkspace from "./components/EditorWorkspace";
 import McpManager, { type McpServer } from "./components/McpManager";
 import WorkspaceSearch from "./components/WorkspaceSearch";
@@ -127,6 +128,9 @@ export default function App() {
   const [pending, setPending] = useState<PermissionRequest | null>(null);
   const [sudoPassword, setSudoPassword] = useState("");
   const [notice, setNotice] = useState<{ text: string; tone: "info" | "error" } | null>(null);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudGateOpen, setCloudGateOpen] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<CloudAuthStatus | null>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(() => readFlag("zerocode.sidebar", true));
   const [inspectorOpen, setInspectorOpen] = useState(() => readFlag("zerocode.inspector", false));
@@ -153,6 +157,35 @@ export default function App() {
   messagesRef.current = messages;
 
   useEffect(() => { agentIdRef.current = agentId; }, [agentId]);
+
+  useEffect(() => {
+    if (!isTauri()) { setCloudReady(true); return; }
+    let alive = true;
+    desktopInvoke<CloudAuthStatus>("cloud_auth", { action: "status" })
+      .then((status) => {
+        if (!alive) return;
+        setCloudStatus(status);
+        setCloudGateOpen(!status.connected);
+        setCloudReady(true);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCloudGateOpen(true);
+        setCloudReady(true);
+      });
+    return () => { alive = false; };
+  }, []);
+
+  const handleCloudConnected = useCallback((status: CloudAuthStatus) => {
+    setCloudStatus(status);
+    setCloudGateOpen(false);
+  }, []);
+
+  const handleLocalMode = useCallback(async () => {
+    await desktopInvoke("cloud_auth", { action: "use-local" });
+    setCloudStatus({ connected: Boolean(cloudStatus?.connected), mode: "local", base_url: cloudStatus?.base_url || "" });
+    setCloudGateOpen(false);
+  }, [cloudStatus]);
   useEffect(() => { try { localStorage.setItem("zerocode.sidebar", sidebarOpen ? "1" : "0"); } catch { /* ignoré */ } }, [sidebarOpen]);
   useEffect(() => { try { localStorage.setItem("zerocode.inspector", inspectorOpen ? "1" : "0"); } catch { /* ignoré */ } }, [inspectorOpen]);
 
@@ -546,7 +579,7 @@ export default function App() {
   }, [workspace, refreshGitInfo, loadDirectory]);
 
   useEffect(() => {
-    if (!isTauri() || !eventsReady) return;
+    if (!isTauri() || !eventsReady || !cloudReady || cloudGateOpen) return;
     let cancelled = false;
     setNotice(null);
     setAgentReady(false);
@@ -571,7 +604,7 @@ export default function App() {
       if (current) void desktopInvoke("stop_agent", { agentId: current }).catch(() => undefined);
       setAgentId(null); setAgentReady(false); agentIdRef.current = null;
     };
-  }, [workspace, eventsReady, agentRestartKey, say]);
+  }, [workspace, eventsReady, agentRestartKey, say, cloudReady, cloudGateOpen]);
 
   useEffect(() => {
     let unlisten: Array<() => void> = [];
@@ -971,6 +1004,10 @@ export default function App() {
     changeMode, openInspector, roles, sessions, sessionId, resumeSession, recentProjects, activateWorkspace]);
 
   const wideInspector = inspectorTab === "editor";
+
+  if (isTauri() && (!cloudReady || cloudGateOpen)) {
+    return <CloudLogin onConnected={handleCloudConnected} onLocal={handleLocalMode} />;
+  }
 
   return (
     <div className="app">
