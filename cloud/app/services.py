@@ -10,12 +10,12 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from .config import get_settings
 from .database import SessionLocal
-from .models import AuditLog, Device, ModelRoute, Provider, RoutingPolicy, UsageEvent, User
+from .models import AuditLog, CloudSetting, Device, ModelRoute, Provider, RequestLease, RoutingPolicy, UsageEvent, User
 from .schemas import ChatRequest
 from .security import (
     DUMMY_PASSWORD_HASH,
@@ -276,6 +276,126 @@ def record_usage_safely(**kwargs: Any) -> None:
         return
 
 
+DEFAULT_GUARDRAILS = {
+    "requests_per_minute": 12,
+    "max_concurrent_requests": 2,
+    "max_prompt_chars": 120000,
+    "max_output_tokens": 8192,
+    "max_messages": 100,
+}
+
+
+def get_guardrails(db: Session) -> dict[str, int]:
+    setting = db.get(CloudSetting, "guardrails")
+    values = dict(DEFAULT_GUARDRAILS)
+    if setting and isinstance(setting.value, dict):
+        for key, default in DEFAULT_GUARDRAILS.items():
+            value = setting.value.get(key, default)
+            if isinstance(value, int) and not isinstance(value, bool):
+                values[key] = value
+    return values
+
+
+def acquire_request_lease(
+    db: Session,
+    user: User,
+    device: Device,
+    request: ChatRequest,
+    request_id: str,
+) -> str:
+    limits = get_guardrails(db)
+    extra = request.model_extra or {}
+
+    if len(request.messages) > limits["max_messages"]:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Too many messages. Server limit: {limits['max_messages']}.",
+        )
+
+    measured_payload = json.dumps(
+        {"messages": request.messages, "tools": extra.get("tools")},
+        ensure_ascii=False,
+        default=str,
+    )
+    if len(measured_payload) > limits["max_prompt_chars"]:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Request payload is too large. Server limit: {limits['max_prompt_chars']} characters.",
+        )
+
+    requested_tokens = extra.get("max_completion_tokens", request.max_tokens)
+    if not isinstance(requested_tokens, int) or isinstance(requested_tokens, bool):
+        raise HTTPException(status_code=422, detail="Invalid output token limit")
+    if requested_tokens > limits["max_output_tokens"] or request.max_tokens > limits["max_output_tokens"]:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Output token limit exceeds the server maximum of {limits['max_output_tokens']}.",
+        )
+    if extra.get("n", 1) not in (None, 1):
+        raise HTTPException(status_code=422, detail="Multiple completions per request are disabled")
+
+    now = datetime.now(UTC)
+    # Serializing admission per account makes the limits consistent across
+    # multiple API workers when PostgreSQL is used.
+    locked_user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if not locked_user or not locked_user.is_active:
+        raise HTTPException(status_code=403, detail="This account is disabled")
+
+    active_requests = db.scalar(
+        select(func.count(RequestLease.id)).where(
+            RequestLease.user_id == user.id,
+            RequestLease.completed_at.is_(None),
+            RequestLease.expires_at > now,
+        )
+    ) or 0
+    if active_requests >= limits["max_concurrent_requests"]:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests are already running for this account.",
+            headers={"Retry-After": "5"},
+        )
+
+    recent_requests = db.scalar(
+        select(func.count(RequestLease.id)).where(
+            RequestLease.user_id == user.id,
+            RequestLease.created_at >= now - timedelta(minutes=1),
+        )
+    ) or 0
+    if recent_requests >= limits["requests_per_minute"]:
+        raise HTTPException(
+            status_code=429,
+            detail="Request rate limit reached. Please slow down.",
+            headers={"Retry-After": "60"},
+        )
+
+    # Expired request records are retained for 48 hours to enforce the rolling
+    # minute window and provide a short operational trace without unbounded growth.
+    db.execute(delete(RequestLease).where(RequestLease.created_at < now - timedelta(hours=48)))
+    lease = RequestLease(
+        user_id=user.id,
+        device_id=device.id,
+        created_at=now,
+        expires_at=now + timedelta(minutes=20),
+    )
+    db.add(lease)
+    db.flush()
+    lease_id = lease.id
+    db.commit()
+    return lease_id
+
+
+def release_request_lease(lease_id: str) -> None:
+    try:
+        with SessionLocal() as session:
+            lease = session.get(RequestLease, lease_id)
+            if lease and lease.completed_at is None:
+                lease.completed_at = datetime.now(UTC)
+                session.commit()
+    except Exception:
+        # A lease expires automatically if the process terminates unexpectedly.
+        return
+
+
 async def proxy_chat(
     *,
     db: Session,
@@ -285,13 +405,21 @@ async def proxy_chat(
     request_id: str,
 ) -> tuple[dict[str, Any] | None, AsyncIterator[bytes] | None, str]:
     task_type = classify_task(request.messages)
+    lease_id = acquire_request_lease(db, user, device, request, request_id)
     extra = request.model_extra or {}
     has_tools = bool(extra.get("tools"))
     candidates = list_candidates(db, request.model, task_type, has_tools, task_type == "vision")
     if not candidates:
+        release_request_lease(lease_id)
         raise HTTPException(status_code=503, detail="No eligible model route is configured")
 
-    def usage_args(route: ModelRoute, usage: dict[str, Any], started: float, success: bool, error: str | None = None) -> dict[str, Any]:
+    def usage_args(
+        route: ModelRoute,
+        usage: dict[str, Any],
+        started: float,
+        success: bool,
+        error: str | None = None,
+    ) -> dict[str, Any]:
         return {
             "user_id": user.id,
             "device_id": device.id,
@@ -311,6 +439,8 @@ async def proxy_chat(
         if secret:
             headers["Authorization"] = "Bearer " + secret
         payload = request.upstream_payload(route.model_name)
+        payload.pop("max_completion_tokens", None)
+        payload.pop("n", None)
         started = time.monotonic()
         usage: dict[str, Any] = {}
         try:
@@ -324,11 +454,11 @@ async def proxy_chat(
                     json=payload,
                 ) as response,
             ):
-                    if response.status_code < 200 or response.status_code >= 300:
-                        raise UpstreamError(response.status_code)
-                    async for line in response.aiter_lines():
-                        parse_usage_line(line, usage)
-                        yield (line + "\n").encode("utf-8")
+                if response.status_code < 200 or response.status_code >= 300:
+                    raise UpstreamError(response.status_code)
+                async for line in response.aiter_lines():
+                    parse_usage_line(line, usage)
+                    yield (line + "\n").encode("utf-8")
             record_usage_safely(**usage_args(route, usage, started, True))
         except Exception:
             record_usage_safely(**usage_args(route, usage, started, False, "upstream_stream_error"))
@@ -336,71 +466,87 @@ async def proxy_chat(
 
     if request.stream:
         async def stream_with_fallback() -> AsyncIterator[bytes]:
-            errors: list[str] = []
-            for route in candidates:
-                delivered_bytes = False
-                try:
-                    async for chunk in stream_candidate(route):
-                        delivered_bytes = True
-                        yield chunk
-                    return
-                except UpstreamError as exc:
-                    errors.append(f"{route.alias}: HTTP {exc.status_code}")
-                except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError):
-                    errors.append(f"{route.alias}: connection failure")
-                except Exception:
-                    errors.append(f"{route.alias}: stream interrupted")
-                if delivered_bytes:
-                    error_payload = {
-                        "error": {
-                            "message": "The upstream stream was interrupted; retry this turn.",
-                            "type": "upstream_stream_error",
+            try:
+                errors: list[str] = []
+                for route in candidates:
+                    delivered_bytes = False
+                    try:
+                        async for chunk in stream_candidate(route):
+                            delivered_bytes = True
+                            yield chunk
+                        return
+                    except UpstreamError as exc:
+                        errors.append(f"{route.alias}: HTTP {exc.status_code}")
+                    except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError):
+                        errors.append(f"{route.alias}: connection failure")
+                    except Exception:
+                        errors.append(f"{route.alias}: stream interrupted")
+                    if delivered_bytes:
+                        error_payload = {
+                            "error": {
+                                "message": "The upstream stream was interrupted; retry this turn.",
+                                "type": "upstream_stream_error",
+                            }
                         }
+                        yield ("data: " + json.dumps(error_payload) + "\n\n").encode("utf-8")
+                        yield b"data: [DONE]\n\n"
+                        return
+                error_payload = {
+                    "error": {
+                        "message": "All configured model routes failed",
+                        "attempts": errors,
                     }
-                    yield ("data: " + json.dumps(error_payload) + "\n\n").encode("utf-8")
-                    yield b"data: [DONE]\n\n"
-                    return
-            error_payload = {"error": {"message": "All configured model routes failed", "attempts": errors}}
-            yield ("data: " + json.dumps(error_payload) + "\n\n").encode("utf-8")
-            yield b"data: [DONE]\n\n"
+                }
+                yield ("data: " + json.dumps(error_payload) + "\n\n").encode("utf-8")
+                yield b"data: [DONE]\n\n"
+            finally:
+                release_request_lease(lease_id)
 
         return None, stream_with_fallback(), task_type
 
     errors: list[str] = []
-    for route in candidates:
-        secret = decrypt_secret(route.provider.encrypted_api_key)
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if secret:
-            headers["Authorization"] = "Bearer " + secret
-        started = time.monotonic()
-        try:
-            timeout = httpx.Timeout(get_settings().upstream_timeout_seconds, connect=15)
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
-                response = await client.post(
-                    route.provider.base_url + "/chat/completions",
-                    headers=headers,
-                    json=request.upstream_payload(route.model_name),
+    try:
+        for route in candidates:
+            secret = decrypt_secret(route.provider.encrypted_api_key)
+            headers = {"Content-Type": "application/json", "Accept": "application/json"}
+            if secret:
+                headers["Authorization"] = "Bearer " + secret
+            started = time.monotonic()
+            try:
+                timeout = httpx.Timeout(get_settings().upstream_timeout_seconds, connect=15)
+                async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+                    response = await client.post(
+                        route.provider.base_url + "/chat/completions",
+                        headers=headers,
+                        json=request.upstream_payload(route.model_name),
+                    )
+                if response.status_code < 200 or response.status_code >= 300:
+                    errors.append(f"{route.alias}: HTTP {response.status_code}")
+                    record_usage_safely(**usage_args(route, {}, started, False, "upstream_http_error"))
+                    continue
+                result = response.json()
+                write_usage(
+                    db,
+                    user_id=user.id,
+                    device_id=device.id,
+                    request_id=request_id,
+                    task_type=task_type,
+                    requested_model=request.model,
+                    route=route,
+                    usage=result.get("usage"),
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    success=True,
                 )
-            if response.status_code < 200 or response.status_code >= 300:
-                errors.append(f"{route.alias}: HTTP {response.status_code}")
-                record_usage_safely(**usage_args(route, {}, started, False, "upstream_http_error"))
-                continue
-            result = response.json()
-            write_usage(
-                db,
-                user_id=user.id,
-                device_id=device.id,
-                request_id=request_id,
-                task_type=task_type,
-                requested_model=request.model,
-                route=route,
-                usage=result.get("usage"),
-                latency_ms=int((time.monotonic() - started) * 1000),
-                success=True,
-            )
-            result["model"] = route.alias
-            return result, None, task_type
-        except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError):
-            errors.append(f"{route.alias}: connection failure")
-            record_usage_safely(**usage_args(route, {}, started, False, "upstream_connection_error"))
-    raise HTTPException(status_code=502, detail={"message": "All model routes failed", "attempts": errors})
+                result["model"] = route.alias
+                return result, None, task_type
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError):
+                errors.append(f"{route.alias}: connection failure")
+                record_usage_safely(
+                    **usage_args(route, {}, started, False, "upstream_connection_error")
+                )
+        raise HTTPException(
+            status_code=502,
+            detail={"message": "All model routes failed", "attempts": errors},
+        )
+    finally:
+        release_request_lease(lease_id)
