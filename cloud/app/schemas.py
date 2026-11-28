@@ -75,6 +75,18 @@ class ClientConfigPatch(BaseModel):
     feature_flags: dict[str, bool] | None = None
 
 
+class GuardrailsPatch(BaseModel):
+    requests_per_minute: int | None = Field(default=None, ge=1, le=120)
+    max_concurrent_requests: int | None = Field(default=None, ge=1, le=20)
+    max_prompt_chars: int | None = Field(default=None, ge=1000, le=500000)
+    max_output_tokens: int | None = Field(default=None, ge=256, le=32768)
+    max_messages: int | None = Field(default=None, ge=1, le=200)
+
+
+class UserStatusPatch(BaseModel):
+    is_active: bool
+
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
     model: str = Field(default="auto", min_length=1, max_length=120)
