@@ -272,7 +272,7 @@ async function loadOverview() {
   const [overview, guardrails, clientConfig, recent] = await Promise.all([
     api("/admin/overview"),
     api("/admin/guardrails"),
-    api("/client/config"),
+    api("/admin/client-config"),
     api("/admin/usage/recent?limit=8"),
   ]);
   $("metric-users").textContent = formatNumber(overview.users_active);
@@ -325,7 +325,7 @@ async function loadSystem() {
       if (!response.ok) throw new Error(body.detail || "L’API n’est pas prête.");
       return body;
     }),
-    api("/client/config"),
+    api("/admin/client-config"),
   ]);
   $("api-health-badge").className = "badge badge-green";
   $("api-health-badge").textContent = "Opérationnelle";
