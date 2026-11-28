@@ -3,11 +3,11 @@ import json
 import re
 import socket
 import time
-from uuid import uuid4
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import httpx
 from fastapi import HTTPException
@@ -433,7 +433,7 @@ def acquire_request_lease(
 
     # Expired request records are retained for 48 hours to enforce the rolling
     # minute window and provide a short operational trace without unbounded growth.
-    db.execute(delete(RequestLease).where(RequestLease.created_at < now - timedelta(hours=48)))
+    db.execute(delete(RequestLease).where(RequestLease.created_at < now - timedelta(hours=2)))
     lease = RequestLease(
         user_id=user.id,
         device_id=device.id,
@@ -470,7 +470,7 @@ async def proxy_chat(
     lease_id = acquire_request_lease(db, user, device, request, request_id)
     extra = request.model_extra or {}
     has_tools = bool(extra.get("tools"))
-    candidates = list_candidates(db, request.model, task_type, has_tools, task_type == "vision")
+    candidates = list_candidates(db, request.model, task_type, has_tools, task_type == "vision")[:5]
     if not candidates:
         release_request_lease(lease_id)
         raise HTTPException(status_code=503, detail="No eligible model route is configured")
