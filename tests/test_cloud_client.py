@@ -16,7 +16,7 @@ def test_cloud_url_requires_https_except_local_development() -> None:
     assert cloud_client._validate_url("http://localhost:8000") == "http://localhost:8000"
     with pytest.raises(ConfigError):
         cloud_client._validate_url("http://cloud.example")
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigError):
         cloud_client._validate_url("https://user:password@cloud.example")
 
 
