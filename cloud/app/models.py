@@ -130,3 +130,12 @@ class AuditLog(Base):
     target_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    blocked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
