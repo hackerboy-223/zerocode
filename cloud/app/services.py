@@ -16,7 +16,17 @@ from sqlalchemy.orm import Session, joinedload
 
 from .config import get_settings
 from .database import SessionLocal
-from .models import AuditLog, CloudSetting, Device, ModelRoute, Provider, RequestLease, RoutingPolicy, UsageEvent, User
+from .models import (
+    AuditLog,
+    CloudSetting,
+    Device,
+    ModelRoute,
+    Provider,
+    RequestLease,
+    RoutingPolicy,
+    UsageEvent,
+    User,
+)
 from .schemas import ChatRequest
 from .security import (
     DUMMY_PASSWORD_HASH,
