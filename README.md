@@ -400,10 +400,9 @@ Cette première fondation inclut l'API FastAPI, les comptes et sessions par appa
 
 ### Utiliser un serveur Cloud de préversion
 
-Après déploiement de l'API et configuration de l'URL :
+Après déploiement de l'API et configuration de l'URL, connecte-toi avec un compte provisionné. L'inscription publique est désactivée par défaut :
 
 ```bash
-zerocode cloud register --url https://YOUR-CLOUD-HOST
 zerocode cloud login --url https://YOUR-CLOUD-HOST
 zerocode cloud status
 zerocode cloud use cloud
