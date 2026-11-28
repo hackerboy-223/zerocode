@@ -107,8 +107,14 @@ class ChatRequest(BaseModel):
 
     def upstream_payload(self, upstream_model: str) -> dict[str, Any]:
         payload = self.model_dump(exclude_none=True)
+        extra = self.model_extra or {}
+        payload.pop("max_completion_tokens", None)
+        payload.pop("n", None)
+        payload.pop("best_of", None)
+        if "max_completion_tokens" in extra:
+            payload["max_tokens"] = min(self.max_tokens, extra["max_completion_tokens"])
         payload["model"] = upstream_model
-        for key, value in (self.model_extra or {}).items():
-            if key not in {"user", "metadata", "max_completion_tokens", "n"}:
+        for key, value in extra.items():
+            if key not in {"user", "metadata", "max_completion_tokens", "n", "best_of"}:
                 payload[key] = value
         return payload
