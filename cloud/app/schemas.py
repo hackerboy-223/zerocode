@@ -106,6 +106,6 @@ class ChatRequest(BaseModel):
         payload = self.model_dump(exclude_none=True)
         payload["model"] = upstream_model
         for key, value in (self.model_extra or {}).items():
-            if key not in {"user", "metadata"}:
+            if key not in {"user", "metadata", "max_completion_tokens", "n"}:
                 payload[key] = value
         return payload
