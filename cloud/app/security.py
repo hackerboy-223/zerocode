@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -27,7 +27,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def issue_access_token(user_id: str, role: str, device_id: str) -> tuple[str, datetime]:
     settings = get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires = now + timedelta(minutes=settings.access_token_minutes)
     payload = {
         "sub": user_id,
