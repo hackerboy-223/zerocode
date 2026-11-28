@@ -2,9 +2,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from .config import get_settings
@@ -56,6 +56,20 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > 1_048_576:
+                from starlette.responses import JSONResponse
+
+                return JSONResponse(
+                    {"detail": "Request body exceeds the 1 MiB server limit."},
+                    status_code=413,
+                )
+        except ValueError:
+            from starlette.responses import JSONResponse
+
+            return JSONResponse({"detail": "Invalid Content-Length header."}, status_code=400)
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
