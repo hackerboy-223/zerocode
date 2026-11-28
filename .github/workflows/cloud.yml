@@ -5,6 +5,8 @@ on:
     branches: [main, feature/cloud-platform-foundation]
     paths:
       - "cloud/**"
+      - "src/zerocode/cloud_client.py"
+      - "tests/test_cloud_client.py"
       - ".github/workflows/cloud.yml"
   pull_request:
     branches: [main]
