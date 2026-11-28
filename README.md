@@ -392,3 +392,30 @@ L'application et son terminal exécutent les commandes sur l'ordinateur de l'uti
 
 Guide complet : [docs/DESKTOP.md](docs/DESKTOP.md).
 
+## ZeroCode Cloud — aperçu technique
+
+ZeroCode peut utiliser le moteur IA centralisé ZeroCode Cloud au lieu d'appeler directement les fournisseurs configurés localement. Le client conserve l'agent, les fichiers, le shell, Git, les tests et les permissions sur la machine de l'utilisateur ; le serveur reçoit uniquement les messages et le contexte explicitement soumis pour l'inférence.
+
+Cette première fondation inclut l'API FastAPI, les comptes et sessions par appareil, le routage de modèles OpenAI-compatible, les fournisseurs et secrets gérés côté serveur, les politiques de fallback, la configuration distante et les événements d'usage. Elle ne comprend pas encore la facturation, les quotas payants, l'interface web d'administration, la vérification e-mail ou la récupération de compte. Elle ne doit pas être présentée comme une offre commerciale prête à vendre.
+
+### Utiliser un serveur Cloud de préversion
+
+Après déploiement de l'API et configuration de l'URL, connecte-toi avec un compte provisionné. L'inscription publique est désactivée par défaut :
+
+```bash
+zerocode cloud login --url https://YOUR-CLOUD-HOST
+zerocode cloud status
+zerocode cloud use cloud
+```
+
+Pour revenir au routage local / BYOK / Ollama :
+
+```bash
+zerocode cloud use local
+zerocode cloud logout
+```
+
+Guide serveur : [cloud/README.md](cloud/README.md). La configuration Cloud est stockée localement dans `cloud.json`, avec des permissions restrictives sur les systèmes POSIX. Les clés API des fournisseurs restent chiffrées dans la base côté serveur et ne sont jamais envoyées au client.
+
+Le contrôle distant porte sur les fournisseurs, modèles, politiques de routage, maintenance et configuration client. Les opérations sur les fichiers et commandes continuent d'être décidées et exécutées localement par ZeroCode.
+

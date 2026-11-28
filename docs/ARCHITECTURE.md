@@ -140,3 +140,64 @@ Les tests couvrent la configuration, le catalogue, le routage, les fournisseurs 
 - Nouveau panneau TUI : ajouter un widget Textual dans `tui/app.py` et un mode dans `action_cycle_mode`.
 - Nouvelle politique de permissions : étendre `PermissionManager`.
 - Nouveau format de session : versionner `Session.to_dict` et adapter `from_dict`.
+
+## ZeroCode Cloud — inférence et contrôle centralisés
+
+Le mode Cloud remplace uniquement l'adaptateur de modèle. L'agent et ses outils restent sur l'ordinateur de l'utilisateur.
+
+```text
+CLI / TUI / Desktop
+        |
+        v
+     Agent local
+        |
+        +----> ToolRegistry ----> fichiers / shell / Git / tests locaux
+        |
+        v
+   CloudRouter (client)
+        |
+        | HTTPS + JWT appareil + SSE
+        v
+   ZeroCode Cloud API
+        |
+        +----> Auth / appareils / révocation
+        +----> Remote client config
+        +----> Task classifier / Routing policies
+        +----> Provider credentials (Fernet at rest)
+        +----> Usage events / audit log
+        |
+        v
+   OpenAI-compatible providers
+        |
+        +----> Kilo Gateway
+        +----> autres fournisseurs compatibles
+```
+
+### Règles de frontière
+
+- Le client envoie les messages, définitions d'outils et pièces jointes nécessaires à l'inférence.
+- Le cloud renvoie le flux de réponse et les appels d'outils au format OpenAI-compatible.
+- Les appels d'outils sont ensuite validés et exécutés par le registre local, selon les permissions locales ; le serveur ne reçoit aucun accès général au système de fichiers ou au terminal.
+- Les clés des fournisseurs sont stockées côté serveur, chiffrées avec Fernet. Le client ne reçoit jamais les clés amont.
+- Le mode local continue d'utiliser le routeur actuel et les clés locales ; aucun basculement silencieux entre Cloud et local n'est effectué.
+- Les jetons d'accès ont une durée courte. Les jetons de renouvellement sont rotatifs et associés à un appareil révocable.
+- Les politiques administrateur contrôlent les modèles disponibles, leur ordre, le mode maintenance et les drapeaux de fonctionnalités.
+- Les admissions de requêtes sont vérifiées côté serveur : débit par compte, concurrence par compte et globale, taille de la requête, nombre de messages et limite de sortie.
+- Les comptes sont limités à cinq sessions d'appareils actives par défaut. Une nouvelle connexion révoque la session active la plus ancienne lorsque ce plafond est atteint.
+- La suspension d'un compte révoque immédiatement ses appareils et bloque les jetons d'accès encore valides. Les administrateurs peuvent également révoquer un appareil isolé.
+- Les plafonds sont configurables par l'administrateur via `/v1/admin/guardrails`; le mode maintenance bloque les nouvelles requêtes IA pour l'ensemble du service.
+
+### API et déploiement
+
+Le serveur est isolé dans `cloud/` : FastAPI, SQLAlchemy, PostgreSQL, Alembic et Docker Compose. Les tests API utilisent SQLite et ne nécessitent pas de compte auprès d'un fournisseur IA.
+
+Endpoints principaux :
+- `POST /v1/auth/register`, `/login`, `/refresh`, `/logout`
+- `GET /v1/client/config`
+- `POST /v1/chat/completions` (streaming SSE)
+- `/v1/admin/providers`, `/models`, `/routing`, `/client-config`
+- `/v1/admin/overview`, `/users`, `/guardrails`
+- `GET /v1/admin/usage/summary`, `/usage/recent`, `/audit-logs`
+
+Le contrôle opérationnel est en cours de consolidation. L'API permet déjà de surveiller l'activité, d'ajuster les plafonds, de mettre le service en maintenance et de suspendre des comptes. L'interface web d'administration, la protection contre les tentatives de connexion abusives, le MFA administrateur, la sauvegarde/restauration et les tests de charge restent à finaliser avant une ouverture large.
+

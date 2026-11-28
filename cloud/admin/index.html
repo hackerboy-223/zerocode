@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6f9">
+  <title>ZeroCode · Centre de contrôle</title>
+  <link rel="stylesheet" href="/admin/assets/admin.css">
+  <script src="/admin/assets/admin.js" defer></script>
+</head>
+<body>
+  <section id="login-view" class="login-screen">
+    <div class="login-card">
+      <div class="brand-lockup">
+        <div class="brand-mark">Z</div>
+        <div>
+          <div class="brand-name">ZeroCode</div>
+          <div class="brand-caption">CENTRE DE CONTRÔLE</div>
+        </div>
+      </div>
+      <div class="login-intro">
+        <span class="eyebrow">ACCÈS ADMINISTRATEUR</span>
+        <h1>Garder le contrôle.</h1>
+        <p>Surveille l’activité du service, protège les ressources et maîtrise les accès.</p>
+      </div>
+      <form id="login-form" class="login-form">
+        <label for="login-email">Adresse e-mail</label>
+        <input id="login-email" name="email" type="email" autocomplete="username" required placeholder="admin@zerocode.dev">
+        <label for="login-password">Mot de passe</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required placeholder="••••••••••••">
+        <button class="button button-primary button-wide" type="submit">Se connecter <span aria-hidden="true">→</span></button>
+        <p id="login-error" class="form-error" role="alert"></p>
+      </form>
+      <div class="login-foot">Console privée · Accès réservé aux administrateurs</div>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">Z</div>
+        <div>
+          <div class="brand-name">ZeroCode</div>
+          <div class="brand-caption">CONTROL PLANE</div>
+        </div>
+      </div>
+      <div class="nav-label">PILOTAGE</div>
+      <nav class="main-nav" aria-label="Navigation principale">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">▦</span>Vue générale</button>
+        <button class="nav-item" data-view="accounts"><span class="nav-icon">◉</span>Comptes & appareils</button>
+        <button class="nav-item" data-view="usage"><span class="nav-icon">⌁</span>Activité IA</button>
+        <button class="nav-item" data-view="protections"><span class="nav-icon">◇</span>Protections</button>
+        <button class="nav-item" data-view="providers"><span class="nav-icon">⇄</span>Fournisseurs</button>
+        <button class="nav-item" data-view="models"><span class="nav-icon">◫</span>Modèles</button>
+        <button class="nav-item" data-view="system"><span class="nav-icon">⚙</span>État du service</button>
+        <button class="nav-item" data-view="audit"><span class="nav-icon">≡</span>Journal d’audit</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-status"><span class="status-dot"></span><span id="sidebar-status-text">Connexion vérifiée</span></div>
+        <div class="sidebar-user">
+          <div id="avatar" class="avatar">A</div>
+          <div class="sidebar-user-copy"><strong id="admin-email">Administrateur</strong><span>Accès privilégié</span></div>
+          <button id="logout-button" class="icon-button" title="Se déconnecter" aria-label="Se déconnecter">↗</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-copy">
+          <div class="eyebrow">ZEROCODE CLOUD</div>
+          <h1 id="page-title">Vue générale</h1>
+          <p id="page-subtitle">La santé du service en un coup d’œil.</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="live-indicator"><span class="status-dot"></span>API connectée</div>
+          <button id="refresh-button" class="button button-secondary"><span aria-hidden="true">↻</span> Actualiser</button>
+        </div>
+      </header>
+
+      <div id="global-error" class="notice notice-error" role="alert" hidden></div>
+      <div id="global-success" class="notice notice-success" role="status" hidden></div>
+
+      <section class="view-panel" data-panel="overview">
+        <div class="section-heading">
+          <div><h2>État opérationnel</h2><p>Indicateurs agrégés des dernières 24 heures.</p></div>
+          <span id="overview-updated" class="muted-note">En attente des données…</span>
+        </div>
+        <div class="metric-grid">
+          <article class="metric-card"><div class="metric-label">Comptes actifs</div><div id="metric-users" class="metric-value">—</div><div class="metric-foot">sur <span id="metric-users-total">—</span> comptes</div></article>
+          <article class="metric-card"><div class="metric-label">Requêtes IA · 24 h</div><div id="metric-requests" class="metric-value">—</div><div class="metric-foot">Requêtes enregistrées</div></article>
+          <article class="metric-card"><div class="metric-label">Échecs · 24 h</div><div id="metric-errors" class="metric-value">—</div><div class="metric-foot">À surveiller</div></article>
+          <article class="metric-card"><div class="metric-label">Requêtes en cours</div><div id="metric-inflight" class="metric-value">—</div><div class="metric-foot">Charge actuelle du Cloud</div></article>
+        </div>
+        <div class="content-grid">
+          <article class="surface-card">
+            <div class="card-heading"><div><h3>Garde-fous actifs</h3><p>Limites appliquées côté serveur.</p></div><button class="text-button" data-go="protections">Configurer →</button></div>
+            <div id="guardrail-summary" class="guardrail-summary"><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div></div>
+          </article>
+          <article class="surface-card">
+            <div class="card-heading"><div><h3>Contrôle du service</h3><p>Interrupteur d’urgence et état global.</p></div><span id="maintenance-badge" class="badge badge-neutral">Chargement</span></div>
+            <div class="control-card-body">
+              <div><strong id="maintenance-title">Mode maintenance</strong><p id="maintenance-description">Vérification de la configuration distante.</p></div>
+              <button id="maintenance-toggle" class="switch" type="button" aria-pressed="false" aria-label="Basculer le mode maintenance"><span></span></button>
+            </div>
+            <p class="helper-text">Le mode maintenance bloque les nouvelles requêtes IA pour tous les utilisateurs.</p>
+          </article>
+        </div>
+        <article class="surface-card table-card">
+          <div class="card-heading"><div><h3>Dernière activité</h3><p>Les événements les plus récents du service.</p></div><button class="text-button" data-go="usage">Voir l’activité →</button></div>
+          <div id="overview-recent" class="table-wrap"><div class="empty-state">Chargement de l’activité…</div></div>
+        </article>
+      </section>
+
+      <section class="view-panel" data-panel="accounts" hidden>
+        <div class="section-heading"><div><h2>Comptes & appareils</h2><p>Suspends un compte ou révoque uniquement un appareil compromis.</p></div><button id="accounts-reload" class="button button-secondary">Actualiser la liste</button></div>
+        <div class="toolbar"><div class="search-box"><span>⌕</span><input id="user-search" type="search" placeholder="Rechercher une adresse e-mail…" autocomplete="off"></div><span id="accounts-count" class="muted-note"></span></div>
+        <article class="surface-card table-card"><div id="accounts-table" class="table-wrap"><div class="empty-state">Chargement des comptes…</div></div></article>
+      </section>
+
+      <section class="view-panel" data-panel="usage" hidden>
+        <div class="section-heading"><div><h2>Activité IA</h2><p>Historique des appels, sans exposer les conversations ni les clés des fournisseurs.</p></div><button id="usage-reload" class="button button-secondary">Actualiser</button></div>
+        <article class="surface-card table-card"><div id="usage-table" class="table-wrap"><div class="empty-state">Chargement de l’activité…</div></div></article>
+      </section>
+
+      <section class="view-panel" data-panel="protections" hidden>
+        <div class="section-heading"><div><h2>Protections du service</h2><p>Ces limites sont imposées par l’API Cloud. Le client ne peut pas les contourner.</p></div><span class="badge badge-blue">Contrôle serveur</span></div>
+        <form id="guardrails-form" class="surface-card settings-form">
+          <div class="settings-intro"><h3>Limites de consommation technique</h3><p>Régle les capacités autorisées pour protéger les ressources partagées.</p></div>
+          <div class="settings-grid">
+            <label>Requêtes par compte / minute<input name="requests_per_minute" type="number" min="1" max="120" required></label>
+            <label>Requêtes simultanées / compte<input name="max_concurrent_requests" type="number" min="1" max="20" required></label>
+            <label>Requêtes globales / minute<input name="global_requests_per_minute" type="number" min="1" max="5000" required></label>
+            <label>Requêtes simultanées globales<input name="max_global_concurrent_requests" type="number" min="1" max="500" required></label>
+            <label>Taille maximale du contexte (caractères)<input name="max_prompt_chars" type="number" min="1000" max="500000" step="1000" required></label>
+            <label>Sortie maximale (jetons)<input name="max_output_tokens" type="number" min="256" max="32768" step="256" required></label>
+            <label>Messages maximum par requête<input name="max_messages" type="number" min="1" max="200" required></label>
+            <label>Appareils actifs maximum / compte<input name="max_active_devices" type="number" min="1" max="20" required></label>
+          </div>
+          <div class="form-footer"><p class="helper-text">Une limite dépassée renvoie une réponse 429 ou 422. Les plafonds prennent effet dès l’enregistrement.</p><button class="button button-primary" type="submit">Enregistrer les protections</button></div>
+        </form>
+      </section>
+
+      <section class="view-panel" data-panel="providers" hidden>
+        <div class="section-heading"><div><h2>Fournisseurs IA</h2><p>Désactive immédiatement un fournisseur sans mettre à jour les clients.</p></div><button id="providers-reload" class="button button-secondary">Actualiser</button></div>
+        <div id="providers-grid" class="resource-grid"><div class="empty-state">Chargement des fournisseurs…</div></div>
+      </section>
+
+      <section class="view-panel" data-panel="models" hidden>
+        <div class="section-heading"><div><h2>Modèles disponibles</h2><p>Active ou retire un modèle du routage global.</p></div><button id="models-reload" class="button button-secondary">Actualiser</button></div>
+        <article class="surface-card table-card"><div id="models-table" class="table-wrap"><div class="empty-state">Chargement des modèles…</div></div></article>
+      </section>
+
+      <section class="view-panel" data-panel="system" hidden>
+        <div class="section-heading"><div><h2>État du service</h2><p>Maintenance, disponibilité et configuration distante.</p></div><button id="system-reload" class="button button-secondary">Vérifier maintenant</button></div>
+        <div class="system-grid">
+          <article class="surface-card system-card"><div class="card-heading"><div><h3>Disponibilité de l’API</h3><p>État du serveur et de sa base de données.</p></div><span id="api-health-badge" class="badge badge-neutral">Vérification</span></div><div class="health-line"><span class="status-dot"></span><strong id="api-health-text">Contrôle en cours…</strong></div><p id="api-health-detail" class="helper-text">—</p></article>
+          <article class="surface-card system-card"><div class="card-heading"><div><h3>Mode maintenance</h3><p>Coupe les nouvelles demandes d’inférence.</p></div><span id="system-maintenance-badge" class="badge badge-neutral">—</span></div><div class="control-card-body"><div><strong id="system-maintenance-title">Désactivé</strong><p id="system-maintenance-description">Le service accepte les nouvelles requêtes.</p></div><button id="system-maintenance-toggle" class="switch" type="button" aria-pressed="false" aria-label="Basculer le mode maintenance"><span></span></button></div></article>
+        </div>
+        <article class="surface-card system-card"><div class="card-heading"><div><h3>Fonctionnalités distantes</h3><p>Désactivation progressive de fonctions sans redéployer les clients.</p></div></div><div class="flag-row"><div><strong>IA Cloud</strong><p>Autoriser les nouvelles requêtes IA via le Cloud.</p></div><button id="flag-cloud-ai" class="switch" type="button" aria-pressed="true"><span></span></button></div><div class="flag-row"><div><strong>Configuration distante</strong><p>Autoriser la synchronisation des réglages Cloud.</p></div><button id="flag-remote-config" class="switch" type="button" aria-pressed="true"><span></span></button></div></article>
+      </section>
+
+      <section class="view-panel" data-panel="audit" hidden>
+        <div class="section-heading"><div><h2>Journal d’audit</h2><p>Historique des actions administratives et changements de configuration.</p></div><button id="audit-reload" class="button button-secondary">Actualiser</button></div>
+        <article class="surface-card table-card"><div id="audit-table" class="table-wrap"><div class="empty-state">Chargement du journal…</div></div></article>
+      </section>
+
+      <footer class="page-footer"><span>ZeroCode Cloud Control Plane</span><span>Les actions administratives sont journalisées.</span></footer>
+    </main>
+  </div>
+
+  <dialog id="devices-dialog" class="devices-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">GESTION DES ACCÈS</span><h2>Appareils du compte</h2><p id="devices-user-email" class="muted-note"></p></div><button id="close-devices" class="icon-button" aria-label="Fermer">×</button></div>
+    <div id="devices-list" class="devices-list"></div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
