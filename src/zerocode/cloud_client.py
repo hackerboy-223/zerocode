@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import json
 import os
@@ -39,10 +40,8 @@ def load_cloud_auth() -> dict[str, Any]:
 def save_cloud_auth(value: dict[str, Any]) -> None:
     directory = config_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    try:
+    with contextlib.suppress(OSError):
         os.chmod(directory, 0o700)
-    except OSError:
-        pass
     fd, name = tempfile.mkstemp(prefix=".cloud-", dir=directory)
     path = Path(name)
     try:
@@ -50,15 +49,11 @@ def save_cloud_auth(value: dict[str, Any]) -> None:
             json.dump(value, stream, ensure_ascii=False)
             stream.flush()
             os.fsync(stream.fileno())
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(path, 0o600)
-        except OSError:
-            pass
         os.replace(path, _auth_path())
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(_auth_path(), 0o600)
-        except OSError:
-            pass
     finally:
         path.unlink(missing_ok=True)
 
