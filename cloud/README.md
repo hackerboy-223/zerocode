@@ -10,10 +10,13 @@ ZeroCode Cloud is the remote AI gateway and control plane for ZeroCode clients. 
 - Admin-only provider/model catalog management.
 - Provider API keys encrypted at rest with Fernet; they are never returned by API responses.
 - Per-task routing policies, fallback across configured OpenAI-compatible provider endpoints, and streamed chat completions.
-- Remote client config, maintenance switch, feature flags, usage events and administrative audit records.
+- Remote client config, emergency maintenance switch, feature flags, usage events and administrative audit records.
+- Server-enforced per-account and global request-rate/concurrency limits.
+- Per-request message/payload/output limits and a cap on active device sessions per account.
+- Admin endpoints to inspect service health and users, suspend accounts, revoke devices and tune operational guardrails.
 - PostgreSQL and SQLite development support, Docker Compose.
 
-Not included yet: payment processing, subscriptions, enforced token budgets, email verification, password reset, organization/team management, customer-facing admin UI, provider-native adapters outside OpenAI-compatible APIs, or remote execution of user code. Do not sell paid or unlimited AI usage until quota reservations and cost controls are implemented and tested.
+The administration API is available now; a browser-based control panel is still a separate follow-up. The server currently supports OpenAI-compatible upstream APIs and does not execute user code remotely.
 
 ## Local development
 
@@ -73,7 +76,31 @@ The access/refresh tokens are stored in the user's ZeroCode configuration direct
 - Admin: `GET/POST /v1/admin/providers`, `PATCH /v1/admin/providers/{id}`
 - Admin: `GET/POST /v1/admin/models`, `PATCH /v1/admin/models/{id}`
 - Admin: `GET/PUT /v1/admin/routing`, `PATCH /v1/admin/client-config`
-- Admin: `GET /v1/admin/usage/summary`, `GET /v1/admin/audit-logs`
+- Admin: `GET /v1/admin/overview`, `GET /v1/admin/users`, `PATCH /v1/admin/users/{id}`
+- Admin: `POST /v1/admin/users/{id}/devices/{device_id}/revoke`
+- Admin: `GET/PATCH /v1/admin/guardrails`
+- Admin: `GET /v1/admin/usage/summary`, `GET /v1/admin/usage/recent`, `GET /v1/admin/audit-logs`
+
+## Operational guardrails
+
+The default limits are intentionally conservative and are enforced by the Cloud API, not by the Desktop or CLI interface:
+
+| Control | Default |
+| --- | ---: |
+| Requests per account | 12 per minute |
+| Concurrent requests per account | 2 |
+| Requests across the service | 240 per minute |
+| Concurrent requests across the service | 40 |
+| Output generation | 8,192 tokens per request |
+| Prompt size | 120,000 serialized characters |
+| Messages per request | 100 |
+| Active device sessions per account | 5 |
+
+An administrator can read or update these settings through `GET/PATCH /v1/admin/guardrails`. When an account is suspended, all its device sessions are revoked and existing access tokens stop authenticating. A new login is required after an account is re-enabled. When the device ceiling is reached, the oldest active session is revoked automatically.
+
+The `maintenance_mode` setting in `PATCH /v1/admin/client-config` blocks new AI requests service-wide. Individual providers and model routes can also be disabled without changing client installations.
+
+Request admission is recorded in PostgreSQL so limits are shared across Cloud API workers. Short-lived request leases expire automatically after an interrupted process; completed and expired lease records are cleaned up on subsequent admissions.
 
 ## Configure a model route
 
@@ -87,6 +114,6 @@ Provider credentials remain on the server. The client sends OpenAI-compatible re
 
 ## Deployment and production gate
 
-This foundation is a development/pre-release service, not a production billing system. It currently uses SQLAlchemy metadata creation for the first bootstrap; add Alembic migrations before production data is stored. Before inviting paying customers, implement and test email verification, account recovery, distributed rate limits, atomic quotas, provider cost accounting, admin MFA, secrets rotation, data retention/deletion, signed payment webhooks, backups/restore drills, monitoring and load/security tests.
+This remains a pre-release service. Before exposing it broadly, add login abuse protection, admin MFA, secrets rotation, a browser-based control panel, explicit data retention/deletion rules, backups and restore drills, monitoring/alerting, and load/security tests. Run Alembic migrations before production data is stored; do not rely on development-only automatic schema creation.
 
-Render free services are suitable only for preview: they can spin down/restart, free Postgres expires after 30 days, and free web services have no persistent disk. Use durable managed storage and a paid always-on service for a real subscription product.
+A free hosting tier can sleep, restart, or lose ephemeral files. Use durable managed PostgreSQL storage, backups and an always-on service before relying on the Cloud control plane for active users.
