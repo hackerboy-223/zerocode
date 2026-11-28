@@ -132,3 +132,108 @@ def test_device_revocation_blocks_existing_access_token(client):
     assert len(devices) == 1
     assert client.delete(f"/v1/auth/devices/{devices[0]['id']}", headers=headers).status_code == 200
     assert client.get("/v1/auth/me", headers=headers).status_code == 401
+
+
+def test_admin_can_suspend_user_and_revoke_all_sessions(client, admin_headers):
+    client.post(
+        "/v1/auth/register",
+        json={"email": "suspend-me@example.com", "password": "correct-horse-battery-99"},
+    )
+    login = client.post(
+        "/v1/auth/login",
+        json={"email": "suspend-me@example.com", "password": "correct-horse-battery-99"},
+    ).json()
+    user_headers = {"Authorization": f"Bearer {login['access_token']}"}
+    user_id = login["user"]["id"]
+
+    suspended = client.patch(
+        f"/v1/admin/users/{user_id}",
+        headers=admin_headers,
+        json={"is_active": False},
+    )
+    assert suspended.status_code == 200
+    assert suspended.json()["is_active"] is False
+    assert client.get("/v1/auth/me", headers=user_headers).status_code == 401
+    assert client.post(
+        "/v1/auth/login",
+        json={"email": "suspend-me@example.com", "password": "correct-horse-battery-99"},
+    ).status_code == 401
+
+
+def test_admin_guardrails_enforce_request_rate_and_output_size(client, admin_headers):
+    client.post(
+        "/v1/auth/register",
+        json={"email": "limited@example.com", "password": "correct-horse-battery-99"},
+    )
+    login = client.post(
+        "/v1/auth/login",
+        json={"email": "limited@example.com", "password": "correct-horse-battery-99"},
+    ).json()
+    headers = {"Authorization": f"Bearer {login['access_token']}"}
+
+    configured = client.patch(
+        "/v1/admin/guardrails",
+        headers=admin_headers,
+        json={"requests_per_minute": 1, "max_output_tokens": 256},
+    )
+    assert configured.status_code == 200
+    assert configured.json()["limits"]["requests_per_minute"] == 1
+
+    oversized = client.post(
+        "/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": "auto",
+            "messages": [{"role": "user", "content": "test"}],
+            "max_tokens": 512,
+        },
+    )
+    assert oversized.status_code == 422
+
+    first = client.post(
+        "/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": "auto",
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 128,
+        },
+    )
+    assert first.status_code == 503  # No provider is configured in the isolated test DB.
+
+    second = client.post(
+        "/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": "auto",
+            "messages": [{"role": "user", "content": "hello again"}],
+            "max_tokens": 128,
+        },
+    )
+    assert second.status_code == 429
+    assert second.headers["retry-after"] == "60"
+
+
+def test_login_rotates_oldest_session_when_device_limit_is_reached(client):
+    client.post(
+        "/v1/auth/register",
+        json={"email": "many-devices@example.com", "password": "correct-horse-battery-99"},
+    )
+    latest = None
+    for index in range(6):
+        response = client.post(
+            "/v1/auth/login",
+            json={
+                "email": "many-devices@example.com",
+                "password": "correct-horse-battery-99",
+                "device_name": f"Device {index + 1}",
+            },
+        )
+        assert response.status_code == 200
+        latest = response.json()
+
+    headers = {"Authorization": f"Bearer {latest['access_token']}"}
+    devices = client.get("/v1/auth/devices", headers=headers).json()
+    assert len(devices) == 6
+    assert sum(1 for device in devices if not device["is_revoked"]) == 5
+    assert any(device["is_revoked"] for device in devices)
