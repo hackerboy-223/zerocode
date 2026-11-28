@@ -10,6 +10,7 @@ from zerocode.desktop_bridge import (
     DesktopBridgeUI,
     _desktop_permission_manager,
     _public_mcp_servers,
+    _public_providers,
     _session_summaries,
     _think_value,
     _visible_history,
@@ -376,3 +377,33 @@ def test_public_hooks_and_doctor_report(tmp_path: Path) -> None:
 
     ids = {check["id"] for check in report["checks"]}
     assert {"engine", "workspace", "providers", "git", "mcp", "hooks", "skills"} <= ids
+
+
+
+def test_desktop_bridge_exposes_cloud_gateway_without_local_api_keys() -> None:
+    class CloudRouter:
+        is_cloud = True
+        remote_config = {
+            "models": [
+                {"alias": "MIMI"},
+                {"alias": "MIMI-CODE"},
+            ]
+        }
+
+    providers = _public_providers(object(), CloudRouter())
+
+    assert providers == [
+        {
+            "id": "zerocode-cloud",
+            "label": "ZeroCode Cloud",
+            "env_var": "",
+            "requires_key": False,
+            "enabled": True,
+            "available": True,
+            "source": "keyless",
+            "key_masked": "",
+            "models_count": 2,
+            "signup_url": "",
+            "notes": "Inférence distante · modèles et fournisseurs gérés par ZeroCode Cloud.",
+        }
+    ]
