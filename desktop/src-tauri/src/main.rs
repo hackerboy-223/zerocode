@@ -1328,23 +1328,42 @@ fn cloud_auth(
         .env("PATH", desktop_path())
         .arg("cloud");
     match action.as_str() {
-        "logout" => { command.arg("logout"); }
-        "use-cloud" => { command.args(["use", "cloud"]); }
-        "use-local" => { command.args(["use", "local"]); }
-        _ => { command.arg(subcommand); }
+        "logout" => {
+            command.arg("logout");
+        }
+        "use-cloud" => {
+            command.args(["use", "cloud"]);
+        }
+        "use-local" => {
+            command.args(["use", "local"]);
+        }
+        _ => {
+            command.arg(subcommand);
+        }
     }
-    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|error| {
         format!("Moteur ZeroCode introuvable. Réinstalle le moteur TUI : {error}")
     })?;
     if let Some(payload) = payload {
-        let mut input = child.stdin.take().ok_or_else(|| "Entrée Cloud indisponible.".to_string())?;
-        let bytes = serde_json::to_vec(&payload).map_err(|error| format!("Données invalides : {error}"))?;
-        input.write_all(&bytes).map_err(|error| format!("Envoi des identifiants impossible : {error}"))?;
+        let mut input = child
+            .stdin
+            .take()
+            .ok_or_else(|| "Entrée Cloud indisponible.".to_string())?;
+        let bytes =
+            serde_json::to_vec(&payload).map_err(|error| format!("Données invalides : {error}"))?;
+        input
+            .write_all(&bytes)
+            .map_err(|error| format!("Envoi des identifiants impossible : {error}"))?;
     } else {
         drop(child.stdin.take());
     }
-    let output = child.wait_with_output().map_err(|error| format!("Commande Cloud interrompue : {error}"))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("Commande Cloud interrompue : {error}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !output.status.success() {
@@ -1354,7 +1373,11 @@ fn cloud_auth(
             }
         }
         let message = stderr.trim();
-        return Err(if message.is_empty() { "Opération ZeroCode Cloud échouée.".to_string() } else { message.to_string() });
+        return Err(if message.is_empty() {
+            "Opération ZeroCode Cloud échouée.".to_string()
+        } else {
+            message.to_string()
+        });
     }
     if action == "status" {
         return serde_json::from_str::<Value>(&stdout)
