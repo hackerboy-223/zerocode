@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: zerocode-cloud-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    rootDir: cloud
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    branch: main
+    autoDeployTrigger: checksPass
+    healthCheckPath: /v1/health/ready
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: FERNET_KEY
+        sync: false
+      - key: ACCESS_TOKEN_MINUTES
+        value: "15"
+      - key: REFRESH_TOKEN_DAYS
+        value: "30"
+      - key: ALLOW_PUBLIC_SIGNUP
+        value: "false"
+      - key: AUTO_CREATE_SCHEMA
+        value: "false"
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: UPSTREAM_TIMEOUT_SECONDS
+        value: "120"
+      - key: ALLOW_LOCAL_PROVIDER_URLS
+        value: "false"
+      - key: CLIENT_MIN_VERSION
+        value: "1.0.0"
