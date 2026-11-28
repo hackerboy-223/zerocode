@@ -9,8 +9,9 @@ from sqlalchemy import select
 
 from .config import get_settings
 from .database import Base, SessionLocal, engine
-from .models import User
+from .models import CloudSetting, User
 from .routes import router
+from .services import DEFAULT_GUARDRAILS
 from .security import hash_password
 
 settings = get_settings()
@@ -31,6 +32,25 @@ async def lifespan(_: FastAPI):
                         password_hash=hash_password(settings.bootstrap_admin_password),
                         role="admin",
                         is_active=True,
+                    )
+                )
+            if db.get(CloudSetting, "guardrails") is None:
+                db.add(
+                    CloudSetting(
+                        key="guardrails",
+                        value=dict(DEFAULT_GUARDRAILS),
+                        version=1,
+                    )
+                )
+            db.commit()
+    else:
+        with SessionLocal() as db:
+            if db.get(CloudSetting, "guardrails") is None:
+                db.add(
+                    CloudSetting(
+                        key="guardrails",
+                        value=dict(DEFAULT_GUARDRAILS),
+                        version=1,
                     )
                 )
                 db.commit()
