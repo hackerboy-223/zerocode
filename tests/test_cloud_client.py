@@ -7,14 +7,14 @@ import pytest
 
 from zerocode import cloud_client
 from zerocode.config import Config
-from zerocode.errors import ProviderError
+from zerocode.errors import ConfigError, ProviderError
 from zerocode.types import StreamCallbacks
 
 
 def test_cloud_url_requires_https_except_local_development() -> None:
     assert cloud_client._validate_url("https://cloud.example/") == "https://cloud.example"
     assert cloud_client._validate_url("http://localhost:8000") == "http://localhost:8000"
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigError):
         cloud_client._validate_url("http://cloud.example")
     with pytest.raises(Exception):
         cloud_client._validate_url("https://user:password@cloud.example")
