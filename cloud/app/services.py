@@ -322,6 +322,28 @@ def acquire_request_lease(
     request: ChatRequest,
     request_id: str,
 ) -> str:
+    now = datetime.now(UTC)
+    # Locking the account serializes that user's admission checks. A shared
+    # guardrails row serializes the global limits across different API workers.
+    locked_user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if not locked_user or not locked_user.is_active:
+        raise HTTPException(status_code=403, detail="This account is disabled")
+
+    guardrails_row = db.get(CloudSetting, "guardrails")
+    if not guardrails_row:
+        guardrails_row = CloudSetting(
+            key="guardrails",
+            value=dict(DEFAULT_GUARDRAILS),
+            version=1,
+        )
+        db.add(guardrails_row)
+        db.flush()
+    db.scalar(
+        select(CloudSetting)
+        .where(CloudSetting.key == "guardrails")
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     limits = get_guardrails(db)
     extra = request.model_extra or {}
 
@@ -350,19 +372,12 @@ def acquire_request_lease(
             status_code=422,
             detail=f"Output token limit exceeds the server maximum of {limits['max_output_tokens']}.",
         )
+
     requested_count = extra.get("n", 1)
     if not isinstance(requested_count, int) or isinstance(requested_count, bool) or requested_count != 1:
         raise HTTPException(status_code=422, detail="Multiple completions per request are disabled")
-    best_of = extra.get("best_of", 1)
-    if best_of != 1:
+    if extra.get("best_of", 1) != 1:
         raise HTTPException(status_code=422, detail="Multiple candidate generation is disabled")
-
-    now = datetime.now(UTC)
-    # Serializing admission per account makes the limits consistent across
-    # multiple API workers when PostgreSQL is used.
-    locked_user = db.scalar(select(User).where(User.id == user.id).with_for_update())
-    if not locked_user or not locked_user.is_active:
-        raise HTTPException(status_code=403, detail="This account is disabled")
 
     global_active = db.scalar(
         select(func.count(RequestLease.id)).where(
@@ -430,7 +445,6 @@ def acquire_request_lease(
     lease_id = lease.id
     db.commit()
     return lease_id
-
 
 def release_request_lease(lease_id: str) -> None:
     try:
