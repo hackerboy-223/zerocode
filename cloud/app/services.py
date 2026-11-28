@@ -3,10 +3,10 @@ import json
 import re
 import socket
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlsplit
-from uuid import uuid4
 
 import httpx
 from fastapi import HTTPException
@@ -15,12 +15,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from .config import get_settings
 from .database import SessionLocal
-from .models import AuditLog, CloudSetting, Device, ModelRoute, Provider, RoutingPolicy, UsageEvent, User
+from .models import AuditLog, Device, ModelRoute, Provider, RoutingPolicy, UsageEvent, User
 from .schemas import ChatRequest
 from .security import (
     DUMMY_PASSWORD_HASH,
     decrypt_secret,
-    hash_password,
     hash_refresh_token,
     issue_access_token,
     new_refresh_token,
@@ -64,8 +63,7 @@ def validate_provider_url(value: str) -> str:
         raise ValueError("Invalid provider base URL")
     host = parsed.hostname.lower().rstrip(".")
     local_hosts = {"localhost", "localhost.localdomain"}
-    if host in local_hosts or host.endswith((".local", ".internal")):
-        if not get_settings().allow_local_provider_urls:
+    if (host in local_hosts or host.endswith((".local", ".internal"))) and not get_settings().allow_local_provider_urls:
             raise ValueError("Local provider hosts are disabled")
     try:
         address = ipaddress.ip_address(host)
@@ -110,7 +108,7 @@ def audit(
 
 def issue_login_tokens(db: Session, user: User, device_name: str) -> dict[str, Any]:
     raw_refresh = new_refresh_token()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     device = Device(
         user_id=user.id,
         name=device_name.strip()[:120] or "ZeroCode device",
@@ -148,12 +146,12 @@ def refresh_login(db: Session, raw_token: str) -> dict[str, Any]:
     device = db.scalar(
         select(Device).where(Device.refresh_token_hash == hash_refresh_token(raw_token))
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires = None
     if device and device.refresh_expires_at:
         expires = device.refresh_expires_at
         if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
+            expires = expires.replace(tzinfo=UTC)
     if not device or device.is_revoked or not expires or expires <= now:
         raise HTTPException(status_code=401, detail="Refresh token invalid or expired")
     user = db.get(User, device.user_id)
@@ -317,13 +315,15 @@ async def proxy_chat(
         usage: dict[str, Any] = {}
         try:
             timeout = httpx.Timeout(get_settings().upstream_timeout_seconds, connect=15)
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client,
+                client.stream(
                     "POST",
                     route.provider.base_url + "/chat/completions",
                     headers=headers,
                     json=payload,
-                ) as response:
+                ) as response,
+            ):
                     if response.status_code < 200 or response.status_code >= 300:
                         raise UpstreamError(response.status_code)
                     async for line in response.aiter_lines():
