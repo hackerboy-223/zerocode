@@ -1,4 +1,6 @@
+import hashlib
 import ipaddress
+import math
 import json
 import re
 import socket
@@ -11,7 +13,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from .config import get_settings
@@ -20,6 +22,7 @@ from .models import (
     AuditLog,
     CloudSetting,
     Device,
+    LoginAttempt,
     ModelRoute,
     Provider,
     RequestLease,
@@ -631,3 +634,65 @@ async def proxy_chat(
         )
     finally:
         release_request_lease(lease_id)
+
+
+LOGIN_ATTEMPT_LIMIT = 8
+LOGIN_WINDOW = timedelta(minutes=15)
+LOGIN_BLOCK = timedelta(minutes=15)
+
+
+def _login_key(email: str) -> str:
+    normalized = email.strip().lower()
+    return hashlib.sha256(("zerocode-login:" + normalized).encode("utf-8")).hexdigest()
+
+
+def ensure_login_allowed(db: Session, email: str) -> None:
+    attempt = db.get(LoginAttempt, _login_key(email))
+    if not attempt or not attempt.blocked_until:
+        return
+    blocked_until = attempt.blocked_until
+    if blocked_until.tzinfo is None:
+        blocked_until = blocked_until.replace(tzinfo=UTC)
+    now = datetime.now(UTC)
+    if blocked_until > now:
+        retry_after = max(1, math.ceil((blocked_until - now).total_seconds()))
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed sign-in attempts. Try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def record_login_failure(db: Session, email: str) -> None:
+    key_hash = _login_key(email)
+    now = datetime.now(UTC)
+    # Serialize updates for this email, including the first insert when no row exists.
+    if db.bind and db.bind.dialect.name == "postgresql":
+        lock_id = int(key_hash[:16], 16) % (2**63 - 1)
+        db.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": lock_id})
+    attempt = db.get(LoginAttempt, key_hash)
+    if not attempt:
+        attempt = LoginAttempt(
+            key_hash=key_hash,
+            window_started_at=now,
+            attempts=1,
+        )
+        db.add(attempt)
+    else:
+        window_started = attempt.window_started_at
+        if window_started.tzinfo is None:
+            window_started = window_started.replace(tzinfo=UTC)
+        if now - window_started >= LOGIN_WINDOW:
+            attempt.window_started_at = now
+            attempt.attempts = 1
+            attempt.blocked_until = None
+        else:
+            attempt.attempts += 1
+        if attempt.attempts >= LOGIN_ATTEMPT_LIMIT:
+            attempt.blocked_until = now + LOGIN_BLOCK
+    db.commit()
+
+
+def clear_login_failures(db: Session, email: str) -> None:
+    db.execute(delete(LoginAttempt).where(LoginAttempt.key_hash == _login_key(email)))
+    db.commit()
