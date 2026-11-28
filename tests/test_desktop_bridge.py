@@ -380,7 +380,6 @@ def test_public_hooks_and_doctor_report(tmp_path: Path) -> None:
     assert {"engine", "workspace", "providers", "git", "mcp", "hooks", "skills"} <= ids
 
 
-
 def test_desktop_bridge_exposes_cloud_gateway_without_local_api_keys() -> None:
     class CloudRouter:
         is_cloud = True
@@ -408,7 +407,6 @@ def test_desktop_bridge_exposes_cloud_gateway_without_local_api_keys() -> None:
             "notes": "Inférence distante · modèles et fournisseurs gérés par ZeroCode Cloud.",
         }
     ]
-
 
 
 def test_desktop_bridge_normalizes_cloud_model_aliases() -> None:
