@@ -5,6 +5,7 @@ import contextlib
 import getpass
 import json
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -423,6 +424,8 @@ def cloud_command(args_list: list[str], console: Console) -> int:
     commands = parser.add_subparsers(dest="action", required=True)
     login = commands.add_parser("login", help="Connecter ce client à ZeroCode Cloud")
     login.add_argument("--url", default=os.environ.get("ZEROCODE_CLOUD_URL", ""))
+    commands.add_parser("login-json", help=argparse.SUPPRESS)
+    commands.add_parser("status-json", help=argparse.SUPPRESS)
     register = commands.add_parser("register", help="Créer un compte ZeroCode Cloud")
     register.add_argument("--url", default=os.environ.get("ZEROCODE_CLOUD_URL", ""))
     commands.add_parser("logout", help="Déconnecter ce client")
@@ -430,6 +433,36 @@ def cloud_command(args_list: list[str], console: Console) -> int:
     use = commands.add_parser("use", help="Choisir le moteur IA")
     use.add_argument("mode", choices=("cloud", "local"))
     args = parser.parse_args(args_list)
+
+    if args.action == "login-json":
+        try:
+            payload = json.load(sys.stdin)
+            base_url = _validate_url(str(payload.get("base_url") or ""))
+            email = str(payload.get("email") or "").strip()
+            password = str(payload.get("password") or "")
+            if not email or not password:
+                raise ConfigError("Adresse e-mail et mot de passe requis.")
+            response = httpx.post(
+                base_url + "/v1/auth/login",
+                json={"email": email, "password": password, "device_name": os.environ.get("HOSTNAME", "ZeroCode Desktop")},
+                timeout=25,
+                follow_redirects=False,
+            )
+            if response.status_code >= 300:
+                raise ConfigError(_error_message(response.text))
+            auth = _save_auth({"base_url": base_url}, response.json())
+            print(json.dumps({
+                "ok": True,
+                "connected": True,
+                "mode": "cloud",
+                "base_url": base_url,
+                "user": auth.get("user", {}),
+            }, ensure_ascii=False))
+            return 0
+        except (ConfigError, httpx.HTTPError, ValueError, OSError) as exc:
+            message = str(exc) if isinstance(exc, ConfigError) else f"Connexion Cloud impossible ({exc.__class__.__name__})."
+            print(json.dumps({"ok": False, "error": message}, ensure_ascii=False))
+            return 1
 
     if args.action in {"login", "register"}:
         try:
@@ -462,6 +495,14 @@ def cloud_command(args_list: list[str], console: Console) -> int:
         return 0
 
     auth = load_cloud_auth()
+    if args.action == "status-json":
+        print(json.dumps({
+            "connected": bool(auth.get("access_token") and auth.get("refresh_token")),
+            "mode": auth.get("mode", "local"),
+            "base_url": auth.get("base_url", ""),
+            "user": auth.get("user", {}),
+        }, ensure_ascii=False))
+        return 0
     if args.action == "status":
         console.print(f"Moteur IA : [bold]{auth.get('mode', 'local')}[/bold]")
         if auth.get("base_url"):
