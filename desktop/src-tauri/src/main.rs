@@ -1309,13 +1309,18 @@ fn cloud_auth(
             let password = password.unwrap_or_default();
             let base_url = base_url.unwrap_or_default().trim().to_string();
             if email.is_empty() || password.is_empty() || base_url.is_empty() {
-                return Err("Renseigne le serveur, l’adresse e-mail et le mot de passe.".to_string());
+                return Err(
+                    "Renseigne le serveur, l’adresse e-mail et le mot de passe.".to_string()
+                );
             }
-            ("login-json", Some(json!({
-                "email": email,
-                "password": password,
-                "base_url": base_url
-            })))
+            (
+                "login-json",
+                Some(json!({
+                    "email": email,
+                    "password": password,
+                    "base_url": base_url
+                })),
+            )
         }
         "logout" => ("logout", None),
         "use-cloud" => ("use-cloud", None),
@@ -1324,9 +1329,7 @@ fn cloud_auth(
     };
 
     let mut command = ProcessCommand::new("zerocode");
-    command
-        .env("PATH", desktop_path())
-        .arg("cloud");
+    command.env("PATH", desktop_path()).arg("cloud");
     match action.as_str() {
         "logout" => {
             command.arg("logout");
