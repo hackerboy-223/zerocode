@@ -130,7 +130,7 @@ async function api(path, options = {}, canRefresh = true) {
 function showToast(message, isError = false) {
   const toast = $("toast");
   toast.textContent = message;
-  toast.style.background = isError ? "#a52b3d" : "#1b293b";
+  toast.classList.toggle("toast-error", isError);
   toast.classList.add("visible");
   clearTimeout(state.toastTimer);
   state.toastTimer = setTimeout(() => toast.classList.remove("visible"), 3200);
