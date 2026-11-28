@@ -239,8 +239,8 @@ class CloudRouter:
         return self.remote_config
 
     def preview(self, model: str | None = None, provider: str | None = None) -> list[str]:
-        if provider:
-            return []
+        # Provider selection is controlled by the Cloud admin routing policy.
+        # Ignore a stale local/BYOK provider setting while Cloud mode is active.
         try:
             aliases = [
                 item.get("alias")
@@ -250,7 +250,7 @@ class CloudRouter:
         except (ProviderError, ConfigError):
             return ["zerocode-cloud/auto"]
         if model and model != "auto":
-            return [f"zerocode-cloud/{model}"] if model in aliases else []
+            return [f"zerocode-cloud/{model}"] if model in aliases else ["zerocode-cloud/auto"]
         return [f"zerocode-cloud/{item}" for item in aliases] or ["zerocode-cloud/auto"]
 
     def context_window(self, model: str | None = None) -> int:
@@ -266,11 +266,8 @@ class CloudRouter:
         callbacks: Any = None,
         needs_vision: bool = False,
     ) -> Completion:
-        if provider:
-            raise ConfigError(
-                "En mode Cloud, le fournisseur est choisi par le routeur distant. "
-                "Utilise le mode local pour forcer une clé BYOK ou un modèle Ollama."
-            )
+        # The Cloud control plane owns provider choice. Ignore any provider left
+        # in the local config; BYOK/Ollama is selected by switching to local mode.
         remote = self._get_remote_config()
         if remote.get("maintenance_mode"):
             raise ProviderError(
@@ -290,6 +287,13 @@ class CloudRouter:
                 retryable=False,
             )
         requested_model = (model or self.config.model or "auto").strip()
+        available_aliases = {
+            item.get("alias")
+            for item in remote.get("models", [])
+            if isinstance(item, dict) and isinstance(item.get("alias"), str)
+        }
+        if requested_model != "auto" and requested_model not in available_aliases:
+            requested_model = "auto"
         payload: dict[str, Any] = {
             "model": requested_model,
             "messages": messages,
