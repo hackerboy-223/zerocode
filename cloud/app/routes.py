@@ -493,6 +493,27 @@ def admin_users(
     return result
 
 
+@router.get("/admin/users/{user_id}/devices", tags=["administration"])
+def admin_user_devices(user_id: str, _: AdminPrincipal, db: DbSession) -> list[dict]:
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    items = db.scalars(
+        select(Device).where(Device.user_id == user_id).order_by(Device.created_at.desc())
+    ).all()
+    return [
+        {
+            "id": item.id,
+            "name": item.name,
+            "is_revoked": item.is_revoked,
+            "created_at": item.created_at.isoformat(),
+            "last_seen_at": item.last_seen_at.isoformat(),
+            "refresh_expires_at": item.refresh_expires_at.isoformat(),
+        }
+        for item in items
+    ]
+
+
 @router.patch("/admin/users/{user_id}", tags=["administration"])
 def update_user_status(
     user_id: str,
