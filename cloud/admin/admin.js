@@ -107,7 +107,13 @@ async function api(path, options = {}, canRefresh = true) {
     cache: "no-store",
   });
 
-  if (response.status === 401 && canRefresh && state.refreshToken && !path.startsWith("/auth/")) {
+  if (
+    response.status === 401 &&
+    canRefresh &&
+    state.refreshToken &&
+    path !== "/auth/refresh" &&
+    path !== "/auth/login"
+  ) {
     const renewed = await rotateSession();
     if (renewed) return api(path, options, false);
   }
@@ -145,10 +151,9 @@ function setSwitch(button, enabled) {
 }
 
 function setMaintenanceUI(enabled) {
-  const badge = enabled
-    ? '<span class="badge badge-amber">Maintenance</span>'
-    : '<span class="badge badge-green">En service</span>';
-  $("maintenance-badge").outerHTML = badge.replace('class="badge', 'id="maintenance-badge" class="badge');
+  const badge = $("maintenance-badge");
+  badge.className = `badge ${enabled ? "badge-amber" : "badge-green"}`;
+  badge.textContent = enabled ? "Maintenance" : "En service";
   $("maintenance-title").textContent = enabled ? "Mode maintenance activé" : "Service ouvert";
   $("maintenance-description").textContent = enabled
     ? "Les nouvelles requêtes IA sont bloquées."
