@@ -283,3 +283,26 @@ def test_cloud_rejects_oversized_http_body(client):
         headers={"Content-Type": "application/json"},
     )
     assert response.status_code == 413
+
+
+def test_admin_can_disable_remote_config_but_keep_admin_control(client, admin_headers):
+    client.post(
+        "/v1/auth/register",
+        json={"email": "remote-config@example.com", "password": "correct-horse-battery-99"},
+    )
+    login = client.post(
+        "/v1/auth/login",
+        json={"email": "remote-config@example.com", "password": "correct-horse-battery-99"},
+    ).json()
+    user_headers = {"Authorization": f"Bearer {login['access_token']}"}
+
+    changed = client.patch(
+        "/v1/admin/client-config",
+        headers=admin_headers,
+        json={"feature_flags": {"cloud_ai": True, "remote_config": False}},
+    )
+    assert changed.status_code == 200
+    assert client.get("/v1/client/config", headers=user_headers).status_code == 503
+    admin_config = client.get("/v1/admin/client-config", headers=admin_headers)
+    assert admin_config.status_code == 200
+    assert admin_config.json()["feature_flags"]["remote_config"] is False
